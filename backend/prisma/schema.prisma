@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum Permission {
+  VIEW
+  EDIT
+}
+
+enum Slot {
+  AM
+  PM
+}
+
+// ─── Users & Auth ────────────────────────────────────────────
+
+model User {
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  passwordHash       String   @map("password_hash")
+  name               String?
+  role               Role     @default(USER)
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  assignments       HorseAssignment[]
+  invitesSent       InviteToken[]
+  createdProgrammes Programme[]
+  sessionLogs       ActualSessionLog[]
+  auditEdits        SessionAuditLog[]
+
+  @@map("users")
+}
+
+model InviteToken {
+  id        String    @id @default(uuid())
+  email     String
+  token     String    @unique
+  createdBy String    @map("created_by")
+  creator   User      @relation(fields: [createdBy], references: [id])
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("invite_tokens")
+}
+
+// ─── Horses ──────────────────────────────────────────────────
+
+model Horse {
+  id              String   @id @default(uuid())
+  name            String
+  age             Int?
+  breed           String?
+  ownerNotes      String?  @map("owner_notes")
+  stableLocation  String?  @map("stable_location")
+  identifyingInfo String?  @map("identifying_info")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  assignments     HorseAssignment[]
+  planBlocks      PlanBlock[]
+  plannedSessions PlannedSession[]
+  actualSessions  ActualSessionLog[]
+  vetVisits       VetVisit[]
+  farrierVisits   FarrierVisit[]
+  vaccinations    VaccinationRecord[]
+  expenses        ExpenseNote[]
+
+  @@map("horses")
+}
+
+model HorseAssignment {
+  id         String     @id @default(uuid())
+  userId     String     @map("user_id")
+  horseId    String     @map("horse_id")
+  permission Permission @default(VIEW)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, horseId])
+  @@map("horse_assignments")
+}
+
+// ─── Programmes & Plans ──────────────────────────────────────
+
+model Programme {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdById String   @map("created_by_id")
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  planBlocks PlanBlock[]
+
+  @@map("programmes")
+}
+
+model PlanBlock {
+  id          String     @id @default(uuid())
+  horseId     String     @map("horse_id")
+  programmeId String?    @map("programme_id")
+  name        String
+  startDate   DateTime   @map("start_date") @db.Date
+  numWeeks    Int        @default(6) @map("num_weeks")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  horse     Horse      @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  programme Programme? @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  sessions  PlannedSession[]
+
+  @@map("plan_blocks")
+}
+
+model PlannedSession {
+  id              String   @id @default(uuid())
+  planBlockId     String   @map("plan_block_id")
+  horseId         String   @map("horse_id")
+  date            DateTime @db.Date
+  slot            Slot
+  sessionType     String?  @map("session_type")
+  description     String?
+  durationMinutes Int?     @map("duration_minutes")
+  intensityRpe    Int?     @map("intensity_rpe")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  planBlock     PlanBlock         @relation(fields: [planBlockId], references: [id], onDelete: Cascade)
+  horse         Horse             @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  actualSession ActualSessionLog?
+
+  @@unique([horseId, date, slot])
+  @@map("planned_sessions")
+}
+
+// ─── Session Logging & Audit ─────────────────────────────────
+
+model ActualSessionLog {
+  id               String   @id @default(uuid())
+  horseId          String   @map("horse_id")
+  date             DateTime @db.Date
+  slot             Slot
+  plannedSessionId String?  @unique @map("planned_session_id")
+  sessionType      String?  @map("session_type")
+  durationMinutes  Int?     @map("duration_minutes")
+  intensityRpe     Int?     @map("intensity_rpe")
+  notes            String?
+  rider            String?
+  deviationReason  String?  @map("deviation_reason")
+  createdById      String   @map("created_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  horse          Horse            @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  plannedSession PlannedSession?  @relation(fields: [plannedSessionId], references: [id], onDelete: SetNull)
+  createdBy      User             @relation(fields: [createdById], references: [id])
+  auditLogs      SessionAuditLog[]
+
+  @@unique([horseId, date, slot])
+  @@map("actual_session_logs")
+}
+
+model SessionAuditLog {
+  id                 String   @id @default(uuid())
+  actualSessionLogId String   @map("actual_session_log_id")
+  editedById         String   @map("edited_by_id")
+  editedAt           DateTime @default(now()) @map("edited_at")
+  previousData       Json     @map("previous_data")
+  newData            Json     @map("new_data")
+
+  actualSessionLog ActualSessionLog @relation(fields: [actualSessionLogId], references: [id], onDelete: Cascade)
+  editedBy         User             @relation(fields: [editedById], references: [id])
+
+  @@map("session_audit_logs")
+}
+
+// ─── Stable Manager (health / expenses) ─────────────────────
+
+model VetVisit {
+  id        String   @id @default(uuid())
+  horseId   String   @map("horse_id")
+  date      DateTime @db.Date
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@map("vet_visits")
+}
+
+model FarrierVisit {
+  id        String   @id @default(uuid())
+  horseId   String   @map("horse_id")
+  date      DateTime @db.Date
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@map("farrier_visits")
+}
+
+model VaccinationRecord {
+  id        String    @id @default(uuid())
+  horseId   String    @map("horse_id")
+  name      String?
+  date      DateTime  @db.Date
+  notes     String?
+  dueDate   DateTime? @map("due_date") @db.Date
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@map("vaccination_records")
+}
+
+model ExpenseNote {
+  id        String   @id @default(uuid())
+  horseId   String   @map("horse_id")
+  date      DateTime @db.Date
+  amount    Decimal? @db.Decimal(10, 2)
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@map("expense_notes")
+}
