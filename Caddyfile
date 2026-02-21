@@ -1,0 +1,3 @@
+{$DOMAIN:stable.example.com} {
+    reverse_proxy frontend:80
+}
