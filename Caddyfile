@@ -1,3 +1,3 @@
-{$DOMAIN:stable.example.com} {
+{$DOMAIN:www.holidayskitak.uk} {
     reverse_proxy frontend:80
 }
