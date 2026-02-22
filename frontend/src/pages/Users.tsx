@@ -36,11 +36,16 @@ export default function Users() {
     setError('');
     setSuccess('');
     try {
-      await api('/auth/invite', {
+      const result = await api<{ message: string; inviteUrl?: string; emailError?: string }>('/auth/invite', {
         method: 'POST',
         body: JSON.stringify({ email: inviteEmail }),
       });
-      setSuccess(`Invite sent to ${inviteEmail}`);
+      if (result.emailError) {
+        // Email failed but invite was created - show the link
+        setSuccess(`${result.message}\n\nInvite link: ${result.inviteUrl}`);
+      } else {
+        setSuccess(`Invite sent to ${inviteEmail}`);
+      }
       setInviteEmail('');
       setShowInvite(false);
       load();
@@ -66,7 +71,15 @@ export default function Users() {
         </button>
       </div>
 
-      {success && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">{success}</div>}
+      {success && (
+        <div className={`mb-4 p-3 border rounded-lg text-sm ${success.includes('Invite link') ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-700'}`}>
+          {success.split('\n').map((line, i) => (
+            <div key={i} className={line.startsWith('Invite link:') ? 'mt-2 font-mono text-xs break-all select-all' : ''}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Users table */}
       <div className="bg-white rounded-xl border overflow-hidden mb-8">

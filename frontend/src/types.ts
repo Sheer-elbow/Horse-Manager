@@ -35,6 +35,9 @@ export interface Programme {
   id: string;
   name: string;
   description: string | null;
+  htmlContent: string | null;
+  originalFileName: string | null;
+  horseNames: string[];
   createdAt: string;
   _count?: { planBlocks: number };
 }

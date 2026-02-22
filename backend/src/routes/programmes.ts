@@ -1,10 +1,13 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import * as cheerio from 'cheerio';
 import { prisma } from '../db';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB max
 
 const programmeSchema = z.object({
   name: z.string().min(1),
@@ -35,6 +38,48 @@ router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respo
     }
     console.error('Create programme error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/programmes/upload (admin only) - upload HTML programme file
+router.post('/upload', authenticate, requireAdmin, upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const htmlContent = req.file.buffer.toString('utf-8');
+    const originalFileName = req.file.originalname;
+
+    // Use filename (without extension) as programme name, or use form field
+    const name = req.body.name || originalFileName.replace(/\.[^.]+$/, '');
+
+    // Parse HTML to extract horse names from headings
+    const $ = cheerio.load(htmlContent);
+    const horseNames: string[] = [];
+    $('h1, h2, h3').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text && !horseNames.includes(text)) {
+        horseNames.push(text);
+      }
+    });
+
+    const programme = await prisma.programme.create({
+      data: {
+        name,
+        description: req.body.description || null,
+        htmlContent,
+        originalFileName,
+        horseNames,
+        createdById: req.user!.userId,
+      },
+    });
+
+    res.status(201).json(programme);
+  } catch (err) {
+    console.error('Upload programme error:', err);
+    res.status(500).json({ error: 'Failed to upload programme' });
   }
 });
 
