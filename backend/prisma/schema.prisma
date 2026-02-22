@@ -98,13 +98,16 @@ model HorseAssignment {
 // ─── Programmes & Plans ──────────────────────────────────────
 
 model Programme {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  createdById String   @map("created_by_id")
-  createdBy   User     @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  htmlContent      String?  @map("html_content") @db.Text
+  originalFileName String?  @map("original_file_name")
+  horseNames       String[] @map("horse_names")
+  createdById      String   @map("created_by_id")
+  createdBy        User     @relation(fields: [createdById], references: [id])
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   planBlocks PlanBlock[]
 
