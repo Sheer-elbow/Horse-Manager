@@ -139,9 +139,10 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
   }
 });
 
-// POST /api/auth/invite (admin only, handled at router level in index.ts)
+// POST /api/auth/invite (admin only)
 const inviteSchema = z.object({
   email: z.string().email(),
+  role: z.enum(['TRAINER', 'RIDER', 'OWNER']).default('RIDER'),
 });
 
 router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => {
@@ -167,6 +168,7 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
       data: {
         email: body.email,
         token,
+        role: body.role,
         createdBy: req.user!.userId,
         expiresAt,
       },
@@ -235,7 +237,7 @@ router.post('/accept-invite', async (req, res: Response) => {
         email: invite.email,
         passwordHash,
         name: body.name,
-        role: 'USER',
+        role: invite.role,
         mustChangePassword: false,
       },
     });
@@ -272,7 +274,7 @@ router.get('/invites', authenticate, async (req: AuthRequest, res: Response) => 
   try {
     const invites = await prisma.inviteToken.findMany({
       orderBy: { createdAt: 'desc' },
-      select: { id: true, email: true, createdAt: true, expiresAt: true, usedAt: true },
+      select: { id: true, email: true, role: true, createdAt: true, expiresAt: true, usedAt: true },
     });
     res.json(invites);
   } catch (err) {

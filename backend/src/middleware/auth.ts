@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { Role } from '@prisma/client';
 import { config } from '../config';
 import { AuthRequest, JwtPayload } from '../types';
 
@@ -26,4 +27,14 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
     return;
   }
   next();
+}
+
+export function requireRole(...roles: Role[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
+    }
+    next();
+  };
 }

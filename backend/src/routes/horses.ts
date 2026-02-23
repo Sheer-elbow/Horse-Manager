@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { prisma } from '../db';
-import { authenticate, requireAdmin } from '../middleware/auth';
+import { authenticate, requireAdmin, requireRole } from '../middleware/auth';
 import { requireHorseAccess } from '../middleware/rbac';
 import { AuthRequest, HorsePermissionRequest } from '../types';
 
@@ -66,8 +66,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/horses (admin only)
-router.post('/', authenticate, requireAdmin, async (req, res: Response) => {
+// POST /api/horses (admin + owner)
+router.post('/', authenticate, requireRole('ADMIN', 'OWNER'), async (req, res: Response) => {
   try {
     const data = horseSchema.parse(req.body);
     const horse = await prisma.horse.create({ data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, identifyingInfo: data.identifyingInfo ?? null } });

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import * as cheerio from 'cheerio';
 import { prisma } from '../db';
-import { authenticate, requireAdmin } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router();
@@ -28,8 +28,8 @@ router.get('/', authenticate, async (_req, res: Response) => {
   }
 });
 
-// POST /api/programmes (admin only)
-router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+// POST /api/programmes (admin + trainer)
+router.post('/', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = programmeSchema.parse(req.body);
     const programme = await prisma.programme.create({
@@ -46,8 +46,8 @@ router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respo
   }
 });
 
-// POST /api/programmes/upload (admin only) - upload HTML programme file
-router.post('/upload', authenticate, requireAdmin, upload.single('file'), async (req: AuthRequest, res: Response) => {
+// POST /api/programmes/upload (admin + trainer) - upload HTML programme file
+router.post('/upload', authenticate, requireRole('ADMIN', 'TRAINER'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
@@ -106,8 +106,8 @@ router.get('/:id', authenticate, async (req, res: Response) => {
   }
 });
 
-// PUT /api/programmes/:id (admin only)
-router.put('/:id', authenticate, requireAdmin, async (req, res: Response) => {
+// PUT /api/programmes/:id (admin + trainer)
+router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req, res: Response) => {
   try {
     const data = programmeSchema.parse(req.body);
     const programme = await prisma.programme.update({
@@ -124,8 +124,8 @@ router.put('/:id', authenticate, requireAdmin, async (req, res: Response) => {
   }
 });
 
-// DELETE /api/programmes/:id (admin only)
-router.delete('/:id', authenticate, requireAdmin, async (req, res: Response) => {
+// DELETE /api/programmes/:id (admin + trainer)
+router.delete('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req, res: Response) => {
   try {
     await prisma.programme.delete({ where: { id: req.params.id } });
     res.json({ message: 'Programme deleted' });
