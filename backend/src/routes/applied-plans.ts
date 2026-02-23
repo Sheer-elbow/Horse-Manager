@@ -4,53 +4,11 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { ScheduleDayEntry, isRestDay, projectToSessionFields } from '../services/workout-projection';
 
 const router = Router();
 
-// ─── Shared types for schedule day JSON ─────────────────────
-
-interface ScheduleBlock {
-  name: string;
-  text: string;
-}
-
-interface ScheduleDayEntry {
-  week: number;
-  day: number;
-  title: string;
-  category: string;
-  durationMin: number | null;
-  durationMax: number | null;
-  intensityLabel: string | null;
-  intensityRpeMin: number | null;
-  intensityRpeMax: number | null;
-  blocks: ScheduleBlock[];
-  substitution: string | null;
-  manualRef: string | null;
-}
-
 // ─── Helpers ────────────────────────────────────────────────
-
-const REST_CATEGORIES = ['rest', 'recovery'];
-
-function isRestDay(entry: ScheduleDayEntry): boolean {
-  return REST_CATEGORIES.includes(entry.category.toLowerCase()) || entry.title.toLowerCase() === 'rest';
-}
-
-/**
- * Project a ScheduleDayEntry into PlannedSession-compatible flat fields.
- * This deterministic mapping ensures Workout → PlannedSession sync.
- */
-function projectToSessionFields(entry: ScheduleDayEntry) {
-  const blockTexts = entry.blocks.map(b => `[${b.name}] ${b.text}`).join('\n');
-  return {
-    sessionType: entry.title,
-    description: blockTexts || null,
-    durationMinutes: entry.durationMin,
-    intensityRpe: entry.intensityRpeMin,
-    notes: entry.substitution ? `Substitution: ${entry.substitution}` : null,
-  };
-}
 
 /**
  * Check if user has EDIT access to a horse (admin always passes).
