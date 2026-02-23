@@ -129,7 +129,15 @@ router.post('/:id/photo', authenticate, requireAdmin, photoUpload.single('photo'
       res.status(400).json({ error: 'No photo uploaded' });
       return;
     }
-    const photoUrl = `/api/uploads/horses/${req.file.filename}`;
+    // Remove old photo if extension changed
+    const existing = await prisma.horse.findUnique({ where: { id: req.params.id } });
+    if (existing?.photoUrl) {
+      const oldFilename = path.basename(existing.photoUrl.split('?')[0]);
+      if (oldFilename !== req.file.filename) {
+        fs.unlink(path.join(uploadsDir, oldFilename), () => {});
+      }
+    }
+    const photoUrl = `/api/uploads/horses/${req.file.filename}?v=${Date.now()}`;
     const horse = await prisma.horse.update({
       where: { id: req.params.id },
       data: { photoUrl },
