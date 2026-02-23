@@ -124,8 +124,11 @@ function parseOptionalInt(val: string | undefined): number | null {
 export function parseScheduleCsv(csvContent: string): ParseResult {
   const errors: string[] = [];
 
+  // Strip UTF-8 BOM (common in Excel exports)
+  const cleaned = csvContent.replace(/^\uFEFF/, '');
+
   // Split lines, handling \r\n and \n
-  const lines = csvContent.split(/\r?\n/).filter(l => l.trim() !== '');
+  const lines = cleaned.split(/\r?\n/).filter(l => l.trim() !== '');
   if (lines.length < 2) {
     return { scheduleData: [], numWeeks: 0, errors: ['CSV must have a header row and at least one data row'] };
   }

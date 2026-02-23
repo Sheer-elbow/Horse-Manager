@@ -122,25 +122,25 @@ router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), up
 
     const entries = zip.getEntries();
 
-    // Find schedule.csv (required) - look in root or any subfolder
-    const csvEntry = entries.find(e =>
-      !e.isDirectory && e.entryName.toLowerCase().replace(/^[^/]*\//, '').replace(/^.*\//, '') === 'schedule.csv'
-    );
+    // Helper: get the bare filename from a ZIP entry (strips folder path)
+    const bareFilename = (e: AdmZip.IZipEntry) => (e.entryName.split('/').pop() || '').toLowerCase();
+
+    // Find schedule CSV (required) — prefer exact "schedule.csv", fall back to any .csv file
+    const csvFiles = entries.filter(e => !e.isDirectory && bareFilename(e).endsWith('.csv'));
+    const csvEntry = csvFiles.find(e => bareFilename(e) === 'schedule.csv') || csvFiles[0] || null;
     if (!csvEntry) {
-      res.status(400).json({ error: 'ZIP must contain a schedule.csv file' });
+      res.status(400).json({ error: 'ZIP must contain a .csv schedule file (e.g. schedule.csv)' });
       return;
     }
 
-    // Find manual.html (preferred) or manual.pdf (optional)
-    const htmlEntry = entries.find(e =>
-      !e.isDirectory && /manual\.html?$/i.test(e.entryName.split('/').pop() || '')
-    );
-    const pdfEntry = entries.find(e =>
-      !e.isDirectory && /manual\.pdf$/i.test(e.entryName.split('/').pop() || '')
-    );
+    // Find manual HTML/PDF — prefer "manual.html/htm", fall back to any .html/.htm, then .pdf
+    const htmlFiles = entries.filter(e => !e.isDirectory && /\.html?$/i.test(bareFilename(e)));
+    const pdfFiles = entries.filter(e => !e.isDirectory && /\.pdf$/i.test(bareFilename(e)));
+    const htmlEntry = htmlFiles.find(e => /^manual\.html?$/.test(bareFilename(e))) || htmlFiles[0] || null;
+    const pdfEntry = pdfFiles.find(e => /^manual\.pdf$/.test(bareFilename(e))) || pdfFiles[0] || null;
 
     if (!htmlEntry && !pdfEntry) {
-      res.status(400).json({ error: 'ZIP must contain manual.html (preferred) or manual.pdf' });
+      res.status(400).json({ error: 'ZIP must contain a manual file (.html or .pdf)' });
       return;
     }
 

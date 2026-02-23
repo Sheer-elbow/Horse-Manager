@@ -290,6 +290,14 @@ describe('parseScheduleCsv', () => {
       expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
       expect(result.scheduleData).toHaveLength(7);
     });
+
+    it('strips UTF-8 BOM from Excel exports', () => {
+      const csv = '\uFEFF' + makeWeekCsv();
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.numWeeks).toBe(1);
+      expect(result.scheduleData).toHaveLength(7);
+    });
   });
 
   // ─── Minimal required columns ────────────────────────────
