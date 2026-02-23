@@ -180,6 +180,16 @@ export interface AppliedPlan {
     programme: { id: string; name: string };
   };
   assignedBy?: { id: string; name: string | null; email: string };
+  _count?: { workouts: number };
+}
+
+export interface PlanShare {
+  id: string;
+  appliedPlanId: string;
+  sharedWithId: string;
+  permission: 'VIEW' | 'EDIT';
+  createdAt: string;
+  sharedWith: { id: string; name: string | null; email: string };
 }
 
 export interface AuthTokens {
