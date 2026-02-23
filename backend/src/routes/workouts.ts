@@ -486,6 +486,8 @@ router.post('/:id/reschedule', authenticate, async (req: AuthRequest, res: Respo
 
     const sourcePlanBlockId = sourceWorkout.plannedSessions[0]?.planBlockId;
 
+    // Use Serializable isolation to prevent concurrent reschedule races
+    // on the same horse's PlannedSession slots.
     const result = await prisma.$transaction(async (tx) => {
       if (targetWorkout) {
         // ── SWAP: exchange dates/slots between the two workouts ──
@@ -615,7 +617,7 @@ router.post('/:id/reschedule', authenticate, async (req: AuthRequest, res: Respo
 
         return { source: updatedSource, swapped: null, rest: restWorkout };
       }
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     res.json(result);
   } catch (err) {

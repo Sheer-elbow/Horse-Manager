@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import multer from 'multer';
 import path from 'path';
 import { config } from './config';
 import { prisma } from './db';
@@ -23,7 +24,7 @@ app.use(cors({
   origin: config.nodeEnv === 'production' ? config.appUrl : true,
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
 // Request logging
@@ -51,8 +52,28 @@ app.get('/api/ping', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Global error handler - catches unhandled errors from routes
+// Global error handler - catches multer, JSON parse, and unhandled route errors
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Multer file-size limit exceeded
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(413).json({ error: 'File too large. Check upload size limits.' });
+      return;
+    }
+    res.status(400).json({ error: `Upload error: ${err.message}` });
+    return;
+  }
+
+  // JSON body parse errors (e.g. payload too large, malformed JSON)
+  if ('type' in err && (err as { type: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: 'Request body too large. Maximum size is 1 MB.' });
+    return;
+  }
+  if ('type' in err && (err as { type: string }).type === 'entity.parse.failed') {
+    res.status(400).json({ error: 'Malformed JSON in request body' });
+    return;
+  }
+
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
