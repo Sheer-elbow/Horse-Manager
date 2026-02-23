@@ -123,30 +123,40 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res: Response) => 
 });
 
 // POST /api/horses/:id/photo (admin only)
-router.post('/:id/photo', authenticate, requireAdmin, photoUpload.single('photo'), async (req: AuthRequest, res: Response) => {
-  try {
-    if (!req.file) {
-      res.status(400).json({ error: 'No photo uploaded' });
+router.post('/:id/photo', authenticate, requireAdmin, (req: AuthRequest, res: Response) => {
+  photoUpload.single('photo')(req, res, async (multerErr) => {
+    if (multerErr) {
+      console.error('Multer error:', multerErr);
+      const msg = multerErr instanceof multer.MulterError
+        ? `Upload error: ${multerErr.message}`
+        : multerErr.message || 'Upload failed';
+      res.status(400).json({ error: msg });
       return;
     }
-    // Remove old photo if extension changed
-    const existing = await prisma.horse.findUnique({ where: { id: req.params.id } });
-    if (existing?.photoUrl) {
-      const oldFilename = path.basename(existing.photoUrl.split('?')[0]);
-      if (oldFilename !== req.file.filename) {
-        fs.unlink(path.join(uploadsDir, oldFilename), () => {});
+    try {
+      if (!req.file) {
+        res.status(400).json({ error: 'No photo uploaded' });
+        return;
       }
+      // Remove old photo if extension changed
+      const existing = await prisma.horse.findUnique({ where: { id: req.params.id } });
+      if (existing?.photoUrl) {
+        const oldFilename = path.basename(existing.photoUrl.split('?')[0]);
+        if (oldFilename !== req.file.filename) {
+          fs.unlink(path.join(uploadsDir, oldFilename), () => {});
+        }
+      }
+      const photoUrl = `/api/uploads/horses/${req.file.filename}?v=${Date.now()}`;
+      const horse = await prisma.horse.update({
+        where: { id: req.params.id },
+        data: { photoUrl },
+      });
+      res.json(horse);
+    } catch (err) {
+      console.error('Upload photo error:', err);
+      res.status(500).json({ error: 'Failed to upload photo' });
     }
-    const photoUrl = `/api/uploads/horses/${req.file.filename}?v=${Date.now()}`;
-    const horse = await prisma.horse.update({
-      where: { id: req.params.id },
-      data: { photoUrl },
-    });
-    res.json(horse);
-  } catch (err) {
-    console.error('Upload photo error:', err);
-    res.status(500).json({ error: 'Failed to upload photo' });
-  }
+  });
 });
 
 // DELETE /api/horses/:id/photo (admin only)

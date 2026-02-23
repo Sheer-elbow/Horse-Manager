@@ -36,6 +36,7 @@ export default function HorseProfile() {
   // Photo upload
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
 
   // Add record modal
   const [showAddRecord, setShowAddRecord] = useState(false);
@@ -117,6 +118,7 @@ export default function HorseProfile() {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPhotoError('');
     setUploadingPhoto(true);
     try {
       const formData = new FormData();
@@ -124,7 +126,8 @@ export default function HorseProfile() {
       await api(`/horses/${id}/photo`, { method: 'POST', body: formData });
       loadHorse();
     } catch (err) {
-      console.error('Photo upload error:', err);
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      setPhotoError(msg);
     } finally {
       setUploadingPhoto(false);
       if (photoInputRef.current) photoInputRef.current.value = '';
@@ -218,6 +221,7 @@ export default function HorseProfile() {
                   {horse.photoUrl && (
                     <button onClick={handleRemovePhoto} className="text-sm text-red-500 hover:underline">Remove photo</button>
                   )}
+                  {photoError && <div className="text-sm text-red-600">{photoError}</div>}
                 </div>
               )}
             </div>
