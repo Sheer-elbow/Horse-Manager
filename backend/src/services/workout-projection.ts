@@ -33,6 +33,26 @@ export function isRestDay(entry: ScheduleDayEntry): boolean {
 }
 
 /**
+ * Build a minimal rest-day ScheduleDayEntry for a given week/day position.
+ */
+export function makeRestEntry(week: number, day: number): ScheduleDayEntry {
+  return {
+    week,
+    day,
+    title: 'Rest',
+    category: 'rest',
+    durationMin: null,
+    durationMax: null,
+    intensityLabel: null,
+    intensityRpeMin: null,
+    intensityRpeMax: null,
+    blocks: [],
+    substitution: null,
+    manualRef: null,
+  };
+}
+
+/**
  * Deterministic mapping from workout schedule data to PlannedSession fields.
  * This ensures Workout → PlannedSession projection is always consistent.
  */

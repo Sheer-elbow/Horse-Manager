@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../types';
-import { ScheduleDayEntry, isRestDay, projectToSessionFields } from '../services/workout-projection';
+import { ScheduleDayEntry, isRestDay, projectToSessionFields, makeRestEntry } from '../services/workout-projection';
 
 const router = Router();
 
@@ -402,6 +402,228 @@ router.post('/:id/reset', authenticate, async (req: AuthRequest, res: Response) 
     res.json(result);
   } catch (err) {
     console.error('Reset workout error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /api/workouts/:id/reschedule ──────────────────────
+
+const rescheduleSchema = z.object({
+  targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'targetDate must be YYYY-MM-DD'),
+  slot: z.enum(['AM', 'PM']).optional(),
+});
+
+router.post('/:id/reschedule', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const body = rescheduleSchema.parse(req.body);
+    const targetDate = new Date(body.targetDate + 'T00:00:00Z');
+    if (isNaN(targetDate.getTime())) {
+      res.status(400).json({ error: 'Invalid targetDate' });
+      return;
+    }
+    const targetSlot = body.slot ?? 'AM';
+
+    // Load the source workout with plan metadata
+    const sourceWorkout = await prisma.workout.findUnique({
+      where: { id: req.params.id },
+      include: {
+        appliedPlan: {
+          select: { id: true, status: true, assignedById: true },
+        },
+        plannedSessions: { select: { id: true, planBlockId: true } },
+      },
+    });
+
+    if (!sourceWorkout) {
+      res.status(404).json({ error: 'Workout not found' });
+      return;
+    }
+
+    if (sourceWorkout.appliedPlan.status !== 'ACTIVE') {
+      res.status(400).json({ error: `Cannot reschedule workouts on a ${sourceWorkout.appliedPlan.status} plan` });
+      return;
+    }
+
+    if (!sourceWorkout.scheduledDate) {
+      res.status(400).json({ error: 'Cannot reschedule an unscheduled workout' });
+      return;
+    }
+
+    // Check EDIT access
+    const hasAccess = await checkWorkoutEditAccess(
+      req.user!.userId,
+      req.user!.role,
+      sourceWorkout.horseId,
+      sourceWorkout.appliedPlanId,
+      sourceWorkout.appliedPlan.assignedById,
+    );
+    if (!hasAccess) {
+      res.status(403).json({ error: 'Edit access required for this workout' });
+      return;
+    }
+
+    // No-op if already at the target
+    const sourceDate = sourceWorkout.scheduledDate;
+    if (
+      sourceDate.getTime() === targetDate.getTime() &&
+      sourceWorkout.slot === targetSlot
+    ) {
+      res.json({ source: sourceWorkout, swapped: null });
+      return;
+    }
+
+    // Check if there is a workout at the target date+slot for the same horse
+    const targetWorkout = await prisma.workout.findFirst({
+      where: {
+        horseId: sourceWorkout.horseId,
+        scheduledDate: targetDate,
+        slot: targetSlot,
+      },
+      include: {
+        plannedSessions: { select: { id: true, planBlockId: true } },
+      },
+    });
+
+    const sourcePlanBlockId = sourceWorkout.plannedSessions[0]?.planBlockId;
+
+    const result = await prisma.$transaction(async (tx) => {
+      if (targetWorkout) {
+        // ── SWAP: exchange dates/slots between the two workouts ──
+        // To avoid PlannedSession unique constraint [horseId, date, slot]
+        // violations, delete both PlannedSessions first, update workouts,
+        // then recreate them.
+
+        const targetPlanBlockId = targetWorkout.plannedSessions[0]?.planBlockId;
+
+        // 1. Delete PlannedSessions for both workouts
+        await tx.plannedSession.deleteMany({
+          where: { workoutId: { in: [sourceWorkout.id, targetWorkout.id] } },
+        });
+
+        // 2. Swap dates/slots on Workout rows
+        const updatedSource = await tx.workout.update({
+          where: { id: sourceWorkout.id },
+          data: { scheduledDate: targetDate, slot: targetSlot },
+        });
+
+        const updatedTarget = await tx.workout.update({
+          where: { id: targetWorkout.id },
+          data: { scheduledDate: sourceDate, slot: sourceWorkout.slot },
+        });
+
+        // 3. Recreate PlannedSessions at the new positions
+        const sourceData = updatedSource.currentData as unknown as ScheduleDayEntry;
+        const targetData = updatedTarget.currentData as unknown as ScheduleDayEntry;
+
+        if (sourcePlanBlockId) {
+          await tx.plannedSession.create({
+            data: {
+              planBlockId: sourcePlanBlockId,
+              horseId: sourceWorkout.horseId,
+              workoutId: updatedSource.id,
+              date: targetDate,
+              slot: targetSlot,
+              ...projectToSessionFields(sourceData),
+            },
+          });
+        }
+
+        if (targetPlanBlockId) {
+          await tx.plannedSession.create({
+            data: {
+              planBlockId: targetPlanBlockId,
+              horseId: sourceWorkout.horseId,
+              workoutId: updatedTarget.id,
+              date: sourceDate,
+              slot: sourceWorkout.slot,
+              ...projectToSessionFields(targetData),
+            },
+          });
+        }
+
+        return { source: updatedSource, swapped: updatedTarget };
+      } else {
+        // ── MOVE: target slot is empty ──
+
+        // 1. Delete source PlannedSession first (frees up old unique slot)
+        await tx.plannedSession.deleteMany({
+          where: { workoutId: sourceWorkout.id },
+        });
+
+        // 2. Move the source workout to the new date/slot
+        const updatedSource = await tx.workout.update({
+          where: { id: sourceWorkout.id },
+          data: { scheduledDate: targetDate, slot: targetSlot },
+        });
+
+        // 3. Create PlannedSession at the new position
+        const sourceData = updatedSource.currentData as unknown as ScheduleDayEntry;
+        if (sourcePlanBlockId) {
+          await tx.plannedSession.create({
+            data: {
+              planBlockId: sourcePlanBlockId,
+              horseId: sourceWorkout.horseId,
+              workoutId: updatedSource.id,
+              date: targetDate,
+              slot: targetSlot,
+              ...projectToSessionFields(sourceData),
+            },
+          });
+        }
+
+        // 4. Check if old date is now empty for this applied plan → insert rest
+        const remainingOnOldDate = await tx.workout.findFirst({
+          where: {
+            appliedPlanId: sourceWorkout.appliedPlanId,
+            scheduledDate: sourceDate,
+          },
+        });
+
+        let restWorkout = null;
+        if (!remainingOnOldDate) {
+          // Create a rest workout to fill the vacated date
+          const restEntry = makeRestEntry(sourceWorkout.originWeek, sourceWorkout.originDay);
+          const restJson = restEntry as unknown as Prisma.InputJsonValue;
+
+          restWorkout = await tx.workout.create({
+            data: {
+              appliedPlanId: sourceWorkout.appliedPlanId,
+              horseId: sourceWorkout.horseId,
+              originWeek: sourceWorkout.originWeek,
+              originDay: sourceWorkout.originDay,
+              scheduledDate: sourceDate,
+              slot: sourceWorkout.slot,
+              baselineData: restJson,
+              currentData: restJson,
+              isRest: true,
+            },
+          });
+
+          if (sourcePlanBlockId) {
+            await tx.plannedSession.create({
+              data: {
+                planBlockId: sourcePlanBlockId,
+                horseId: sourceWorkout.horseId,
+                workoutId: restWorkout.id,
+                date: sourceDate,
+                slot: sourceWorkout.slot,
+                ...projectToSessionFields(restEntry),
+              },
+            });
+          }
+        }
+
+        return { source: updatedSource, swapped: null, rest: restWorkout };
+      }
+    });
+
+    res.json(result);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Reschedule workout error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
