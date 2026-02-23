@@ -202,6 +202,8 @@ model VetVisit {
   horseId   String   @map("horse_id")
   date      DateTime @db.Date
   notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -215,6 +217,8 @@ model FarrierVisit {
   horseId   String   @map("horse_id")
   date      DateTime @db.Date
   notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -230,6 +234,8 @@ model VaccinationRecord {
   date      DateTime  @db.Date
   notes     String?
   dueDate   DateTime? @map("due_date") @db.Date
+  fileUrl   String?   @map("file_url")
+  fileName  String?   @map("file_name")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
@@ -244,6 +250,8 @@ model ExpenseNote {
   date      DateTime @db.Date
   amount    Decimal? @db.Decimal(10, 2)
   notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
