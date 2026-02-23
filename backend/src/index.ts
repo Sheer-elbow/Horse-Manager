@@ -14,6 +14,7 @@ import planRoutes from './routes/plans';
 import sessionRoutes from './routes/sessions';
 import healthRoutes from './routes/health';
 import appliedPlanRoutes from './routes/applied-plans';
+import workoutRoutes from './routes/workouts';
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use('/api/plans', planRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/applied-plans', appliedPlanRoutes);
+app.use('/api/workouts', workoutRoutes);
 
 // Health check
 app.get('/api/ping', (_req, res) => {
