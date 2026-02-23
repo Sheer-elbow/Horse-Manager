@@ -66,6 +66,7 @@ model Horse {
   ownerNotes      String?  @map("owner_notes")
   stableLocation  String?  @map("stable_location")
   identifyingInfo String?  @map("identifying_info")
+  photoUrl        String?  @map("photo_url")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
