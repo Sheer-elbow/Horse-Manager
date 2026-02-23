@@ -59,10 +59,17 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {horses.map((h) => (
-            <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow">
-              <div className="font-semibold text-gray-900">{h.name}</div>
-              {h.breed && <div className="text-sm text-gray-500">{h.breed}</div>}
-              {h.stableLocation && <div className="text-sm text-gray-400 mt-1">{h.stableLocation}</div>}
+            <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow flex items-center gap-4">
+              {h.photoUrl ? (
+                <img src={h.photoUrl} alt={h.name} className="w-14 h-14 rounded-lg object-cover border shrink-0" />
+              ) : (
+                <div className="w-14 h-14 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-xl shrink-0">&#x1f40e;</div>
+              )}
+              <div>
+                <div className="font-semibold text-gray-900">{h.name}</div>
+                {h.breed && <div className="text-sm text-gray-500">{h.breed}</div>}
+                {h.stableLocation && <div className="text-sm text-gray-400 mt-1">{h.stableLocation}</div>}
+              </div>
             </Link>
           ))}
         </div>

@@ -25,6 +25,7 @@ export interface Horse {
   ownerNotes: string | null;
   stableLocation: string | null;
   identifyingInfo: string | null;
+  photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
   _permission?: 'VIEW' | 'EDIT';

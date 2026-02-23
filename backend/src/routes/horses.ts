@@ -1,11 +1,40 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { prisma } from '../db';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { requireHorseAccess } from '../middleware/rbac';
 import { AuthRequest, HorsePermissionRequest } from '../types';
 
 const router = Router();
+
+// Configure multer for horse photo uploads
+const uploadsDir = path.join(process.cwd(), 'uploads', 'horses');
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const photoStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${req.params.id}${ext}`);
+  },
+});
+
+const photoUpload = multer({
+  storage: photoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files (jpg, png, webp, gif) are allowed'));
+    }
+  },
+});
 
 const horseSchema = z.object({
   name: z.string().min(1),
@@ -90,6 +119,48 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res: Response) => 
     res.json({ message: 'Horse deleted' });
   } catch {
     res.status(404).json({ error: 'Horse not found' });
+  }
+});
+
+// POST /api/horses/:id/photo (admin only)
+router.post('/:id/photo', authenticate, requireAdmin, photoUpload.single('photo'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No photo uploaded' });
+      return;
+    }
+    const photoUrl = `/api/uploads/horses/${req.file.filename}`;
+    const horse = await prisma.horse.update({
+      where: { id: req.params.id },
+      data: { photoUrl },
+    });
+    res.json(horse);
+  } catch (err) {
+    console.error('Upload photo error:', err);
+    res.status(500).json({ error: 'Failed to upload photo' });
+  }
+});
+
+// DELETE /api/horses/:id/photo (admin only)
+router.delete('/:id/photo', authenticate, requireAdmin, async (req, res: Response) => {
+  try {
+    const horse = await prisma.horse.findUnique({ where: { id: req.params.id } });
+    if (!horse) {
+      res.status(404).json({ error: 'Horse not found' });
+      return;
+    }
+    if (horse.photoUrl) {
+      const filename = path.basename(horse.photoUrl);
+      const filepath = path.join(uploadsDir, filename);
+      fs.unlink(filepath, () => {});
+    }
+    const updated = await prisma.horse.update({
+      where: { id: req.params.id },
+      data: { photoUrl: null },
+    });
+    res.json(updated);
+  } catch {
+    res.status(500).json({ error: 'Failed to remove photo' });
   }
 });
 

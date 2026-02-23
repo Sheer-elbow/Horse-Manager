@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, useRef, FormEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
@@ -32,6 +32,10 @@ export default function HorseProfile() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [assignUserId, setAssignUserId] = useState('');
   const [assignPerm, setAssignPerm] = useState<'VIEW' | 'EDIT'>('VIEW');
+
+  // Photo upload
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Add record modal
   const [showAddRecord, setShowAddRecord] = useState(false);
@@ -110,6 +114,28 @@ export default function HorseProfile() {
     loadHorse();
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      await api(`/horses/${id}/photo`, { method: 'POST', body: formData });
+      loadHorse();
+    } catch (err) {
+      console.error('Photo upload error:', err);
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    await api(`/horses/${id}/photo`, { method: 'DELETE' });
+    loadHorse();
+  };
+
   const handleAddRecord = async (e: FormEvent) => {
     e.preventDefault();
     const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
@@ -171,6 +197,32 @@ export default function HorseProfile() {
 
       {tab === 'overview' && (
         <div className="space-y-6">
+          {/* Horse photo */}
+          <div className="bg-white rounded-xl border p-5">
+            <div className="flex items-start gap-5">
+              <div className="shrink-0">
+                {horse.photoUrl ? (
+                  <img src={horse.photoUrl} alt={horse.name} className="w-32 h-32 rounded-xl object-cover border" />
+                ) : (
+                  <div className="w-32 h-32 rounded-xl bg-gray-100 border flex items-center justify-center text-gray-300 text-4xl">
+                    &#x1f40e;
+                  </div>
+                )}
+              </div>
+              {isAdmin && (
+                <div className="flex flex-col gap-2">
+                  <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  <button onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} className="text-sm text-brand-600 hover:underline">
+                    {uploadingPhoto ? 'Uploading...' : horse.photoUrl ? 'Change photo' : 'Upload photo'}
+                  </button>
+                  {horse.photoUrl && (
+                    <button onClick={handleRemovePhoto} className="text-sm text-red-500 hover:underline">Remove photo</button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Horse details */}
           <div className="bg-white rounded-xl border p-5">
             {editing ? (
@@ -252,11 +304,6 @@ export default function HorseProfile() {
             </div>
           )}
 
-          {/* Document uploads stub */}
-          <div className="bg-white rounded-xl border p-5">
-            <h3 className="font-semibold mb-2">Documents</h3>
-            <p className="text-sm text-gray-400">Document uploads coming in a future version.</p>
-          </div>
         </div>
       )}
 

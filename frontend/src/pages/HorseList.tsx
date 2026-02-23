@@ -68,8 +68,15 @@ export default function HorseList() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {horses.map((h) => (
             <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border p-5 hover:shadow-md transition-shadow">
-              <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
-              <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-4 mb-3">
+                {h.photoUrl ? (
+                  <img src={h.photoUrl} alt={h.name} className="w-16 h-16 rounded-lg object-cover border shrink-0" />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>
+                )}
+                <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
+              </div>
+              <div className="space-y-1">
                 {h.breed && <div className="text-sm text-gray-500">Breed: {h.breed}</div>}
                 {h.age && <div className="text-sm text-gray-500">Age: {h.age}</div>}
                 {h.stableLocation && <div className="text-sm text-gray-400">Location: {h.stableLocation}</div>}
