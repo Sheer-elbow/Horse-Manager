@@ -73,11 +73,16 @@ function deleteFile(fileUrl: string | null) {
 // ─── Vet Visits ──────────────────────────────────────────────
 
 router.get('/:horseId/vet-visits', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
-  const visits = await prisma.vetVisit.findMany({
-    where: { horseId: req.params.horseId },
-    orderBy: { date: 'desc' },
-  });
-  res.json(visits);
+  try {
+    const visits = await prisma.vetVisit.findMany({
+      where: { horseId: req.params.horseId },
+      orderBy: { date: 'desc' },
+    });
+    res.json(visits);
+  } catch (err) {
+    console.error('List vet visits error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/:horseId/vet-visits', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
@@ -112,11 +117,16 @@ router.delete('/:horseId/vet-visits/:recordId', authenticate, requireHorseAccess
 // ─── Farrier Visits ──────────────────────────────────────────
 
 router.get('/:horseId/farrier-visits', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
-  const visits = await prisma.farrierVisit.findMany({
-    where: { horseId: req.params.horseId },
-    orderBy: { date: 'desc' },
-  });
-  res.json(visits);
+  try {
+    const visits = await prisma.farrierVisit.findMany({
+      where: { horseId: req.params.horseId },
+      orderBy: { date: 'desc' },
+    });
+    res.json(visits);
+  } catch (err) {
+    console.error('List farrier visits error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/:horseId/farrier-visits', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
@@ -151,11 +161,16 @@ router.delete('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAc
 // ─── Vaccinations / Deworming ────────────────────────────────
 
 router.get('/:horseId/vaccinations', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
-  const records = await prisma.vaccinationRecord.findMany({
-    where: { horseId: req.params.horseId },
-    orderBy: { date: 'desc' },
-  });
-  res.json(records);
+  try {
+    const records = await prisma.vaccinationRecord.findMany({
+      where: { horseId: req.params.horseId },
+      orderBy: { date: 'desc' },
+    });
+    res.json(records);
+  } catch (err) {
+    console.error('List vaccinations error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/:horseId/vaccinations', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
@@ -198,11 +213,16 @@ router.delete('/:horseId/vaccinations/:recordId', authenticate, requireHorseAcce
 // ─── Expenses ────────────────────────────────────────────────
 
 router.get('/:horseId/expenses', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
-  const expenses = await prisma.expenseNote.findMany({
-    where: { horseId: req.params.horseId },
-    orderBy: { date: 'desc' },
-  });
-  res.json(expenses);
+  try {
+    const expenses = await prisma.expenseNote.findMany({
+      where: { horseId: req.params.horseId },
+      orderBy: { date: 'desc' },
+    });
+    res.json(expenses);
+  } catch (err) {
+    console.error('List expenses error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/:horseId/expenses', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {

@@ -28,15 +28,20 @@ router.get('/blocks', authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const blocks = await prisma.planBlock.findMany({
-    where,
-    include: {
-      horse: { select: { id: true, name: true } },
-      programme: { select: { id: true, name: true } },
-    },
-    orderBy: { startDate: 'desc' },
-  });
-  res.json(blocks);
+  try {
+    const blocks = await prisma.planBlock.findMany({
+      where,
+      include: {
+        horse: { select: { id: true, name: true } },
+        programme: { select: { id: true, name: true } },
+      },
+      orderBy: { startDate: 'desc' },
+    });
+    res.json(blocks);
+  } catch (err) {
+    console.error('List plan blocks error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/plans/blocks
@@ -156,19 +161,24 @@ router.get('/sessions', authenticate, async (req: AuthRequest, res: Response) =>
     where.date = { gte: start, lt: end };
   }
 
-  const sessions = await prisma.plannedSession.findMany({
-    where,
-    include: { actualSession: true },
-    orderBy: [{ date: 'asc' }, { slot: 'asc' }],
-  });
+  try {
+    const sessions = await prisma.plannedSession.findMany({
+      where,
+      include: { actualSession: true },
+      orderBy: [{ date: 'asc' }, { slot: 'asc' }],
+    });
 
-  // Add locked flag
-  const result = sessions.map((s) => ({
-    ...s,
-    _locked: isWeekLocked(s.date.toISOString().split('T')[0]),
-  }));
+    // Add locked flag
+    const result = sessions.map((s) => ({
+      ...s,
+      _locked: isWeekLocked(s.date.toISOString().split('T')[0]),
+    }));
 
-  res.json(result);
+    res.json(result);
+  } catch (err) {
+    console.error('List planned sessions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/plans/sessions
@@ -272,26 +282,31 @@ router.put('/sessions/:id', authenticate, async (req: AuthRequest, res: Response
 
 // DELETE /api/plans/sessions/:id
 router.delete('/sessions/:id', authenticate, async (req: AuthRequest, res: Response) => {
-  const existing = await prisma.plannedSession.findUnique({ where: { id: req.params.id } });
-  if (!existing) {
-    res.status(404).json({ error: 'Session not found' });
-    return;
-  }
-  if (isWeekLocked(existing.date.toISOString().split('T')[0])) {
-    res.status(400).json({ error: 'Cannot delete sessions in past weeks (locked)' });
-    return;
-  }
-  if (req.user!.role !== 'ADMIN') {
-    const assignment = await prisma.horseAssignment.findUnique({
-      where: { userId_horseId: { userId: req.user!.userId, horseId: existing.horseId } },
-    });
-    if (!assignment || assignment.permission !== 'EDIT') {
-      res.status(403).json({ error: 'Edit access required' });
+  try {
+    const existing = await prisma.plannedSession.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Session not found' });
       return;
     }
+    if (isWeekLocked(existing.date.toISOString().split('T')[0])) {
+      res.status(400).json({ error: 'Cannot delete sessions in past weeks (locked)' });
+      return;
+    }
+    if (req.user!.role !== 'ADMIN') {
+      const assignment = await prisma.horseAssignment.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: existing.horseId } },
+      });
+      if (!assignment || assignment.permission !== 'EDIT') {
+        res.status(403).json({ error: 'Edit access required' });
+        return;
+      }
+    }
+    await prisma.plannedSession.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Session deleted' });
+  } catch (err) {
+    console.error('Delete planned session error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  await prisma.plannedSession.delete({ where: { id: req.params.id } });
-  res.json({ message: 'Session deleted' });
 });
 
 // POST /api/plans/copy-week - Copy sessions from one week to another

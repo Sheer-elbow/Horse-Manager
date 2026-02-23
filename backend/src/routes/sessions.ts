@@ -22,46 +22,51 @@ const sessionLogSchema = z.object({
 
 // GET /api/sessions?horseId=xxx&weekStart=YYYY-MM-DD
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
-  const { horseId, weekStart, date } = req.query;
+  try {
+    const { horseId, weekStart, date } = req.query;
 
-  const where: Record<string, unknown> = {};
-  if (horseId) where.horseId = horseId;
-  if (date) {
-    where.date = new Date((date as string) + 'T00:00:00Z');
-  } else if (weekStart) {
-    const start = new Date((weekStart as string) + 'T00:00:00Z');
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 7);
-    where.date = { gte: start, lt: end };
-  }
-
-  // Check access for non-admin
-  if (req.user!.role !== 'ADMIN' && horseId) {
-    const assignment = await prisma.horseAssignment.findUnique({
-      where: { userId_horseId: { userId: req.user!.userId, horseId: horseId as string } },
-    });
-    if (!assignment) {
-      res.status(403).json({ error: 'No access to this horse' });
-      return;
+    const where: Record<string, unknown> = {};
+    if (horseId) where.horseId = horseId;
+    if (date) {
+      where.date = new Date((date as string) + 'T00:00:00Z');
+    } else if (weekStart) {
+      const start = new Date((weekStart as string) + 'T00:00:00Z');
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 7);
+      where.date = { gte: start, lt: end };
     }
+
+    // Check access for non-admin
+    if (req.user!.role !== 'ADMIN' && horseId) {
+      const assignment = await prisma.horseAssignment.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: horseId as string } },
+      });
+      if (!assignment) {
+        res.status(403).json({ error: 'No access to this horse' });
+        return;
+      }
+    }
+
+    const sessions = await prisma.actualSessionLog.findMany({
+      where,
+      include: {
+        plannedSession: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+        auditLogs: { select: { id: true, editedAt: true }, orderBy: { editedAt: 'desc' }, take: 1 },
+      },
+      orderBy: [{ date: 'asc' }, { slot: 'asc' }],
+    });
+
+    const result = sessions.map((s) => ({
+      ...s,
+      _edited: s.auditLogs.length > 0,
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error('List sessions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-
-  const sessions = await prisma.actualSessionLog.findMany({
-    where,
-    include: {
-      plannedSession: true,
-      createdBy: { select: { id: true, name: true, email: true } },
-      auditLogs: { select: { id: true, editedAt: true }, orderBy: { editedAt: 'desc' }, take: 1 },
-    },
-    orderBy: [{ date: 'asc' }, { slot: 'asc' }],
-  });
-
-  const result = sessions.map((s) => ({
-    ...s,
-    _edited: s.auditLogs.length > 0,
-  }));
-
-  res.json(result);
 });
 
 // POST /api/sessions - create a session log
@@ -190,31 +195,36 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 
 // GET /api/sessions/:id/audit - get audit history for a session
 router.get('/:id/audit', authenticate, async (req: AuthRequest, res: Response) => {
-  const session = await prisma.actualSessionLog.findUnique({
-    where: { id: req.params.id },
-    select: { horseId: true },
-  });
-  if (!session) {
-    res.status(404).json({ error: 'Session not found' });
-    return;
-  }
-
-  if (req.user!.role !== 'ADMIN') {
-    const assignment = await prisma.horseAssignment.findUnique({
-      where: { userId_horseId: { userId: req.user!.userId, horseId: session.horseId } },
+  try {
+    const session = await prisma.actualSessionLog.findUnique({
+      where: { id: req.params.id },
+      select: { horseId: true },
     });
-    if (!assignment) {
-      res.status(403).json({ error: 'No access to this horse' });
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
       return;
     }
-  }
 
-  const auditLogs = await prisma.sessionAuditLog.findMany({
-    where: { actualSessionLogId: req.params.id },
-    include: { editedBy: { select: { id: true, name: true, email: true } } },
-    orderBy: { editedAt: 'desc' },
-  });
-  res.json(auditLogs);
+    if (req.user!.role !== 'ADMIN') {
+      const assignment = await prisma.horseAssignment.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: session.horseId } },
+      });
+      if (!assignment) {
+        res.status(403).json({ error: 'No access to this horse' });
+        return;
+      }
+    }
+
+    const auditLogs = await prisma.sessionAuditLog.findMany({
+      where: { actualSessionLogId: req.params.id },
+      include: { editedBy: { select: { id: true, name: true, email: true } } },
+      orderBy: { editedAt: 'desc' },
+    });
+    res.json(auditLogs);
+  } catch (err) {
+    console.error('Get audit log error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;

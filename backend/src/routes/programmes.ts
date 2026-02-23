@@ -16,11 +16,16 @@ const programmeSchema = z.object({
 
 // GET /api/programmes
 router.get('/', authenticate, async (_req, res: Response) => {
-  const programmes = await prisma.programme.findMany({
-    orderBy: { name: 'asc' },
-    include: { _count: { select: { planBlocks: true } } },
-  });
-  res.json(programmes);
+  try {
+    const programmes = await prisma.programme.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { planBlocks: true } } },
+    });
+    res.json(programmes);
+  } catch (err) {
+    console.error('List programmes error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/programmes (admin only)
@@ -85,15 +90,20 @@ router.post('/upload', authenticate, requireAdmin, upload.single('file'), async 
 
 // GET /api/programmes/:id
 router.get('/:id', authenticate, async (req, res: Response) => {
-  const programme = await prisma.programme.findUnique({
-    where: { id: req.params.id },
-    include: { planBlocks: { include: { horse: { select: { id: true, name: true } } } } },
-  });
-  if (!programme) {
-    res.status(404).json({ error: 'Programme not found' });
-    return;
+  try {
+    const programme = await prisma.programme.findUnique({
+      where: { id: req.params.id },
+      include: { planBlocks: { include: { horse: { select: { id: true, name: true } } } } },
+    });
+    if (!programme) {
+      res.status(404).json({ error: 'Programme not found' });
+      return;
+    }
+    res.json(programme);
+  } catch (err) {
+    console.error('Get programme error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  res.json(programme);
 });
 
 // PUT /api/programmes/:id (admin only)
