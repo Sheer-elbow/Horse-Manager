@@ -47,18 +47,23 @@ const horseSchema = z.object({
 
 // GET /api/horses - list horses visible to user
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
-  if (req.user!.role === 'ADMIN') {
-    const horses = await prisma.horse.findMany({ orderBy: { name: 'asc' } });
-    res.json(horses);
-    return;
-  }
+  try {
+    if (req.user!.role === 'ADMIN') {
+      const horses = await prisma.horse.findMany({ orderBy: { name: 'asc' } });
+      res.json(horses);
+      return;
+    }
 
-  // Non-admin: only horses they're assigned to
-  const assignments = await prisma.horseAssignment.findMany({
-    where: { userId: req.user!.userId },
-    include: { horse: true },
-  });
-  res.json(assignments.map((a) => ({ ...a.horse, _permission: a.permission })));
+    // Non-admin: only horses they're assigned to
+    const assignments = await prisma.horseAssignment.findMany({
+      where: { userId: req.user!.userId },
+      include: { horse: true },
+    });
+    res.json(assignments.map((a) => ({ ...a.horse, _permission: a.permission })));
+  } catch (err) {
+    console.error('List horses error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/horses (admin only)
@@ -79,19 +84,24 @@ router.post('/', authenticate, requireAdmin, async (req, res: Response) => {
 
 // GET /api/horses/:id
 router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
-  const horse = await prisma.horse.findUnique({
-    where: { id: req.params.id },
-    include: {
-      assignments: {
-        include: { user: { select: { id: true, email: true, name: true } } },
+  try {
+    const horse = await prisma.horse.findUnique({
+      where: { id: req.params.id },
+      include: {
+        assignments: {
+          include: { user: { select: { id: true, email: true, name: true } } },
+        },
       },
-    },
-  });
-  if (!horse) {
-    res.status(404).json({ error: 'Horse not found' });
-    return;
+    });
+    if (!horse) {
+      res.status(404).json({ error: 'Horse not found' });
+      return;
+    }
+    res.json({ ...horse, _permission: req.horsePermission });
+  } catch (err) {
+    console.error('Get horse error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  res.json({ ...horse, _permission: req.horsePermission });
 });
 
 // PUT /api/horses/:id (admin only)
@@ -191,11 +201,16 @@ const assignmentSchema = z.object({
 
 // GET /api/horses/:id/assignments
 router.get('/:id/assignments', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
-  const assignments = await prisma.horseAssignment.findMany({
-    where: { horseId: req.params.id },
-    include: { user: { select: { id: true, email: true, name: true } } },
-  });
-  res.json(assignments);
+  try {
+    const assignments = await prisma.horseAssignment.findMany({
+      where: { horseId: req.params.id },
+      include: { user: { select: { id: true, email: true, name: true } } },
+    });
+    res.json(assignments);
+  } catch (err) {
+    console.error('List assignments error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // POST /api/horses/:id/assignments (admin only)

@@ -13,52 +13,62 @@ const updateUserSchema = z.object({
 
 // GET /api/users - list all users (admin only)
 router.get('/', authenticate, requireAdmin, async (_req, res: Response) => {
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      createdAt: true,
-      assignments: {
-        select: {
-          id: true,
-          horseId: true,
-          permission: true,
-          horse: { select: { id: true, name: true } },
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        assignments: {
+          select: {
+            id: true,
+            horseId: true,
+            permission: true,
+            horse: { select: { id: true, name: true } },
+          },
         },
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  res.json(users);
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(users);
+  } catch (err) {
+    console.error('List users error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // GET /api/users/:id
 router.get('/:id', authenticate, requireAdmin, async (req, res: Response) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.params.id },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      createdAt: true,
-      assignments: {
-        select: {
-          id: true,
-          horseId: true,
-          permission: true,
-          horse: { select: { id: true, name: true } },
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        assignments: {
+          select: {
+            id: true,
+            horseId: true,
+            permission: true,
+            horse: { select: { id: true, name: true } },
+          },
         },
       },
-    },
-  });
-  if (!user) {
-    res.status(404).json({ error: 'User not found' });
-    return;
+    });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json(user);
+  } catch (err) {
+    console.error('Get user error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  res.json(user);
 });
 
 // PUT /api/users/:id (admin only)

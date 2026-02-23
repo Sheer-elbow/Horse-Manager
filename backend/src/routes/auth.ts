@@ -86,15 +86,20 @@ router.post('/refresh', async (req, res: Response) => {
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.userId },
-    select: { id: true, email: true, name: true, role: true, mustChangePassword: true },
-  });
-  if (!user) {
-    res.status(404).json({ error: 'User not found' });
-    return;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { id: true, email: true, name: true, role: true, mustChangePassword: true },
+    });
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json(user);
+  } catch (err) {
+    console.error('Get current user error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  res.json(user);
 });
 
 // POST /api/auth/change-password
@@ -264,11 +269,16 @@ router.get('/invites', authenticate, async (req: AuthRequest, res: Response) => 
     return;
   }
 
-  const invites = await prisma.inviteToken.findMany({
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, email: true, createdAt: true, expiresAt: true, usedAt: true },
-  });
-  res.json(invites);
+  try {
+    const invites = await prisma.inviteToken.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, email: true, createdAt: true, expiresAt: true, usedAt: true },
+    });
+    res.json(invites);
+  } catch (err) {
+    console.error('List invites error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;
