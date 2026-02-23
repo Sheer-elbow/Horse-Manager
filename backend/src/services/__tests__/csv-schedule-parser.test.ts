@@ -248,14 +248,21 @@ describe('parseScheduleCsv', () => {
       expect(result.errors.some(e => e.includes('"intensity_rpe_max" must be 1-10'))).toBe(true);
     });
 
-    it('rejects incomplete week (not 7 days)', () => {
+    it('auto-fills missing days as rest (no longer rejects incomplete weeks)', () => {
       const header = 'week,day,title,category';
       const rows = Array.from({ length: 5 }, (_, i) =>
         `1,${i + 1},Training,training`
       );
       const csv = [header, ...rows].join('\n');
       const result = parseScheduleCsv(csv);
-      expect(result.errors.some(e => e.includes('must have exactly 7 day entries'))).toBe(true);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      // Days 6 and 7 should be auto-filled rest days
+      const day6 = result.scheduleData.find(d => d.day === 6)!;
+      const day7 = result.scheduleData.find(d => d.day === 7)!;
+      expect(day6.category).toBe('rest');
+      expect(day6.title).toBe('Rest');
+      expect(day7.category).toBe('rest');
     });
 
     it('rejects duplicate week+day', () => {
@@ -352,6 +359,114 @@ describe('parseScheduleCsv', () => {
       const result = parseScheduleCsv(csv);
       const day1 = result.scheduleData.find(d => d.day === 1)!;
       expect(day1.blocks[0].name).toBe('Rest');
+    });
+  });
+
+  // ─── Semicolon delimiter ────────────────────────────────
+
+  describe('semicolon delimiter (European Excel)', () => {
+    it('parses semicolon-delimited CSV', () => {
+      const header = 'week;day;title;category';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1;${i + 1};${i === 6 ? 'Rest' : 'Training'};${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].title).toBe('Training');
+    });
+
+    it('handles quoted fields with semicolons inside', () => {
+      const header = 'week;day;title;category';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        i === 0
+          ? `1;${i + 1};"Flat work; extended";training`
+          : `1;${i + 1};Rest;rest`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].title).toBe('Flat work; extended');
+    });
+  });
+
+  // ─── Header aliases ─────────────────────────────────────
+
+  describe('header aliases', () => {
+    it('maps "Session" to title and "Type" to category', () => {
+      const header = 'week,day,session,type';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Rest' : 'Flatwork'},${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].title).toBe('Flatwork');
+    });
+
+    it('maps "Workout" to title', () => {
+      const header = 'week,day,workout,category';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Rest' : 'Jumping'},${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].title).toBe('Jumping');
+    });
+
+    it('strips "Week #" hash and "Duration (min)" parens', () => {
+      const header = 'Week #,Day,Title,Category,Duration (min)';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Rest' : 'Training'},${i === 6 ? 'rest' : 'training'},45`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].durationMin).toBe(45);
+    });
+  });
+
+  // ─── Auto-fill rest days ────────────────────────────────
+
+  describe('auto-fill rest days', () => {
+    it('fills missing days when only training days provided', () => {
+      const header = 'week,day,title,category';
+      // Only provide Mon-Fri (days 1-5)
+      const rows = Array.from({ length: 5 }, (_, i) =>
+        `1,${i + 1},Training day ${i + 1},training`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.numWeeks).toBe(1);
+    });
+
+    it('fills a single-day week with 6 rest days', () => {
+      const header = 'week,day,title,category';
+      const csv = [header, '1,3,Jumping,training'].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      const restDays = result.scheduleData.filter(d => d.category === 'rest');
+      expect(restDays).toHaveLength(6);
+    });
+
+    it('fills across multiple weeks independently', () => {
+      const header = 'week,day,title,category';
+      const rows = [
+        '1,1,Training,training',
+        '1,3,Training,training',
+        '2,2,Training,training',
+        '2,5,Training,training',
+      ];
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(14);
+      expect(result.numWeeks).toBe(2);
     });
   });
 });

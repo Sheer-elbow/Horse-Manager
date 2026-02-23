@@ -48,13 +48,60 @@ const KNOWN_COLUMNS = [
   'blocks', 'substitution', 'manual_ref',
 ];
 
+/** Common header aliases → canonical name */
+const HEADER_ALIASES: Record<string, string> = {
+  session: 'title',
+  session_title: 'title',
+  workout: 'title',
+  workout_title: 'title',
+  exercise: 'title',
+  name: 'title',
+  type: 'category',
+  session_type: 'category',
+  workout_type: 'category',
+  duration: 'duration_min',
+  rpe_min: 'intensity_rpe_min',
+  rpe_max: 'intensity_rpe_max',
+  rpe: 'intensity_rpe_min',
+  intensity: 'intensity_label',
+  sub: 'substitution',
+  alternative: 'substitution',
+  ref: 'manual_ref',
+  manual_reference: 'manual_ref',
+  page: 'manual_ref',
+  exercises: 'blocks',
+};
+
 const REST_CATEGORIES = ['rest', 'recovery'];
 
 function normalizeHeader(h: string): string {
-  return h.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  let norm = h.trim().toLowerCase();
+  // Strip trailing #, e.g. "Week #" → "week"
+  norm = norm.replace(/\s*#$/, '');
+  // Strip parenthetical content, e.g. "Duration (min)" → "duration"
+  norm = norm.replace(/\s*\([^)]*\)/, '');
+  // Replace spaces, hyphens, multiple underscores with single _
+  norm = norm.replace(/[\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  // Apply alias mapping
+  return HEADER_ALIASES[norm] ?? norm;
 }
 
-function parseCsvLine(line: string): string[] {
+/** Detect whether the header uses semicolons (European Excel) or commas */
+function detectDelimiter(headerLine: string): string {
+  // Count unquoted semicolons vs commas
+  let inQuotes = false;
+  let commas = 0;
+  let semis = 0;
+  for (const ch of headerLine) {
+    if (ch === '"') { inQuotes = !inQuotes; continue; }
+    if (inQuotes) continue;
+    if (ch === ',') commas++;
+    if (ch === ';') semis++;
+  }
+  return semis > commas ? ';' : ',';
+}
+
+function parseCsvLine(line: string, delimiter = ','): string[] {
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -75,7 +122,7 @@ function parseCsvLine(line: string): string[] {
     } else {
       if (ch === '"') {
         inQuotes = true;
-      } else if (ch === ',') {
+      } else if (ch === delimiter) {
         fields.push(current.trim());
         current = '';
       } else {
@@ -133,8 +180,11 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
     return { scheduleData: [], numWeeks: 0, errors: ['CSV must have a header row and at least one data row'] };
   }
 
+  // Auto-detect delimiter (comma vs semicolon)
+  const delimiter = detectDelimiter(lines[0]);
+
   // Parse header
-  const headers = parseCsvLine(lines[0]).map(normalizeHeader);
+  const headers = parseCsvLine(lines[0], delimiter).map(normalizeHeader);
 
   // Check required columns
   for (const col of REQUIRED_COLUMNS) {
@@ -160,7 +210,7 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
 
   for (let i = 1; i < lines.length; i++) {
     const lineNum = i + 1;
-    const fields = parseCsvLine(lines[i]);
+    const fields = parseCsvLine(lines[i], delimiter);
 
     // Skip empty rows
     if (fields.every(f => f === '')) continue;
@@ -237,27 +287,6 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
     return { scheduleData: [], numWeeks: 0, errors };
   }
 
-  // Sort by week, then day
-  scheduleData.sort((a, b) => a.week - b.week || a.day - b.day);
-
-  // Determine numWeeks
-  const maxWeek = Math.max(...scheduleData.map(d => d.week));
-
-  // Validate: each week must have exactly 7 days
-  for (let w = 1; w <= maxWeek; w++) {
-    const weekDays = scheduleData.filter(d => d.week === w);
-    if (weekDays.length !== 7) {
-      errors.push(`Week ${w}: must have exactly 7 day entries (got ${weekDays.length}). Include rest days explicitly.`);
-    } else {
-      // Check days 1-7 all present
-      const dayNums = weekDays.map(d => d.day).sort();
-      const expected = [1, 2, 3, 4, 5, 6, 7];
-      if (JSON.stringify(dayNums) !== JSON.stringify(expected)) {
-        errors.push(`Week ${w}: days must be 1-7, got [${dayNums.join(', ')}]`);
-      }
-    }
-  }
-
   // Check for duplicate week+day
   const seen = new Set<string>();
   for (const d of scheduleData) {
@@ -268,10 +297,39 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
     seen.add(key);
   }
 
-  const fatalAfterStructure = errors.filter(e => !e.startsWith('Warning:'));
-  if (fatalAfterStructure.length > 0) {
+  const fatalAfterDupes = errors.filter(e => !e.startsWith('Warning:'));
+  if (fatalAfterDupes.length > 0) {
     return { scheduleData: [], numWeeks: 0, errors };
   }
+
+  // Determine numWeeks
+  const maxWeek = Math.max(...scheduleData.map(d => d.week));
+
+  // Auto-fill missing days in each week as rest days (trainers often omit them)
+  for (let w = 1; w <= maxWeek; w++) {
+    const existingDays = new Set(scheduleData.filter(d => d.week === w).map(d => d.day));
+    for (let d = 1; d <= 7; d++) {
+      if (!existingDays.has(d)) {
+        scheduleData.push({
+          week: w,
+          day: d,
+          title: 'Rest',
+          category: 'rest',
+          durationMin: null,
+          durationMax: null,
+          intensityLabel: null,
+          intensityRpeMin: null,
+          intensityRpeMax: null,
+          blocks: [{ name: 'Rest', text: 'Rest' }],
+          substitution: null,
+          manualRef: null,
+        });
+      }
+    }
+  }
+
+  // Sort by week, then day
+  scheduleData.sort((a, b) => a.week - b.week || a.day - b.day);
 
   return { scheduleData, numWeeks: maxWeek, errors };
 }

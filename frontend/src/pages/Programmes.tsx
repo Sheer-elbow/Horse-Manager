@@ -120,7 +120,12 @@ export default function Programmes() {
       setForm({ name: '', description: '' });
       load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      if (err instanceof ApiError && err.body && typeof err.body === 'object' && 'details' in err.body) {
+        const details = (err.body as { details: string[] }).details;
+        setError(`${err.message}\n${details.join('\n')}`);
+      } else {
+        setError(err instanceof Error ? err.message : 'Upload failed');
+      }
     } finally {
       setUploading(false);
     }
@@ -275,7 +280,7 @@ export default function Programmes() {
 
       {/* ─── Add programme modal ─────────────────────────────── */}
       <Modal open={showAdd} onClose={() => { setShowAdd(false); setError(''); }} title="New programme" wide>
-        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
+        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm whitespace-pre-line">{error}</div>}
 
         {/* Upload ZIP package */}
         <form onSubmit={handleZipUpload} className="space-y-3 mb-4">
