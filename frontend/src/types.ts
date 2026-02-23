@@ -60,6 +60,7 @@ export interface PlannedSession {
   id: string;
   planBlockId: string;
   horseId: string;
+  workoutId?: string | null;
   date: string;
   slot: 'AM' | 'PM';
   sessionType: string | null;
@@ -69,6 +70,50 @@ export interface PlannedSession {
   notes: string | null;
   _locked?: boolean;
   actualSession?: ActualSessionLog | null;
+}
+
+export interface ScheduleBlock {
+  name: string;
+  text: string;
+}
+
+export interface ScheduleDayEntry {
+  week: number;
+  day: number;
+  title: string;
+  category: string;
+  durationMin: number | null;
+  durationMax: number | null;
+  intensityLabel: string | null;
+  intensityRpeMin: number | null;
+  intensityRpeMax: number | null;
+  blocks: ScheduleBlock[];
+  substitution: string | null;
+  manualRef: string | null;
+}
+
+export interface Workout {
+  id: string;
+  horseId: string;
+  appliedPlanId: string;
+  originWeek: number;
+  originDay: number;
+  scheduledDate: string | null;
+  slot: 'AM' | 'PM';
+  baselineData: ScheduleDayEntry;
+  currentData: ScheduleDayEntry;
+  isRest: boolean;
+  appliedPlan?: {
+    id: string;
+    status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+    assignedById: string;
+    programmeVersion?: {
+      id: string;
+      version: number;
+      manualFileName: string | null;
+      programme: { id: string; name: string };
+    };
+  };
 }
 
 export interface ActualSessionLog {
