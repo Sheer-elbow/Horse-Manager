@@ -27,6 +27,29 @@ async function checkHorseEditAccess(req: AuthRequest, res: Response, horseId: st
   return true;
 }
 
+/**
+ * Check if user can VIEW an applied plan.
+ * Access granted if:
+ *   - user is ADMIN, OR
+ *   - user is the trainer who assigned the plan, OR
+ *   - user has a HorseAssignment for the plan's horse, OR
+ *   - user has a PlanShare for this plan
+ */
+async function canViewPlan(userId: string, role: string, planId: string, horseId: string, assignedById: string): Promise<boolean> {
+  if (role === 'ADMIN') return true;
+  if (userId === assignedById) return true;
+
+  const assignment = await prisma.horseAssignment.findUnique({
+    where: { userId_horseId: { userId, horseId } },
+  });
+  if (assignment) return true;
+
+  const share = await prisma.planShare.findFirst({
+    where: { appliedPlanId: planId, sharedWithId: userId },
+  });
+  return !!share;
+}
+
 // ─── Schemas ────────────────────────────────────────────────
 
 const applyPlanSchema = z.object({
@@ -197,6 +220,10 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: Auth
 });
 
 // ─── GET /api/applied-plans?horseId= ────────────────────────
+// Visibility:
+//   - ADMIN sees all plans for the horse
+//   - Trainer sees plans they assigned + plans shared with them
+//   - Rider/Owner sees plans for horses they have a HorseAssignment for
 
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -207,19 +234,37 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Check access to horse
-    if (req.user!.role !== 'ADMIN') {
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Build visibility filter
+    let where: Record<string, unknown>;
+
+    if (role === 'ADMIN') {
+      where = { horseId };
+    } else {
+      // Check if user has a HorseAssignment (riders/owners see all plans on their horse)
       const assignment = await prisma.horseAssignment.findUnique({
-        where: { userId_horseId: { userId: req.user!.userId, horseId } },
+        where: { userId_horseId: { userId, horseId } },
       });
-      if (!assignment) {
-        res.status(403).json({ error: 'No access to this horse' });
-        return;
+
+      if (assignment) {
+        // Horse assignment grants visibility to all plans on this horse
+        where = { horseId };
+      } else {
+        // No horse assignment — only see plans they assigned or that are shared with them
+        where = {
+          horseId,
+          OR: [
+            { assignedById: userId },
+            { shares: { some: { sharedWithId: userId } } },
+          ],
+        };
       }
     }
 
     const plans = await prisma.appliedPlan.findMany({
-      where: { horseId },
+      where,
       include: {
         programmeVersion: {
           select: {
@@ -267,15 +312,10 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Check access to horse
-    if (req.user!.role !== 'ADMIN') {
-      const assignment = await prisma.horseAssignment.findUnique({
-        where: { userId_horseId: { userId: req.user!.userId, horseId: plan.horseId } },
-      });
-      if (!assignment) {
-        res.status(403).json({ error: 'No access to this horse' });
-        return;
-      }
+    // Check visibility
+    if (!(await canViewPlan(req.user!.userId, req.user!.role, plan.id, plan.horseId, plan.assignedById))) {
+      res.status(403).json({ error: 'No access to this plan' });
+      return;
     }
 
     res.json(plan);
@@ -328,6 +368,155 @@ router.patch('/:id/status', authenticate, requireRole('ADMIN', 'TRAINER'), async
       return;
     }
     console.error('Update applied plan status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /api/applied-plans/:id/shares ──────────────────────
+
+const createShareSchema = z.object({
+  userId: z.string().uuid(),
+  permission: z.enum(['VIEW', 'EDIT']),
+});
+
+router.post('/:id/shares', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const data = createShareSchema.parse(req.body);
+
+    const plan = await prisma.appliedPlan.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, horseId: true, assignedById: true },
+    });
+
+    if (!plan) {
+      res.status(404).json({ error: 'Applied plan not found' });
+      return;
+    }
+
+    // Only the assigning trainer or admin can share
+    if (req.user!.role !== 'ADMIN' && plan.assignedById !== req.user!.userId) {
+      res.status(403).json({ error: 'Only the assigning trainer can share this plan' });
+      return;
+    }
+
+    // Cannot share with yourself
+    if (data.userId === plan.assignedById) {
+      res.status(400).json({ error: 'Cannot share a plan with its assigning trainer' });
+      return;
+    }
+
+    // Verify target user exists
+    const targetUser = await prisma.user.findUnique({
+      where: { id: data.userId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!targetUser) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Upsert: update permission if share already exists
+    const share = await prisma.planShare.upsert({
+      where: {
+        appliedPlanId_sharedWithId: {
+          appliedPlanId: plan.id,
+          sharedWithId: data.userId,
+        },
+      },
+      update: { permission: data.permission },
+      create: {
+        appliedPlanId: plan.id,
+        sharedWithId: data.userId,
+        permission: data.permission,
+      },
+      include: {
+        sharedWith: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    res.status(201).json(share);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Create plan share error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /api/applied-plans/:id/shares ───────────────────────
+
+router.get('/:id/shares', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const plan = await prisma.appliedPlan.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, horseId: true, assignedById: true },
+    });
+
+    if (!plan) {
+      res.status(404).json({ error: 'Applied plan not found' });
+      return;
+    }
+
+    // Check visibility (anyone who can view the plan can see its shares)
+    if (!(await canViewPlan(req.user!.userId, req.user!.role, plan.id, plan.horseId, plan.assignedById))) {
+      res.status(403).json({ error: 'No access to this plan' });
+      return;
+    }
+
+    const shares = await prisma.planShare.findMany({
+      where: { appliedPlanId: plan.id },
+      include: {
+        sharedWith: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    res.json(shares);
+  } catch (err) {
+    console.error('List plan shares error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── DELETE /api/applied-plans/:id/shares/:shareId ───────────
+
+router.delete('/:id/shares/:shareId', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const share = await prisma.planShare.findUnique({
+      where: { id: req.params.shareId },
+      include: {
+        appliedPlan: { select: { id: true, assignedById: true } },
+      },
+    });
+
+    if (!share) {
+      res.status(404).json({ error: 'Share not found' });
+      return;
+    }
+
+    // Verify share belongs to this plan
+    if (share.appliedPlanId !== req.params.id) {
+      res.status(404).json({ error: 'Share not found' });
+      return;
+    }
+
+    // Only the assigning trainer, admin, or the shared user themselves can delete
+    const isAdmin = req.user!.role === 'ADMIN';
+    const isAssigner = share.appliedPlan.assignedById === req.user!.userId;
+    const isSelf = share.sharedWithId === req.user!.userId;
+
+    if (!isAdmin && !isAssigner && !isSelf) {
+      res.status(403).json({ error: 'Only the assigning trainer or the shared user can remove a share' });
+      return;
+    }
+
+    await prisma.planShare.delete({ where: { id: share.id } });
+
+    res.status(204).end();
+  } catch (err) {
+    console.error('Delete plan share error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
