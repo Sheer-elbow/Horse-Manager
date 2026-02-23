@@ -15,7 +15,7 @@ export default function Programmes() {
   const [viewProgramme, setViewProgramme] = useState<Programme | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isAdmin = user?.role === 'ADMIN';
+  const canManage = user?.role === 'ADMIN' || user?.role === 'TRAINER';
 
   const load = async () => {
     try {
@@ -89,7 +89,7 @@ export default function Programmes() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Programmes</h2>
-        {isAdmin && (
+        {canManage && (
           <button onClick={() => setShowAdd(true)} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700">
             New programme
           </button>
@@ -117,7 +117,7 @@ export default function Programmes() {
                 {p.htmlContent && (
                   <button onClick={() => setViewProgramme(p)} className="text-xs text-blue-600 hover:underline">View</button>
                 )}
-                {isAdmin && (
+                {canManage && (
                   <button onClick={() => handleDelete(p.id)} className="text-xs text-red-500 hover:underline">Delete</button>
                 )}
               </div>

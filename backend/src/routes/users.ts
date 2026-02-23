@@ -8,7 +8,7 @@ const router = Router();
 
 const updateUserSchema = z.object({
   name: z.string().nullable().optional(),
-  role: z.enum(['ADMIN', 'USER']).optional(),
+  role: z.enum(['ADMIN', 'TRAINER', 'RIDER', 'OWNER']).optional(),
 });
 
 // GET /api/users - list all users (admin only)

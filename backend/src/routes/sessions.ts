@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 import { createAuditEntry } from '../services/audit';
 import { AuthRequest } from '../types';
 
@@ -69,8 +69,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/sessions - create a session log
-router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
+// POST /api/sessions - create a session log (admin + trainer + rider)
+router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = sessionLogSchema.parse(req.body);
 
@@ -127,8 +127,8 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT /api/sessions/:id - edit with audit trail
-router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+// PUT /api/sessions/:id - edit with audit trail (admin + trainer + rider)
+router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = await prisma.actualSessionLog.findUnique({ where: { id: req.params.id } });
     if (!existing) {

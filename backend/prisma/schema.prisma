@@ -9,7 +9,9 @@ datasource db {
 
 enum Role {
   ADMIN
-  USER
+  TRAINER
+  RIDER
+  OWNER
 }
 
 enum Permission {
@@ -29,7 +31,7 @@ model User {
   email              String   @unique
   passwordHash       String   @map("password_hash")
   name               String?
-  role               Role     @default(USER)
+  role               Role     @default(RIDER)
   mustChangePassword Boolean  @default(false) @map("must_change_password")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
@@ -47,6 +49,7 @@ model InviteToken {
   id        String    @id @default(uuid())
   email     String
   token     String    @unique
+  role      Role      @default(RIDER)
   createdBy String    @map("created_by")
   creator   User      @relation(fields: [createdBy], references: [id])
   expiresAt DateTime  @map("expires_at")

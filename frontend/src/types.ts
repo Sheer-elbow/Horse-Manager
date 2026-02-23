@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  role: 'ADMIN' | 'USER';
+  role: 'ADMIN' | 'TRAINER' | 'RIDER' | 'OWNER';
   mustChangePassword: boolean;
   createdAt?: string;
   assignments?: HorseAssignment[];
@@ -100,6 +100,7 @@ export interface AuditEntry {
 export interface InviteToken {
   id: string;
   email: string;
+  role: 'TRAINER' | 'RIDER' | 'OWNER';
   createdAt: string;
   expiresAt: string;
   usedAt: string | null;

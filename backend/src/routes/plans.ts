@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 import { requireHorseAccess } from '../middleware/rbac';
 import { AuthRequest, HorsePermissionRequest } from '../types';
 
@@ -44,8 +44,8 @@ router.get('/blocks', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/plans/blocks
-router.post('/blocks', authenticate, async (req: AuthRequest, res: Response) => {
+// POST /api/plans/blocks (admin + trainer)
+router.post('/blocks', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = planBlockSchema.parse(req.body);
 
@@ -56,7 +56,7 @@ router.post('/blocks', authenticate, async (req: AuthRequest, res: Response) => 
       return;
     }
 
-    // Check horse access
+    // Check horse access (non-admin must have EDIT on horse)
     if (req.user!.role !== 'ADMIN') {
       const assignment = await prisma.horseAssignment.findUnique({
         where: { userId_horseId: { userId: req.user!.userId, horseId: data.horseId } },
@@ -87,8 +87,8 @@ router.post('/blocks', authenticate, async (req: AuthRequest, res: Response) => 
   }
 });
 
-// DELETE /api/plans/blocks/:id
-router.delete('/blocks/:id', authenticate, async (req: AuthRequest, res: Response) => {
+// DELETE /api/plans/blocks/:id (admin + trainer)
+router.delete('/blocks/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const block = await prisma.planBlock.findUnique({ where: { id: req.params.id } });
     if (!block) {
@@ -181,8 +181,8 @@ router.get('/sessions', authenticate, async (req: AuthRequest, res: Response) =>
   }
 });
 
-// POST /api/plans/sessions
-router.post('/sessions', authenticate, async (req: AuthRequest, res: Response) => {
+// POST /api/plans/sessions (admin + trainer)
+router.post('/sessions', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = plannedSessionSchema.parse(req.body);
 
@@ -235,8 +235,8 @@ router.post('/sessions', authenticate, async (req: AuthRequest, res: Response) =
   }
 });
 
-// PUT /api/plans/sessions/:id
-router.put('/sessions/:id', authenticate, async (req: AuthRequest, res: Response) => {
+// PUT /api/plans/sessions/:id (admin + trainer)
+router.put('/sessions/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = await prisma.plannedSession.findUnique({ where: { id: req.params.id } });
     if (!existing) {
@@ -280,8 +280,8 @@ router.put('/sessions/:id', authenticate, async (req: AuthRequest, res: Response
   }
 });
 
-// DELETE /api/plans/sessions/:id
-router.delete('/sessions/:id', authenticate, async (req: AuthRequest, res: Response) => {
+// DELETE /api/plans/sessions/:id (admin + trainer)
+router.delete('/sessions/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = await prisma.plannedSession.findUnique({ where: { id: req.params.id } });
     if (!existing) {
@@ -317,7 +317,7 @@ const copyWeekSchema = z.object({
   targetWeekStart: z.string(), // YYYY-MM-DD (Monday)
 });
 
-router.post('/copy-week', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/copy-week', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = copyWeekSchema.parse(req.body);
 

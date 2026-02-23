@@ -59,7 +59,11 @@ export default function Planner() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
   const isAdmin = user?.role === 'ADMIN';
-  const canEdit = isAdmin || horse?._permission === 'EDIT';
+  const hasEditPermission = isAdmin || horse?._permission === 'EDIT';
+  // Plan management: Admin + Trainer only
+  const canEditPlan = hasEditPermission && (isAdmin || user?.role === 'TRAINER');
+  // Session logging: Admin + Trainer + Rider
+  const canLogSession = hasEditPermission && (isAdmin || user?.role === 'TRAINER' || user?.role === 'RIDER');
   const weekLocked = isWeekInPast(currentWeekStart);
 
   const loadHorse = async () => {
@@ -284,7 +288,7 @@ export default function Planner() {
             {b.name}
           </button>
         ))}
-        {canEdit && (
+        {canEditPlan && (
           <button
             onClick={() => {
               const nextMon = getMondayOfWeek(new Date());
@@ -338,7 +342,7 @@ export default function Planner() {
               Next &rarr;
             </button>
 
-            {canEdit && !weekLocked && (
+            {canEditPlan && !weekLocked && (
               <button
                 onClick={() => {
                   const targets = blockWeeks.filter((w) => toDateStr(w) !== toDateStr(currentWeekStart) && !isWeekInPast(w));
@@ -398,8 +402,8 @@ export default function Planner() {
                       <div key={dayIdx} className="bg-white border rounded-lg p-2 min-h-[100px] text-xs space-y-1">
                         {/* Planned */}
                         <div
-                          className={`rounded p-1.5 ${planned ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canEdit && !weekLocked ? 'cursor-pointer hover:bg-blue-100' : ''}`}
-                          onClick={() => canEdit && !weekLocked && openEditPlanned(dayIdx, slot)}
+                          className={`rounded p-1.5 ${planned ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canEditPlan && !weekLocked ? 'cursor-pointer hover:bg-blue-100' : ''}`}
+                          onClick={() => canEditPlan && !weekLocked && openEditPlanned(dayIdx, slot)}
                         >
                           <div className="text-[10px] text-gray-400 uppercase">Plan</div>
                           {planned ? (
@@ -409,14 +413,14 @@ export default function Planner() {
                               {planned.intensityRpe && <div className="text-gray-500">RPE {planned.intensityRpe}</div>}
                             </>
                           ) : (
-                            <div className="text-gray-300">{canEdit && !weekLocked ? '+ Add' : '-'}</div>
+                            <div className="text-gray-300">{canEditPlan && !weekLocked ? '+ Add' : '-'}</div>
                           )}
                         </div>
 
                         {/* Actual */}
                         <div
-                          className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canEdit ? 'cursor-pointer hover:bg-green-100' : ''}`}
-                          onClick={() => canEdit && openLogActual(dayIdx, slot)}
+                          className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canLogSession ? 'cursor-pointer hover:bg-green-100' : ''}`}
+                          onClick={() => canLogSession && openLogActual(dayIdx, slot)}
                         >
                           <div className="flex items-center gap-1">
                             <span className="text-[10px] text-gray-400 uppercase">Actual</span>
@@ -437,7 +441,7 @@ export default function Planner() {
                               {actual.rider && <div className="text-gray-400">{actual.rider}</div>}
                             </>
                           ) : (
-                            <div className="text-gray-300">{canEdit ? '+ Log' : '-'}</div>
+                            <div className="text-gray-300">{canLogSession ? '+ Log' : '-'}</div>
                           )}
                         </div>
                       </div>

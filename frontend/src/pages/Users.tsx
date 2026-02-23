@@ -14,7 +14,8 @@ export default function Users() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', role: '' as 'ADMIN' | 'USER' });
+  const [editForm, setEditForm] = useState({ name: '', role: '' as User['role'] });
+  const [inviteRole, setInviteRole] = useState<'TRAINER' | 'RIDER' | 'OWNER'>('RIDER');
 
   const load = async () => {
     try {
@@ -40,7 +41,7 @@ export default function Users() {
     try {
       const result = await api<{ message: string; inviteUrl?: string; emailError?: string }>('/auth/invite', {
         method: 'POST',
-        body: JSON.stringify({ email: inviteEmail }),
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       });
       if (result.emailError) {
         // Email failed but invite was created - show the link
@@ -121,7 +122,12 @@ export default function Users() {
                 <td className="px-4 py-3">{u.email}</td>
                 <td className="px-4 py-3">{u.name || '-'}</td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
+                    u.role === 'TRAINER' ? 'bg-blue-100 text-blue-700' :
+                    u.role === 'RIDER' ? 'bg-green-100 text-green-700' :
+                    'bg-amber-100 text-amber-700'
+                  }`}>
                     {u.role}
                   </span>
                 </td>
@@ -150,6 +156,7 @@ export default function Users() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Sent</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Expires</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
@@ -159,6 +166,7 @@ export default function Users() {
               {invites.map((inv) => (
                 <tr key={inv.id} className="border-b last:border-0">
                   <td className="px-4 py-3">{inv.email}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{inv.role}</td>
                   <td className="px-4 py-3 text-gray-500">{new Date(inv.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-gray-500">{new Date(inv.expiresAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
@@ -185,6 +193,14 @@ export default function Users() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
             <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2" required placeholder="user@example.com" />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'TRAINER' | 'RIDER' | 'OWNER')} className="w-full border rounded-lg px-3 py-2">
+              <option value="RIDER">Rider</option>
+              <option value="TRAINER">Trainer</option>
+              <option value="OWNER">Owner</option>
+            </select>
+          </div>
           <p className="text-xs text-gray-500">An invite link will be sent to this email. The invite expires in 72 hours.</p>
           <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Send invite</button>
         </form>
@@ -204,9 +220,11 @@ export default function Users() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as 'ADMIN' | 'USER' })} className="w-full border rounded-lg px-3 py-2" disabled={editUser?.id === currentUser?.id}>
-              <option value="USER">User</option>
+            <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as User['role'] })} className="w-full border rounded-lg px-3 py-2" disabled={editUser?.id === currentUser?.id}>
               <option value="ADMIN">Admin</option>
+              <option value="TRAINER">Trainer</option>
+              <option value="RIDER">Rider</option>
+              <option value="OWNER">Owner</option>
             </select>
             {editUser?.id === currentUser?.id && <p className="text-xs text-gray-400 mt-1">Cannot change your own role</p>}
           </div>
