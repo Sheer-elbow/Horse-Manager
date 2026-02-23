@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, useRef, FormEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
@@ -14,6 +14,8 @@ interface HealthRecord {
   name?: string | null;
   dueDate?: string | null;
   amount?: number | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
 }
 
 export default function HorseProfile() {
@@ -33,9 +35,16 @@ export default function HorseProfile() {
   const [assignUserId, setAssignUserId] = useState('');
   const [assignPerm, setAssignPerm] = useState<'VIEW' | 'EDIT'>('VIEW');
 
+  // Photo upload
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+
   // Add record modal
   const [showAddRecord, setShowAddRecord] = useState(false);
   const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '' });
+  const recFileRef = useRef<HTMLInputElement>(null);
+  const [recError, setRecError] = useState('');
 
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = isAdmin || horse?._permission === 'EDIT';
@@ -110,21 +119,55 @@ export default function HorseProfile() {
     loadHorse();
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoError('');
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      await api(`/horses/${id}/photo`, { method: 'POST', body: formData });
+      loadHorse();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      setPhotoError(msg);
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    await api(`/horses/${id}/photo`, { method: 'DELETE' });
+    loadHorse();
+  };
+
   const handleAddRecord = async (e: FormEvent) => {
     e.preventDefault();
+    setRecError('');
     const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
-    const body: Record<string, unknown> = { date: recForm.date, notes: recForm.notes || null };
-    if (tab === 'vaccinations') {
-      body.name = recForm.name || null;
-      body.dueDate = recForm.dueDate || null;
+    try {
+      const formData = new FormData();
+      formData.append('date', recForm.date);
+      if (recForm.notes) formData.append('notes', recForm.notes);
+      if (tab === 'vaccinations') {
+        if (recForm.name) formData.append('name', recForm.name);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
+      }
+      if (tab === 'expenses' && recForm.amount) {
+        formData.append('amount', recForm.amount);
+      }
+      const file = recFileRef.current?.files?.[0];
+      if (file) formData.append('file', file);
+      await api(`/health/${id}/${endpoint}`, { method: 'POST', body: formData });
+      setShowAddRecord(false);
+      setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '' });
+      if (recFileRef.current) recFileRef.current.value = '';
+      loadRecords(tab);
+    } catch (err: unknown) {
+      setRecError(err instanceof Error ? err.message : 'Failed to add record');
     }
-    if (tab === 'expenses') {
-      body.amount = recForm.amount ? parseFloat(recForm.amount) : null;
-    }
-    await api(`/health/${id}/${endpoint}`, { method: 'POST', body: JSON.stringify(body) });
-    setShowAddRecord(false);
-    setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '' });
-    loadRecords(tab);
   };
 
   const handleDeleteRecord = async (recordId: string) => {
@@ -171,6 +214,33 @@ export default function HorseProfile() {
 
       {tab === 'overview' && (
         <div className="space-y-6">
+          {/* Horse photo */}
+          <div className="bg-white rounded-xl border p-5">
+            <div className="flex items-start gap-5">
+              <div className="shrink-0">
+                {horse.photoUrl ? (
+                  <img src={horse.photoUrl} alt={horse.name} className="w-32 h-32 rounded-xl object-cover border" />
+                ) : (
+                  <div className="w-32 h-32 rounded-xl bg-gray-100 border flex items-center justify-center text-gray-300 text-4xl">
+                    &#x1f40e;
+                  </div>
+                )}
+              </div>
+              {isAdmin && (
+                <div className="flex flex-col gap-2">
+                  <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  <button onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} className="text-sm text-brand-600 hover:underline">
+                    {uploadingPhoto ? 'Uploading...' : horse.photoUrl ? 'Change photo' : 'Upload photo'}
+                  </button>
+                  {horse.photoUrl && (
+                    <button onClick={handleRemovePhoto} className="text-sm text-red-500 hover:underline">Remove photo</button>
+                  )}
+                  {photoError && <div className="text-sm text-red-600">{photoError}</div>}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Horse details */}
           <div className="bg-white rounded-xl border p-5">
             {editing ? (
@@ -252,11 +322,6 @@ export default function HorseProfile() {
             </div>
           )}
 
-          {/* Document uploads stub */}
-          <div className="bg-white rounded-xl border p-5">
-            <h3 className="font-semibold mb-2">Documents</h3>
-            <p className="text-sm text-gray-400">Document uploads coming in a future version.</p>
-          </div>
         </div>
       )}
 
@@ -278,15 +343,28 @@ export default function HorseProfile() {
             <div className="space-y-3">
               {records.map((r) => (
                 <div key={r.id} className="flex items-start justify-between py-3 border-b last:border-0">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{new Date(r.date).toLocaleDateString('en-GB')}</div>
                     {r.name && <div className="text-sm text-gray-700">{r.name}</div>}
                     {r.notes && <div className="text-sm text-gray-500 mt-1">{r.notes}</div>}
                     {r.dueDate && <div className="text-xs text-amber-600 mt-1">Due: {new Date(r.dueDate).toLocaleDateString('en-GB')}</div>}
                     {r.amount != null && <div className="text-sm text-gray-600 mt-1">Amount: {r.amount}</div>}
+                    {r.fileUrl && (
+                      <div className="mt-2">
+                        {r.fileName?.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
+                          <a href={r.fileUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={r.fileUrl} alt={r.fileName || 'Attachment'} className="max-w-xs max-h-40 rounded-lg border object-cover" />
+                          </a>
+                        ) : (
+                          <a href={r.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline">
+                            <span>&#128206;</span> {r.fileName || 'View attachment'}
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {canEdit && (
-                    <button onClick={() => handleDeleteRecord(r.id)} className="text-xs text-red-500 hover:underline">Delete</button>
+                    <button onClick={() => handleDeleteRecord(r.id)} className="text-xs text-red-500 hover:underline shrink-0 ml-3">Delete</button>
                   )}
                 </div>
               ))}
@@ -319,7 +397,8 @@ export default function HorseProfile() {
       </Modal>
 
       {/* Add record modal */}
-      <Modal open={showAddRecord} onClose={() => setShowAddRecord(false)} title={`Add ${tab} record`}>
+      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setRecError(''); }} title={`Add ${tab} record`}>
+        {recError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{recError}</div>}
         <form onSubmit={handleAddRecord} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -346,6 +425,10 @@ export default function HorseProfile() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea value={recForm.notes} onChange={(e) => setRecForm({ ...recForm, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={3} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Attach file (image or PDF)</label>
+            <input ref={recFileRef} type="file" accept="image/*,.pdf" className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100" />
           </div>
           <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Save</button>
         </form>

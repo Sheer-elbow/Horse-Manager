@@ -167,8 +167,28 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
       },
     });
 
-    await sendInviteEmail(body.email, token);
-    res.json({ message: `Invite sent to ${body.email}` });
+    const inviteUrl = `${config.appUrl}/accept-invite?token=${token}`;
+
+    // Try to send email, but always return the invite link as fallback
+    let emailSent = false;
+    let emailError = '';
+    try {
+      await sendInviteEmail(body.email, token);
+      emailSent = true;
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : 'Unknown email error';
+      console.error('Failed to send invite email:', emailError);
+    }
+
+    if (emailSent) {
+      res.json({ message: `Invite sent to ${body.email}`, inviteUrl });
+    } else {
+      res.json({
+        message: `Invite created but email could not be sent. Share the link manually.`,
+        inviteUrl,
+        emailError,
+      });
+    }
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: err.errors });

@@ -43,9 +43,13 @@ export async function api<T = unknown>(
   options: RequestInit = {}
 ): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
+
+  // Don't set Content-Type for FormData (browser sets it with boundary)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;

@@ -39,6 +39,8 @@ services:
       APP_URL: ${APP_URL}
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
+    volumes:
+      - uploads:/app/uploads
     expose:
       - "3000"
 
@@ -65,5 +67,6 @@ services:
 
 volumes:
   pgdata:
+  uploads:
   caddy_data:
   caddy_config:

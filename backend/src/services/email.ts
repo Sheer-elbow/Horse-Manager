@@ -1,9 +1,41 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config';
 
-// Email adapter interface - swap implementation for SendGrid/Mailgun/Postmark later
+// Email adapter interface
 interface EmailAdapter {
   sendMail(options: { to: string; subject: string; html: string }): Promise<void>;
+}
+
+// Resend HTTP API adapter - bypasses SMTP ports (which DigitalOcean often blocks)
+class ResendHttpAdapter implements EmailAdapter {
+  private apiKey: string;
+  private from: string;
+
+  constructor(apiKey: string, from: string) {
+    this.apiKey = apiKey;
+    this.from = from;
+  }
+
+  async sendMail(options: { to: string; subject: string; html: string }): Promise<void> {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: this.from,
+        to: [options.to],
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(`Resend API error ${res.status}: ${JSON.stringify(body)}`);
+    }
+  }
 }
 
 class SmtpAdapter implements EmailAdapter {
@@ -30,10 +62,10 @@ class SmtpAdapter implements EmailAdapter {
   }
 }
 
-// Fallback: log emails to console when SMTP is not configured
+// Fallback: log emails to console when not configured
 class ConsoleAdapter implements EmailAdapter {
   async sendMail(options: { to: string; subject: string; html: string }): Promise<void> {
-    console.log('=== EMAIL (console, SMTP not configured) ===');
+    console.log('=== EMAIL (console, not configured) ===');
     console.log(`To: ${options.to}`);
     console.log(`Subject: ${options.subject}`);
     console.log(`Body: ${options.html}`);
@@ -42,10 +74,19 @@ class ConsoleAdapter implements EmailAdapter {
 }
 
 function createEmailAdapter(): EmailAdapter {
+  // If the SMTP password looks like a Resend API key, use the HTTP API
+  // This avoids SMTP port blocking issues on cloud providers like DigitalOcean
+  if (config.smtp.pass && config.smtp.pass.startsWith('re_')) {
+    console.log('Using Resend HTTP API for email delivery');
+    return new ResendHttpAdapter(config.smtp.pass, config.smtp.from);
+  }
+
   if (config.smtp.host) {
+    console.log('Using SMTP for email delivery');
     return new SmtpAdapter();
   }
-  console.warn('SMTP not configured. Emails will be logged to console.');
+
+  console.warn('Email not configured. Emails will be logged to console.');
   return new ConsoleAdapter();
 }
 

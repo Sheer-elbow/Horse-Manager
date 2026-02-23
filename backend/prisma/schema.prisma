@@ -66,6 +66,7 @@ model Horse {
   ownerNotes      String?  @map("owner_notes")
   stableLocation  String?  @map("stable_location")
   identifyingInfo String?  @map("identifying_info")
+  photoUrl        String?  @map("photo_url")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -98,13 +99,16 @@ model HorseAssignment {
 // ─── Programmes & Plans ──────────────────────────────────────
 
 model Programme {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  createdById String   @map("created_by_id")
-  createdBy   User     @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  htmlContent      String?  @map("html_content") @db.Text
+  originalFileName String?  @map("original_file_name")
+  horseNames       String[] @map("horse_names")
+  createdById      String   @map("created_by_id")
+  createdBy        User     @relation(fields: [createdById], references: [id])
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   planBlocks PlanBlock[]
 
@@ -198,6 +202,8 @@ model VetVisit {
   horseId   String   @map("horse_id")
   date      DateTime @db.Date
   notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -211,6 +217,8 @@ model FarrierVisit {
   horseId   String   @map("horse_id")
   date      DateTime @db.Date
   notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -226,6 +234,8 @@ model VaccinationRecord {
   date      DateTime  @db.Date
   notes     String?
   dueDate   DateTime? @map("due_date") @db.Date
+  fileUrl   String?   @map("file_url")
+  fileName  String?   @map("file_name")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
@@ -240,6 +250,8 @@ model ExpenseNote {
   date      DateTime @db.Date
   amount    Decimal? @db.Decimal(10, 2)
   notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

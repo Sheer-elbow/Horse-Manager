@@ -25,6 +25,7 @@ export interface Horse {
   ownerNotes: string | null;
   stableLocation: string | null;
   identifyingInfo: string | null;
+  photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
   _permission?: 'VIEW' | 'EDIT';
@@ -35,6 +36,9 @@ export interface Programme {
   id: string;
   name: string;
   description: string | null;
+  htmlContent: string | null;
+  originalFileName: string | null;
+  horseNames: string[];
   createdAt: string;
   _count?: { planBlocks: number };
 }
