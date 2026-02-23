@@ -50,6 +50,118 @@ async function canViewPlan(userId: string, role: string, planId: string, horseId
   return !!share;
 }
 
+// ─── Core apply logic ────────────────────────────────────────
+
+interface ApplyParams {
+  horseId: string;
+  programmeVersionId: string;
+  programmeId: string;
+  programmeName: string;
+  versionNumber: number;
+  numWeeks: number;
+  scheduleData: ScheduleDayEntry[];
+  startDate: Date;
+  assignedById: string;
+  sourceAppliedPlanId?: string;
+  isAmended?: boolean;
+}
+
+/**
+ * Shared transaction logic for applying a programme version to a horse.
+ * Used by both POST /applied-plans and POST /applied-plans/:id/repeat.
+ * Returns collision error string or null (caller should 409 if non-null).
+ */
+async function checkCollisions(horseId: string, scheduleData: ScheduleDayEntry[], startDate: Date) {
+  const scheduledDates: Date[] = [];
+  for (const entry of scheduleData) {
+    const offsetDays = (entry.week - 1) * 7 + (entry.day - 1);
+    const d = new Date(startDate);
+    d.setUTCDate(d.getUTCDate() + offsetDays);
+    scheduledDates.push(d);
+  }
+
+  const existingSessions = await prisma.plannedSession.findMany({
+    where: { horseId, slot: 'AM', date: { in: scheduledDates } },
+    select: { date: true },
+  });
+
+  if (existingSessions.length > 0) {
+    return existingSessions.map(s => s.date.toISOString().split('T')[0]);
+  }
+  return null;
+}
+
+async function executeApply(params: ApplyParams) {
+  return prisma.$transaction(async (tx) => {
+    // 1. Create AppliedPlan
+    const appliedPlan = await tx.appliedPlan.create({
+      data: {
+        horseId: params.horseId,
+        programmeVersionId: params.programmeVersionId,
+        assignedById: params.assignedById,
+        startDate: params.startDate,
+        status: 'ACTIVE',
+        sourceAppliedPlanId: params.sourceAppliedPlanId ?? null,
+        isAmended: params.isAmended ?? false,
+      },
+    });
+
+    // 2. Create PlanBlock (for Planner grid compatibility)
+    const planBlock = await tx.planBlock.create({
+      data: {
+        horseId: params.horseId,
+        programmeId: params.programmeId,
+        appliedPlanId: appliedPlan.id,
+        name: `${params.programmeName} v${params.versionNumber}`,
+        startDate: params.startDate,
+        numWeeks: params.numWeeks,
+      },
+    });
+
+    // 3. Create Workout + PlannedSession for each schedule day
+    let workoutsCreated = 0;
+
+    for (const entry of params.scheduleData) {
+      const offsetDays = (entry.week - 1) * 7 + (entry.day - 1);
+      const scheduledDate = new Date(params.startDate);
+      scheduledDate.setUTCDate(scheduledDate.getUTCDate() + offsetDays);
+
+      const rest = isRestDay(entry);
+      const entryJson = entry as unknown as Prisma.InputJsonValue;
+
+      const workout = await tx.workout.create({
+        data: {
+          appliedPlanId: appliedPlan.id,
+          horseId: params.horseId,
+          originWeek: entry.week,
+          originDay: entry.day,
+          scheduledDate,
+          slot: 'AM',
+          baselineData: entryJson,
+          currentData: entryJson,
+          isRest: rest,
+        },
+      });
+
+      const sessionFields = projectToSessionFields(entry);
+      await tx.plannedSession.create({
+        data: {
+          planBlockId: planBlock.id,
+          horseId: params.horseId,
+          workoutId: workout.id,
+          date: scheduledDate,
+          slot: 'AM',
+          ...sessionFields,
+        },
+      });
+
+      workoutsCreated++;
+    }
+
+    return { appliedPlan, planBlock, workoutsCreated };
+  });
+}
+
 // ─── Schemas ────────────────────────────────────────────────
 
 const applyPlanSchema = z.object({
@@ -105,107 +217,26 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: Auth
       return;
     }
 
-    const numWeeks = programmeVersion.numWeeks;
-    const programmeName = programmeVersion.programme.name;
-
-    // Check for PlannedSession collisions before starting the transaction.
-    // All workouts default to AM slot.
-    const scheduledDates: Date[] = [];
-    for (const entry of scheduleData) {
-      const offsetDays = (entry.week - 1) * 7 + (entry.day - 1);
-      const d = new Date(startDate);
-      d.setUTCDate(d.getUTCDate() + offsetDays);
-      scheduledDates.push(d);
-    }
-
-    const existingSessions = await prisma.plannedSession.findMany({
-      where: {
-        horseId: data.horseId,
-        slot: 'AM',
-        date: { in: scheduledDates },
-      },
-      select: { date: true },
-    });
-
-    if (existingSessions.length > 0) {
-      const conflictDates = existingSessions.map(s =>
-        s.date.toISOString().split('T')[0]
-      );
+    // Check for PlannedSession collisions
+    const conflictDates = await checkCollisions(data.horseId, scheduleData, startDate);
+    if (conflictDates) {
       res.status(409).json({
-        error: `Cannot apply: ${existingSessions.length} date(s) already have AM planned sessions`,
+        error: `Cannot apply: ${conflictDates.length} date(s) already have AM planned sessions`,
         conflictDates,
       });
       return;
     }
 
-    // Execute everything in a single transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create AppliedPlan
-      const appliedPlan = await tx.appliedPlan.create({
-        data: {
-          horseId: data.horseId,
-          programmeVersionId: data.programmeVersionId,
-          assignedById: req.user!.userId,
-          startDate,
-          status: 'ACTIVE',
-        },
-      });
-
-      // 2. Create PlanBlock (for Planner grid compatibility)
-      const planBlock = await tx.planBlock.create({
-        data: {
-          horseId: data.horseId,
-          programmeId: programmeVersion.programmeId,
-          appliedPlanId: appliedPlan.id,
-          name: `${programmeName} v${programmeVersion.version}`,
-          startDate,
-          numWeeks,
-        },
-      });
-
-      // 3. Create Workout + PlannedSession for each schedule day
-      let workoutsCreated = 0;
-
-      for (const entry of scheduleData) {
-        const offsetDays = (entry.week - 1) * 7 + (entry.day - 1);
-        const scheduledDate = new Date(startDate);
-        scheduledDate.setUTCDate(scheduledDate.getUTCDate() + offsetDays);
-
-        const rest = isRestDay(entry);
-        const entryJson = entry as unknown as Prisma.InputJsonValue;
-
-        // Create Workout
-        const workout = await tx.workout.create({
-          data: {
-            appliedPlanId: appliedPlan.id,
-            horseId: data.horseId,
-            originWeek: entry.week,
-            originDay: entry.day,
-            scheduledDate,
-            slot: 'AM',
-            baselineData: entryJson,
-            currentData: entryJson,
-            isRest: rest,
-          },
-        });
-
-        // Create PlannedSession projection
-        const sessionFields = projectToSessionFields(entry);
-        await tx.plannedSession.create({
-          data: {
-            planBlockId: planBlock.id,
-            horseId: data.horseId,
-            workoutId: workout.id,
-            date: scheduledDate,
-            slot: 'AM',
-            ...sessionFields,
-          },
-        });
-
-        workoutsCreated++;
-      }
-
-      return { appliedPlan, planBlock, workoutsCreated };
+    const result = await executeApply({
+      horseId: data.horseId,
+      programmeVersionId: data.programmeVersionId,
+      programmeId: programmeVersion.programmeId,
+      programmeName: programmeVersion.programme.name,
+      versionNumber: programmeVersion.version,
+      numWeeks: programmeVersion.numWeeks,
+      scheduleData,
+      startDate,
+      assignedById: req.user!.userId,
     });
 
     res.status(201).json(result);
@@ -408,6 +439,214 @@ router.patch('/:id/status', authenticate, requireRole('ADMIN', 'TRAINER'), async
       return;
     }
     console.error('Update applied plan status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /api/applied-plans/:id/repeat ──────────────────────
+
+const repeatSchema = z.object({
+  mode: z.enum(['original', 'amended']),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate must be YYYY-MM-DD'),
+});
+
+router.post('/:id/repeat', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
+  try {
+    const body = repeatSchema.parse(req.body);
+
+    // Load the source applied plan
+    const sourcePlan = await prisma.appliedPlan.findUnique({
+      where: { id: req.params.id },
+      include: {
+        programmeVersion: {
+          include: { programme: { select: { id: true, name: true } } },
+        },
+      },
+    });
+
+    if (!sourcePlan) {
+      res.status(404).json({ error: 'Applied plan not found' });
+      return;
+    }
+
+    // Check EDIT access on the horse
+    if (!(await checkHorseEditAccess(req, res, sourcePlan.horseId))) return;
+
+    // Parse startDate
+    const startDate = new Date(body.startDate + 'T00:00:00Z');
+    if (isNaN(startDate.getTime())) {
+      res.status(400).json({ error: 'Invalid startDate' });
+      return;
+    }
+
+    const pv = sourcePlan.programmeVersion;
+    const programmeName = pv.programme.name;
+
+    if (body.mode === 'original') {
+      // ── ORIGINAL: reuse the same published version's scheduleData ──
+      const scheduleData = pv.scheduleData as unknown as ScheduleDayEntry[];
+      if (!Array.isArray(scheduleData) || scheduleData.length === 0) {
+        res.status(400).json({ error: 'Source programme version has no schedule data' });
+        return;
+      }
+
+      const conflictDates = await checkCollisions(sourcePlan.horseId, scheduleData, startDate);
+      if (conflictDates) {
+        res.status(409).json({
+          error: `Cannot repeat: ${conflictDates.length} date(s) already have AM planned sessions`,
+          conflictDates,
+        });
+        return;
+      }
+
+      const result = await executeApply({
+        horseId: sourcePlan.horseId,
+        programmeVersionId: pv.id,
+        programmeId: pv.programmeId,
+        programmeName,
+        versionNumber: pv.version,
+        numWeeks: pv.numWeeks,
+        scheduleData,
+        startDate,
+        assignedById: req.user!.userId,
+        sourceAppliedPlanId: sourcePlan.id,
+      });
+
+      res.status(201).json(result);
+    } else {
+      // ── AMENDED: derive scheduleData from the source plan's workouts ──
+      const workouts = await prisma.workout.findMany({
+        where: { appliedPlanId: sourcePlan.id },
+        orderBy: [{ originWeek: 'asc' }, { originDay: 'asc' }],
+      });
+
+      if (workouts.length === 0) {
+        res.status(400).json({ error: 'Source plan has no workouts to derive from' });
+        return;
+      }
+
+      // Build amended scheduleData from currentData of each workout
+      const amendedSchedule: ScheduleDayEntry[] = workouts.map(w => {
+        const data = w.currentData as unknown as ScheduleDayEntry;
+        return {
+          ...data,
+          week: w.originWeek,
+          day: w.originDay,
+        };
+      });
+
+      // Compute numWeeks from the max originWeek
+      const numWeeks = Math.max(...workouts.map(w => w.originWeek));
+
+      const conflictDates = await checkCollisions(sourcePlan.horseId, amendedSchedule, startDate);
+      if (conflictDates) {
+        res.status(409).json({
+          error: `Cannot repeat: ${conflictDates.length} date(s) already have AM planned sessions`,
+          conflictDates,
+        });
+        return;
+      }
+
+      // Create a private amended ProgrammeVersion (PUBLISHED so it can be applied),
+      // then apply it — all in one transaction
+      const result = await prisma.$transaction(async (tx) => {
+        // Find the next version number for this programme
+        const latestVersion = await tx.programmeVersion.findFirst({
+          where: { programmeId: pv.programmeId },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        const nextVersion = (latestVersion?.version ?? 0) + 1;
+
+        // Create the amended version (immediately PUBLISHED)
+        const amendedVersion = await tx.programmeVersion.create({
+          data: {
+            programmeId: pv.programmeId,
+            version: nextVersion,
+            status: 'PUBLISHED',
+            numWeeks,
+            manualHtml: pv.manualHtml,
+            manualFileName: pv.manualFileName,
+            scheduleData: amendedSchedule as unknown as Prisma.InputJsonValue,
+            publishedAt: new Date(),
+          },
+        });
+
+        // Create AppliedPlan
+        const appliedPlan = await tx.appliedPlan.create({
+          data: {
+            horseId: sourcePlan.horseId,
+            programmeVersionId: amendedVersion.id,
+            assignedById: req.user!.userId,
+            startDate,
+            status: 'ACTIVE',
+            sourceAppliedPlanId: sourcePlan.id,
+            isAmended: true,
+          },
+        });
+
+        // Create PlanBlock
+        const planBlock = await tx.planBlock.create({
+          data: {
+            horseId: sourcePlan.horseId,
+            programmeId: pv.programmeId,
+            appliedPlanId: appliedPlan.id,
+            name: `${programmeName} v${nextVersion} (amended)`,
+            startDate,
+            numWeeks,
+          },
+        });
+
+        // Create Workouts + PlannedSessions
+        let workoutsCreated = 0;
+        for (const entry of amendedSchedule) {
+          const offsetDays = (entry.week - 1) * 7 + (entry.day - 1);
+          const scheduledDate = new Date(startDate);
+          scheduledDate.setUTCDate(scheduledDate.getUTCDate() + offsetDays);
+
+          const rest = isRestDay(entry);
+          const entryJson = entry as unknown as Prisma.InputJsonValue;
+
+          const workout = await tx.workout.create({
+            data: {
+              appliedPlanId: appliedPlan.id,
+              horseId: sourcePlan.horseId,
+              originWeek: entry.week,
+              originDay: entry.day,
+              scheduledDate,
+              slot: 'AM',
+              baselineData: entryJson,
+              currentData: entryJson,
+              isRest: rest,
+            },
+          });
+
+          const sessionFields = projectToSessionFields(entry);
+          await tx.plannedSession.create({
+            data: {
+              planBlockId: planBlock.id,
+              horseId: sourcePlan.horseId,
+              workoutId: workout.id,
+              date: scheduledDate,
+              slot: 'AM',
+              ...sessionFields,
+            },
+          });
+
+          workoutsCreated++;
+        }
+
+        return { appliedPlan, planBlock, workoutsCreated, amendedVersion: { id: amendedVersion.id, version: amendedVersion.version } };
+      });
+
+      res.status(201).json(result);
+    }
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Repeat applied plan error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
