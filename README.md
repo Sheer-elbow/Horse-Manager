@@ -268,6 +268,88 @@ The included workflow (`.github/workflows/deploy.yml`) builds and deploys on pus
 
 ## Data model
 
-Key entities: `User`, `Horse`, `HorseAssignment`, `Programme`, `PlanBlock`, `PlannedSession`, `ActualSessionLog`, `SessionAuditLog`, `VetVisit`, `FarrierVisit`, `VaccinationRecord`, `ExpenseNote`.
+Key entities: `User`, `Horse`, `HorseAssignment`, `Programme`, `ProgrammeVersion`, `PlanBlock`, `PlannedSession`, `ActualSessionLog`, `SessionAuditLog`, `AppliedPlan`, `Workout`, `PlanShare`, `VetVisit`, `FarrierVisit`, `VaccinationRecord`, `ExpenseNote`.
 
 See `backend/prisma/schema.prisma` for the full schema.
+
+---
+
+## Programme Upload (Trainer Guide)
+
+Trainers can upload structured training programmes as a **ZIP package** containing a schedule CSV and a reference manual.
+
+### ZIP Package Structure
+
+```
+my-programme.zip
+├── schedule.csv      (required)
+└── manual.html       (required — or manual.pdf)
+```
+
+**Upload limits:** ZIP file max 10 MB. Only `.csv`, `.html`, `.htm`, `.pdf`, `.txt`, `.md` files are allowed inside the ZIP.
+
+### schedule.csv Format
+
+The CSV defines the daily training schedule. Each week must have exactly 7 day entries (days 1–7), including rest days.
+
+**Required columns:** `week`, `day`, `title`, `category`
+
+**Optional columns:** `duration_min`, `duration_max`, `intensity_label`, `intensity_rpe_min`, `intensity_rpe_max`, `blocks`, `substitution`, `manual_ref`
+
+Column names are case-insensitive and may use spaces or hyphens (e.g. `Duration Min` → `duration_min`).
+
+### CSV Template
+
+```csv
+week,day,title,category,duration_min,duration_max,intensity_label,intensity_rpe_min,intensity_rpe_max,blocks,substitution,manual_ref
+1,1,Flat work,training,30,45,Moderate,5,7,"Warm-up: 10 min walk | Main: 20 min trot | Cool-down: 5 min walk",,p.12
+1,2,Jumping,training,40,50,Hard,7,9,,,
+1,3,Rest,rest,,,,,,,,
+1,4,Hack,training,60,,Light,3,4,,,
+1,5,Lunging,training,20,25,,5,6,,,
+1,6,Polo practice,training,45,60,Hard,8,9,"Warm-up: stick & ball | Match: 2 chukkas",,p.20
+1,7,Recovery walk,recovery,15,,Light,2,3,,,
+```
+
+### Column Reference
+
+| Column | Required | Type | Description |
+|--------|----------|------|-------------|
+| `week` | Yes | integer ≥ 1 | Week number |
+| `day` | Yes | integer 1–7 | Day of week (1 = Monday) |
+| `title` | Yes | text | Session name (e.g. "Flat work", "Rest") |
+| `category` | Yes | text | Category: `training`, `rest`, `recovery`, etc. |
+| `duration_min` | No | integer | Minimum duration in minutes |
+| `duration_max` | No | integer | Maximum duration in minutes |
+| `intensity_label` | No | text | Label like "Light", "Moderate", "Hard" |
+| `intensity_rpe_min` | No | integer 1–10 | Minimum RPE (rate of perceived exertion) |
+| `intensity_rpe_max` | No | integer 1–10 | Maximum RPE |
+| `blocks` | No | pipe-separated | Exercise blocks: `"Name: text \| Name: text"` |
+| `substitution` | No | text | Alternative if conditions don't suit |
+| `manual_ref` | No | text | Page reference in the manual (e.g. "p.12") |
+
+### Blocks Format
+
+The `blocks` column uses pipe-separated `Name: text` entries:
+
+```
+"Warm-up: 10 min walk | Main: 3×5 min canter | Cool-down: 10 min walk"
+```
+
+If the blocks column is empty, a single "Main" block is created from the title. Rest days get a "Rest" block.
+
+### Rest Days
+
+A day is considered a rest day if:
+- The `category` is `rest` or `recovery` (case-insensitive), OR
+- The `title` is `Rest` (case-insensitive)
+
+Rest days must still be listed in the CSV (all 7 days per week are required).
+
+### Workflow
+
+1. **Upload** the ZIP via the Programmes page → creates a DRAFT version
+2. **Publish** the draft → makes it available for assignment
+3. **Apply** the published version to a horse with a start date
+4. **View** the generated schedule in the Planner page
+5. **Repeat** a completed programme (original or with amendments)

@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, FormEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api/client';
-import { Horse, User } from '../types';
+import { api, ApiError } from '../api/client';
+import { Horse, User, AppliedPlan, PlanShare } from '../types';
 import Modal from '../components/Modal';
 
-type Tab = 'overview' | 'vet' | 'farrier' | 'vaccinations' | 'expenses';
+type Tab = 'overview' | 'vet' | 'farrier' | 'vaccinations' | 'expenses' | 'programmes';
 
 interface HealthRecord {
   id: string;
@@ -45,6 +45,26 @@ export default function HorseProfile() {
   const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '' });
   const recFileRef = useRef<HTMLInputElement>(null);
   const [recError, setRecError] = useState('');
+
+  // Applied plans (programmes tab)
+  const [appliedPlans, setAppliedPlans] = useState<AppliedPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(false);
+
+  // Repeat modal
+  const [showRepeat, setShowRepeat] = useState(false);
+  const [repeatPlanId, setRepeatPlanId] = useState<string | null>(null);
+  const [repeatForm, setRepeatForm] = useState({ mode: 'original' as 'original' | 'amended', startDate: '' });
+  const [repeatError, setRepeatError] = useState('');
+  const [repeatLoading, setRepeatLoading] = useState(false);
+
+  // Share modal
+  const [showShare, setShowShare] = useState(false);
+  const [sharePlanId, setSharePlanId] = useState<string | null>(null);
+  const [sharePlanAssignerId, setSharePlanAssignerId] = useState<string | null>(null);
+  const [shares, setShares] = useState<PlanShare[]>([]);
+  const [shareUsers, setShareUsers] = useState<User[]>([]);
+  const [shareForm, setShareForm] = useState({ userId: '', permission: 'VIEW' as 'VIEW' | 'EDIT' });
+  const [shareError, setShareError] = useState('');
 
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = isAdmin || horse?._permission === 'EDIT';
@@ -176,11 +196,112 @@ export default function HorseProfile() {
     loadRecords(tab);
   };
 
+  // ─── Applied plans (programmes tab) ─────────────────────────
+
+  const loadAppliedPlans = async () => {
+    setPlansLoading(true);
+    try {
+      const plans = await api<AppliedPlan[]>(`/applied-plans?horseId=${id}`);
+      setAppliedPlans(plans);
+    } catch { /* ignore */ }
+    finally { setPlansLoading(false); }
+  };
+
+  useEffect(() => {
+    if (tab === 'programmes') loadAppliedPlans();
+  }, [tab, id]);
+
+  const openRepeat = (planId: string) => {
+    setRepeatPlanId(planId);
+    const nextMon = new Date();
+    const day = nextMon.getDay();
+    const diff = day === 0 ? 1 : (8 - day);
+    nextMon.setDate(nextMon.getDate() + diff);
+    setRepeatForm({ mode: 'original', startDate: nextMon.toISOString().split('T')[0] });
+    setRepeatError('');
+    setShowRepeat(true);
+  };
+
+  const handleRepeat = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!repeatPlanId) return;
+    setRepeatLoading(true);
+    setRepeatError('');
+    try {
+      await api(`/applied-plans/${repeatPlanId}/repeat`, {
+        method: 'POST',
+        body: JSON.stringify({ mode: repeatForm.mode, startDate: repeatForm.startDate }),
+      });
+      setShowRepeat(false);
+      loadAppliedPlans();
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.body && typeof err.body === 'object' && 'conflictDates' in (err.body as Record<string, unknown>)) {
+        const body = err.body as { conflictDates: string[] };
+        setRepeatError(`Date conflicts: ${body.conflictDates.join(', ')}`);
+      } else {
+        setRepeatError(err instanceof Error ? err.message : 'Repeat failed');
+      }
+    } finally {
+      setRepeatLoading(false);
+    }
+  };
+
+  const openShare = async (planId: string, assignerId: string) => {
+    setSharePlanId(planId);
+    setSharePlanAssignerId(assignerId);
+    setShareForm({ userId: '', permission: 'VIEW' });
+    setShareError('');
+    setShowShare(true);
+    const [s, u] = await Promise.all([
+      api<PlanShare[]>(`/applied-plans/${planId}/shares`),
+      api<User[]>('/users'),
+    ]);
+    setShares(s);
+    setShareUsers(u);
+  };
+
+  const handleAddShare = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!sharePlanId) return;
+    setShareError('');
+    try {
+      await api(`/applied-plans/${sharePlanId}/shares`, {
+        method: 'POST',
+        body: JSON.stringify({ userId: shareForm.userId, permission: shareForm.permission }),
+      });
+      setShareForm({ userId: '', permission: 'VIEW' });
+      const s = await api<PlanShare[]>(`/applied-plans/${sharePlanId}/shares`);
+      setShares(s);
+    } catch (err: unknown) {
+      setShareError(err instanceof Error ? err.message : 'Share failed');
+    }
+  };
+
+  const handleRemoveShare = async (shareId: string) => {
+    if (!sharePlanId) return;
+    await api(`/applied-plans/${sharePlanId}/shares/${shareId}`, { method: 'DELETE' });
+    const s = await api<PlanShare[]>(`/applied-plans/${sharePlanId}/shares`);
+    setShares(s);
+  };
+
+  const formatDateRange = (plan: AppliedPlan): string => {
+    const start = new Date(plan.startDate);
+    const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (plan.programmeVersion?.numWeeks) {
+      const end = new Date(start);
+      end.setDate(end.getDate() + plan.programmeVersion.numWeeks * 7 - 1);
+      const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      return `${startStr} - ${endStr}`;
+    }
+    return startStr;
+  };
+
   if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
   if (!horse) return null;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
+    { key: 'programmes', label: 'Programmes' },
     { key: 'vet', label: 'Vet visits' },
     { key: 'farrier', label: 'Farrier' },
     { key: 'vaccinations', label: 'Vaccinations' },
@@ -325,8 +446,79 @@ export default function HorseProfile() {
         </div>
       )}
 
+      {/* Programmes tab */}
+      {tab === 'programmes' && (
+        <div className="bg-white rounded-xl border p-5">
+          <h3 className="font-semibold mb-4">Applied Programmes</h3>
+          {plansLoading ? (
+            <p className="text-sm text-gray-500">Loading...</p>
+          ) : appliedPlans.length === 0 ? (
+            <p className="text-sm text-gray-500">No programmes applied yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {appliedPlans.map((plan) => {
+                const pv = plan.programmeVersion;
+                const isAssigner = user?.id === plan.assignedById;
+                const canManage = isAdmin || isAssigner;
+                return (
+                  <div key={plan.id} className="border rounded-lg p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">
+                            {pv?.programme?.name || 'Unknown programme'}
+                          </span>
+                          {pv && (
+                            <span className="text-xs text-gray-500">v{pv.version}</span>
+                          )}
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            plan.status === 'ACTIVE' ? 'bg-green-100 text-green-700'
+                              : plan.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {plan.status}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {formatDateRange(plan)}
+                          {pv?.numWeeks && <span className="ml-2">({pv.numWeeks} weeks)</span>}
+                        </div>
+                        <div className="text-sm text-gray-400 mt-0.5">
+                          Assigned by {plan.assignedBy?.name || plan.assignedBy?.email || 'Unknown'}
+                        </div>
+                        {plan._count?.workouts != null && (
+                          <div className="text-xs text-gray-400 mt-0.5">{plan._count.workouts} workouts</div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => openRepeat(plan.id)}
+                              className="text-xs px-3 py-1.5 rounded-lg border text-brand-600 hover:bg-brand-50"
+                            >
+                              Repeat
+                            </button>
+                            <button
+                              onClick={() => openShare(plan.id, plan.assignedById)}
+                              className="text-xs px-3 py-1.5 rounded-lg border text-brand-600 hover:bg-brand-50"
+                            >
+                              Share
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Health / expense records tab */}
-      {tab !== 'overview' && (
+      {!['overview', 'programmes'].includes(tab) && (
         <div className="bg-white rounded-xl border p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab}</h3>
@@ -432,6 +624,122 @@ export default function HorseProfile() {
           </div>
           <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Save</button>
         </form>
+      </Modal>
+
+      {/* Repeat programme modal */}
+      <Modal open={showRepeat} onClose={() => setShowRepeat(false)} title="Repeat Programme">
+        <form onSubmit={handleRepeat} className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Create a new run of this programme for the same horse.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
+            <select
+              value={repeatForm.mode}
+              onChange={(e) => setRepeatForm({ ...repeatForm, mode: e.target.value as 'original' | 'amended' })}
+              className="w-full border rounded-lg px-3 py-2"
+            >
+              <option value="original">Original - use the published programme as-is</option>
+              <option value="amended">Amended - use edits from previous run</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Start date (Monday)</label>
+            <input
+              type="date"
+              value={repeatForm.startDate}
+              onChange={(e) => setRepeatForm({ ...repeatForm, startDate: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              required
+            />
+          </div>
+          {repeatError && (
+            <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{repeatError}</div>
+          )}
+          <button
+            type="submit"
+            disabled={repeatLoading}
+            className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
+          >
+            {repeatLoading ? 'Creating...' : 'Repeat programme'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Share plan modal */}
+      <Modal open={showShare} onClose={() => setShowShare(false)} title="Share Plan" wide>
+        <div className="space-y-4">
+          {/* Existing shares */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Current shares</h4>
+            {shares.length === 0 ? (
+              <p className="text-sm text-gray-400">Not shared with anyone yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {shares.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                    <div>
+                      <span className="text-sm font-medium">{s.sharedWith.name || s.sharedWith.email}</span>
+                      <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${s.permission === 'EDIT' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {s.permission}
+                      </span>
+                    </div>
+                    {(isAdmin || user?.id === sharePlanAssignerId) && (
+                      <button
+                        onClick={() => handleRemoveShare(s.id)}
+                        className="text-xs text-red-500 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add share form */}
+          {(isAdmin || user?.id === sharePlanAssignerId) && (
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Add share</h4>
+              <form onSubmit={handleAddShare} className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                  <select
+                    value={shareForm.userId}
+                    onChange={(e) => setShareForm({ ...shareForm, userId: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2"
+                    required
+                  >
+                    <option value="">Select user...</option>
+                    {shareUsers
+                      .filter((u) => u.id !== sharePlanAssignerId && u.role !== 'ADMIN' && !shares.some((s) => s.sharedWithId === u.id))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Permission</label>
+                  <select
+                    value={shareForm.permission}
+                    onChange={(e) => setShareForm({ ...shareForm, permission: e.target.value as 'VIEW' | 'EDIT' })}
+                    className="w-full border rounded-lg px-3 py-2"
+                  >
+                    <option value="VIEW">View only</option>
+                    <option value="EDIT">Editor</option>
+                  </select>
+                </div>
+                {shareError && (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{shareError}</div>
+                )}
+                <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">
+                  Add share
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

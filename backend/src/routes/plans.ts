@@ -34,6 +34,15 @@ router.get('/blocks', authenticate, async (req: AuthRequest, res: Response) => {
       include: {
         horse: { select: { id: true, name: true } },
         programme: { select: { id: true, name: true } },
+        appliedPlan: {
+          select: {
+            id: true,
+            status: true,
+            programmeVersion: {
+              select: { version: true, programme: { select: { name: true } } },
+            },
+          },
+        },
       },
       orderBy: { startDate: 'desc' },
     });
