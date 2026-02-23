@@ -1,13 +1,18 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import AdmZip from 'adm-zip';
+import sanitizeHtml from 'sanitize-html';
 import * as cheerio from 'cheerio';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { authenticate, requireRole } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { parseScheduleCsv } from '../services/csv-schedule-parser';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB max
+const uploadPackage = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB for ZIP
 
 const programmeSchema = z.object({
   name: z.string().min(1),
@@ -88,6 +93,145 @@ router.post('/upload', authenticate, requireRole('ADMIN', 'TRAINER'), upload.sin
   } catch (err) {
     console.error('Upload programme error:', err);
     res.status(500).json({ error: 'Failed to upload programme' });
+  }
+});
+
+// POST /api/programmes/upload-package (admin + trainer) - upload ZIP with manual.html + schedule.csv
+router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), uploadPackage.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    // Validate file extension
+    const fileName = req.file.originalname.toLowerCase();
+    if (!fileName.endsWith('.zip')) {
+      res.status(400).json({ error: 'File must be a .zip archive' });
+      return;
+    }
+
+    // Extract ZIP
+    let zip: AdmZip;
+    try {
+      zip = new AdmZip(req.file.buffer);
+    } catch {
+      res.status(400).json({ error: 'Invalid or corrupted ZIP file' });
+      return;
+    }
+
+    const entries = zip.getEntries();
+
+    // Find schedule.csv (required) - look in root or any subfolder
+    const csvEntry = entries.find(e =>
+      !e.isDirectory && e.entryName.toLowerCase().replace(/^[^/]*\//, '').replace(/^.*\//, '') === 'schedule.csv'
+    );
+    if (!csvEntry) {
+      res.status(400).json({ error: 'ZIP must contain a schedule.csv file' });
+      return;
+    }
+
+    // Find manual.html (preferred) or manual.pdf (optional)
+    const htmlEntry = entries.find(e =>
+      !e.isDirectory && /manual\.html?$/i.test(e.entryName.split('/').pop() || '')
+    );
+    const pdfEntry = entries.find(e =>
+      !e.isDirectory && /manual\.pdf$/i.test(e.entryName.split('/').pop() || '')
+    );
+
+    if (!htmlEntry && !pdfEntry) {
+      res.status(400).json({ error: 'ZIP must contain manual.html (preferred) or manual.pdf' });
+      return;
+    }
+
+    // Reject unexpected file types (only allow .csv, .html, .htm, .pdf, .txt, .md)
+    const allowedExtensions = ['.csv', '.html', '.htm', '.pdf', '.txt', '.md'];
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const entryName = entry.entryName.split('/').pop() || '';
+      const ext = entryName.includes('.') ? '.' + entryName.split('.').pop()!.toLowerCase() : '';
+      if (ext && !allowedExtensions.includes(ext)) {
+        res.status(400).json({ error: `ZIP contains disallowed file type: "${entryName}". Allowed: ${allowedExtensions.join(', ')}` });
+        return;
+      }
+    }
+
+    // Parse schedule CSV
+    const csvContent = csvEntry.getData().toString('utf-8');
+    const parseResult = parseScheduleCsv(csvContent);
+    const fatalErrors = parseResult.errors.filter(e => !e.startsWith('Warning:'));
+    if (fatalErrors.length > 0) {
+      res.status(400).json({ error: 'Invalid schedule.csv', details: parseResult.errors });
+      return;
+    }
+    if (parseResult.scheduleData.length === 0) {
+      res.status(400).json({ error: 'schedule.csv produced no valid entries' });
+      return;
+    }
+
+    // Process manual
+    let manualHtml: string | null = null;
+    let manualFileName: string | null = null;
+
+    if (htmlEntry) {
+      const rawHtml = htmlEntry.getData().toString('utf-8');
+      // Sanitize HTML: allow safe tags for a training manual
+      manualHtml = sanitizeHtml(rawHtml, {
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+          'img', 'figure', 'figcaption', 'section', 'article',
+          'table', 'thead', 'tbody', 'tr', 'th', 'td',
+          'dl', 'dt', 'dd', 'hr', 'br', 'span', 'div',
+        ]),
+        allowedAttributes: {
+          ...sanitizeHtml.defaults.allowedAttributes,
+          '*': ['id', 'class', 'style'],
+          'img': ['src', 'alt', 'width', 'height'],
+          'a': ['href', 'name', 'id'],
+        },
+        allowedSchemes: ['http', 'https', 'data'],
+      });
+      manualFileName = htmlEntry.entryName.split('/').pop() || 'manual.html';
+    } else if (pdfEntry) {
+      // Store PDF note — actual PDF viewer is a next-iteration feature
+      manualFileName = pdfEntry.entryName.split('/').pop() || 'manual.pdf';
+      manualHtml = `<p>PDF manual uploaded: ${manualFileName}. PDF viewer coming soon.</p>`;
+    }
+
+    // Determine programme name
+    const name = req.body.name || req.file.originalname.replace(/\.zip$/i, '');
+    const description = req.body.description || null;
+
+    // Create Programme + ProgrammeVersion in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const programme = await tx.programme.create({
+        data: {
+          name,
+          description,
+          status: 'DRAFT',
+          createdById: req.user!.userId,
+        },
+      });
+
+      const version = await tx.programmeVersion.create({
+        data: {
+          programmeId: programme.id,
+          version: 1,
+          status: 'DRAFT',
+          numWeeks: parseResult.numWeeks,
+          manualHtml,
+          manualFileName,
+          scheduleData: parseResult.scheduleData as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      return { programme, version };
+    });
+
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Upload programme package error:', err);
+    res.status(500).json({ error: 'Failed to process programme package' });
   }
 });
 
