@@ -219,18 +219,26 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: Auth
   }
 });
 
-// ─── GET /api/applied-plans?horseId= ────────────────────────
+// ─── GET /api/applied-plans?horseId=&status= ────────────────
 // Visibility:
 //   - ADMIN sees all plans for the horse
 //   - Trainer sees plans they assigned + plans shared with them
 //   - Rider/Owner sees plans for horses they have a HorseAssignment for
+// Optional filters:
+//   - status: ACTIVE | COMPLETED | CANCELLED (omit for all)
 
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const horseId = req.query.horseId as string | undefined;
+    const statusFilter = req.query.status as string | undefined;
 
     if (!horseId) {
       res.status(400).json({ error: 'horseId query parameter required' });
+      return;
+    }
+
+    if (statusFilter && !['ACTIVE', 'COMPLETED', 'CANCELLED'].includes(statusFilter)) {
+      res.status(400).json({ error: 'status must be ACTIVE, COMPLETED, or CANCELLED' });
       return;
     }
 
@@ -263,6 +271,10 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       }
     }
 
+    if (statusFilter) {
+      where.status = statusFilter;
+    }
+
     const plans = await prisma.appliedPlan.findMany({
       where,
       include: {
@@ -275,6 +287,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
           },
         },
         assignedBy: { select: { id: true, name: true, email: true } },
+        _count: { select: { workouts: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -318,7 +331,34 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    res.json(plan);
+    // Compute workout summary: counts + date range
+    const [workoutAgg, dateRange] = await Promise.all([
+      prisma.workout.groupBy({
+        by: ['isRest'],
+        where: { appliedPlanId: plan.id },
+        _count: { id: true },
+      }),
+      prisma.workout.aggregate({
+        where: { appliedPlanId: plan.id, scheduledDate: { not: null } },
+        _min: { scheduledDate: true },
+        _max: { scheduledDate: true },
+      }),
+    ]);
+
+    const totalWorkouts = workoutAgg.reduce((sum, g) => sum + g._count.id, 0);
+    const restDays = workoutAgg.find(g => g.isRest)?._count.id ?? 0;
+    const trainingDays = totalWorkouts - restDays;
+
+    res.json({
+      ...plan,
+      workoutSummary: {
+        total: totalWorkouts,
+        trainingDays,
+        restDays,
+        earliestDate: dateRange._min.scheduledDate,
+        latestDate: dateRange._max.scheduledDate,
+      },
+    });
   } catch (err) {
     console.error('Get applied plan error:', err);
     res.status(500).json({ error: 'Internal server error' });
