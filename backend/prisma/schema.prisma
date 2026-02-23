@@ -24,6 +24,18 @@ enum Slot {
   PM
 }
 
+enum ProgrammeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AppliedPlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 // ─── Users & Auth ────────────────────────────────────────────
 
 model User {
@@ -41,6 +53,8 @@ model User {
   createdProgrammes Programme[]
   sessionLogs       ActualSessionLog[]
   auditEdits        SessionAuditLog[]
+  assignedPlans     AppliedPlan[]
+  sharedPlans       PlanShare[]
 
   @@map("users")
 }
@@ -77,6 +91,8 @@ model Horse {
   planBlocks      PlanBlock[]
   plannedSessions PlannedSession[]
   actualSessions  ActualSessionLog[]
+  appliedPlans    AppliedPlan[]
+  workouts        Workout[]
   vetVisits       VetVisit[]
   farrierVisits   FarrierVisit[]
   vaccinations    VaccinationRecord[]
@@ -102,35 +118,40 @@ model HorseAssignment {
 // ─── Programmes & Plans ──────────────────────────────────────
 
 model Programme {
-  id               String   @id @default(uuid())
+  id               String            @id @default(uuid())
   name             String
   description      String?
-  htmlContent      String?  @map("html_content") @db.Text
-  originalFileName String?  @map("original_file_name")
-  horseNames       String[] @map("horse_names")
-  createdById      String   @map("created_by_id")
-  createdBy        User     @relation(fields: [createdById], references: [id])
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  htmlContent      String?           @map("html_content") @db.Text
+  originalFileName String?           @map("original_file_name")
+  horseNames       String[]          @map("horse_names")
+  status           ProgrammeStatus?  @map("status")
+  latestVersionId  String?           @map("latest_version_id")
+  createdById      String            @map("created_by_id")
+  createdBy        User              @relation(fields: [createdById], references: [id])
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
   planBlocks PlanBlock[]
+  versions   ProgrammeVersion[]
 
   @@map("programmes")
 }
 
 model PlanBlock {
-  id          String     @id @default(uuid())
-  horseId     String     @map("horse_id")
-  programmeId String?    @map("programme_id")
-  name        String
-  startDate   DateTime   @map("start_date") @db.Date
-  numWeeks    Int        @default(6) @map("num_weeks")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  id            String     @id @default(uuid())
+  horseId       String     @map("horse_id")
+  programmeId   String?    @map("programme_id")
+  appliedPlanId String?    @map("applied_plan_id")
+  name          String
+  startDate     DateTime   @map("start_date") @db.Date
+  numWeeks      Int        @default(6) @map("num_weeks")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  horse     Horse      @relation(fields: [horseId], references: [id], onDelete: Cascade)
-  programme Programme? @relation(fields: [programmeId], references: [id], onDelete: SetNull)
-  sessions  PlannedSession[]
+  horse       Horse        @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  programme   Programme?   @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  appliedPlan AppliedPlan? @relation(fields: [appliedPlanId], references: [id], onDelete: SetNull)
+  sessions    PlannedSession[]
 
   @@map("plan_blocks")
 }
@@ -139,6 +160,7 @@ model PlannedSession {
   id              String   @id @default(uuid())
   planBlockId     String   @map("plan_block_id")
   horseId         String   @map("horse_id")
+  workoutId       String?  @map("workout_id")
   date            DateTime @db.Date
   slot            Slot
   sessionType     String?  @map("session_type")
@@ -151,10 +173,92 @@ model PlannedSession {
 
   planBlock     PlanBlock         @relation(fields: [planBlockId], references: [id], onDelete: Cascade)
   horse         Horse             @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  workout       Workout?          @relation(fields: [workoutId], references: [id], onDelete: SetNull)
   actualSession ActualSessionLog?
 
   @@unique([horseId, date, slot])
   @@map("planned_sessions")
+}
+
+// ─── Programme Versions & Applied Plans ──────────────────────
+
+model ProgrammeVersion {
+  id             String           @id @default(uuid())
+  programmeId    String           @map("programme_id")
+  version        Int
+  status         ProgrammeStatus  @default(DRAFT)
+  numWeeks       Int              @map("num_weeks")
+  manualHtml     String?          @map("manual_html") @db.Text
+  manualFileName String?          @map("manual_file_name")
+  scheduleData   Json             @map("schedule_data")
+  publishedAt    DateTime?        @map("published_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  programme    Programme     @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  appliedPlans AppliedPlan[]
+
+  @@unique([programmeId, version])
+  @@map("programme_versions")
+}
+
+model AppliedPlan {
+  id                  String            @id @default(uuid())
+  horseId             String            @map("horse_id")
+  programmeVersionId  String            @map("programme_version_id")
+  assignedById        String            @map("assigned_by_id")
+  startDate           DateTime          @map("start_date") @db.Date
+  status              AppliedPlanStatus @default(ACTIVE)
+  sourceAppliedPlanId String?           @map("source_applied_plan_id")
+  isAmended           Boolean           @default(false) @map("is_amended")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  horse             Horse             @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  programmeVersion  ProgrammeVersion  @relation(fields: [programmeVersionId], references: [id])
+  assignedBy        User              @relation(fields: [assignedById], references: [id])
+  sourceAppliedPlan AppliedPlan?      @relation("AppliedPlanRepeat", fields: [sourceAppliedPlanId], references: [id], onDelete: SetNull)
+  derivedPlans      AppliedPlan[]     @relation("AppliedPlanRepeat")
+  planBlocks        PlanBlock[]
+  workouts          Workout[]
+  shares            PlanShare[]
+
+  @@map("applied_plans")
+}
+
+model Workout {
+  id            String    @id @default(uuid())
+  appliedPlanId String    @map("applied_plan_id")
+  horseId       String    @map("horse_id")
+  originWeek    Int       @map("origin_week")
+  originDay     Int       @map("origin_day")
+  scheduledDate DateTime? @map("scheduled_date") @db.Date
+  slot          Slot      @default(AM)
+  baselineData  Json      @map("baseline_data")
+  currentData   Json      @map("current_data")
+  isRest        Boolean   @default(false) @map("is_rest")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  appliedPlan     AppliedPlan      @relation(fields: [appliedPlanId], references: [id], onDelete: Cascade)
+  horse           Horse            @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  plannedSessions PlannedSession[]
+
+  @@map("workouts")
+}
+
+model PlanShare {
+  id            String     @id @default(uuid())
+  appliedPlanId String     @map("applied_plan_id")
+  sharedWithId  String     @map("shared_with_id")
+  permission    Permission
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  appliedPlan AppliedPlan @relation(fields: [appliedPlanId], references: [id], onDelete: Cascade)
+  sharedWith  User        @relation(fields: [sharedWithId], references: [id], onDelete: Cascade)
+
+  @@unique([appliedPlanId, sharedWithId])
+  @@map("plan_shares")
 }
 
 // ─── Session Logging & Audit ─────────────────────────────────
