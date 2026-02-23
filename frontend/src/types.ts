@@ -40,6 +40,8 @@ export interface Programme {
   originalFileName: string | null;
   horseNames: string[];
   createdAt: string;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | null;
+  latestVersionId?: string | null;
   _count?: { planBlocks: number };
 }
 
@@ -104,6 +106,35 @@ export interface InviteToken {
   createdAt: string;
   expiresAt: string;
   usedAt: string | null;
+}
+
+export interface ProgrammeVersion {
+  id: string;
+  programmeId: string;
+  version: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  numWeeks: number;
+  manualFileName: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  programme?: { id: string; name: string };
+}
+
+export interface AppliedPlan {
+  id: string;
+  horseId: string;
+  programmeVersionId: string;
+  assignedById: string;
+  startDate: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  programmeVersion?: {
+    id: string;
+    version: number;
+    numWeeks: number;
+    programme: { id: string; name: string };
+  };
+  assignedBy?: { id: string; name: string | null; email: string };
 }
 
 export interface AuthTokens {
