@@ -35,9 +35,9 @@ jobs:
       - name: Deploy to droplet
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ 138.68.162.91 }}
+          username: ${{ root }}
+          key: ${{ sb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZWQyNTUxOQAAACBqt+BVxAh21WsgITLSQsZCnz8CWfCKu0e/tXphpni3XAAAAKgyo6OLMqOjiwAAAAtzc2gtZWQyNTUxOQAAACBqt+BVxAh21WsgITLSQsZCnz8CWfCKu0e/tXphpni3XAAAAEAIZSs4bK7JoQj8VDprmUOmrpd1uX0v45/7UuwsYE3ZWWq34FXECHbVayAhMtJCxkKfPwJZ8Iq7R7+1emGmeLdcAAAAH3Jvb3RAdWJ1bnR1LXMtMnZjcHUtMmdiLWxvbjEtMDEBAgMEBQY= }}
           script: |
             cd /opt/stable-manager
             git pull origin main
