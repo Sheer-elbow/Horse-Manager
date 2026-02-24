@@ -651,6 +651,44 @@ router.post('/:id/repeat', authenticate, requireRole('ADMIN', 'TRAINER'), async 
   }
 });
 
+// ─── DELETE /api/applied-plans/:id ───────────────────────────
+// Remove an applied programme from a horse.
+// Deletes: PlanBlocks → PlannedSessions, Workouts, PlanShares.
+// Preserves: ActualSessionLogs (plannedSessionId set to null).
+
+router.delete('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
+  try {
+    const plan = await prisma.appliedPlan.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, horseId: true, assignedById: true },
+    });
+
+    if (!plan) {
+      res.status(404).json({ error: 'Applied plan not found' });
+      return;
+    }
+
+    // Only the assigning trainer or admin can remove
+    if (req.user!.role !== 'ADMIN' && plan.assignedById !== req.user!.userId) {
+      res.status(403).json({ error: 'Only the assigning trainer can remove this plan' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete PlanBlocks (cascades to PlannedSessions; ActualSessionLogs.plannedSessionId → null)
+      await tx.planBlock.deleteMany({ where: { appliedPlanId: plan.id } });
+
+      // 2. Delete AppliedPlan (cascades to Workouts and PlanShares)
+      await tx.appliedPlan.delete({ where: { id: plan.id } });
+    });
+
+    res.json({ message: 'Applied plan removed. Actual session logs have been preserved.' });
+  } catch (err) {
+    console.error('Delete applied plan error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── POST /api/applied-plans/:id/shares ──────────────────────
 
 const createShareSchema = z.object({

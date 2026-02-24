@@ -284,6 +284,16 @@ export default function HorseProfile() {
     setShares(s);
   };
 
+  const handleRemovePlan = async (planId: string) => {
+    if (!confirm('Remove this programme from the horse? Scheduled workouts and planned sessions will be deleted, but actual session logs will be preserved.')) return;
+    try {
+      await api(`/applied-plans/${planId}`, { method: 'DELETE' });
+      loadAppliedPlans();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to remove plan');
+    }
+  };
+
   const formatDateRange = (plan: AppliedPlan): string => {
     const start = new Date(plan.startDate);
     const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -504,6 +514,12 @@ export default function HorseProfile() {
                               className="text-xs px-3 py-1.5 rounded-lg border text-brand-600 hover:bg-brand-50"
                             >
                               Share
+                            </button>
+                            <button
+                              onClick={() => handleRemovePlan(plan.id)}
+                              className="text-xs px-3 py-1.5 rounded-lg border text-red-500 hover:bg-red-50"
+                            >
+                              Remove
                             </button>
                           </>
                         )}

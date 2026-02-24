@@ -29,6 +29,10 @@ export default function Programmes() {
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState('');
 
+  // Rename state
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
   const canManage = user?.role === 'ADMIN' || user?.role === 'TRAINER';
 
   const load = async () => {
@@ -131,10 +135,38 @@ export default function Programmes() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this programme?')) return;
-    await api(`/programmes/${id}`, { method: 'DELETE' });
-    load();
+  const handleDelete = async (id: string, appliedCount?: number) => {
+    if (appliedCount && appliedCount > 0) {
+      alert(`Cannot delete: this programme is still applied to horses (${appliedCount} applied plan${appliedCount === 1 ? '' : 's'}). Remove it from all horses first.`);
+      return;
+    }
+    if (!confirm('Delete this programme? This cannot be undone.')) return;
+    try {
+      await api(`/programmes/${id}`, { method: 'DELETE' });
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    }
+  };
+
+  const startRename = (p: Programme) => {
+    setRenamingId(p.id);
+    setRenameValue(p.name);
+  };
+
+  const handleRename = async (id: string) => {
+    const trimmed = renameValue.trim();
+    if (!trimmed) return;
+    try {
+      await api(`/programmes/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: trimmed }),
+      });
+      setRenamingId(null);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Rename failed');
+    }
   };
 
   // ─── Version management ───────────────────────────────────
@@ -257,7 +289,24 @@ export default function Programmes() {
           {programmes.map((p) => (
             <div key={p.id} className="bg-white rounded-xl border p-5">
               <div className="flex items-start justify-between">
-                <div className="font-semibold text-gray-900">{p.name}</div>
+                {renamingId === p.id ? (
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); handleRename(p.id); }}
+                    className="flex items-center gap-2 flex-1 min-w-0"
+                  >
+                    <input
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      className="border rounded px-2 py-1 text-sm font-semibold flex-1 min-w-0"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Escape') setRenamingId(null); }}
+                    />
+                    <button type="submit" className="text-xs text-green-600 hover:underline">Save</button>
+                    <button type="button" onClick={() => setRenamingId(null)} className="text-xs text-gray-400 hover:underline">Cancel</button>
+                  </form>
+                ) : (
+                  <div className="font-semibold text-gray-900">{p.name}</div>
+                )}
                 <div className="flex gap-1.5 ml-2 shrink-0">
                   {isVersioned(p) ? (
                     statusBadge(p.status!)
@@ -273,7 +322,14 @@ export default function Programmes() {
               {p.horseNames && p.horseNames.length > 0 && (
                 <div className="text-xs text-gray-400 mt-1">Horses: {p.horseNames.join(', ')}</div>
               )}
-              <div className="text-xs text-gray-400 mt-2">{p._count?.planBlocks || 0} plan blocks</div>
+              <div className="text-xs text-gray-400 mt-2">
+                {p._count?.planBlocks || 0} plan blocks
+                {(p._appliedPlanCount ?? 0) > 0 && (
+                  <span className="ml-2 text-amber-600">
+                    Applied to {p._appliedPlanCount} horse{p._appliedPlanCount === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
 
               <div className="flex flex-wrap gap-2 mt-3">
                 {/* Legacy: view HTML */}
@@ -289,7 +345,15 @@ export default function Programmes() {
                   <button onClick={() => openManual(p)} className="text-xs text-indigo-600 hover:underline">Manual</button>
                 )}
                 {canManage && (
-                  <button onClick={() => handleDelete(p.id)} className="text-xs text-red-500 hover:underline">Delete</button>
+                  <>
+                    <button onClick={() => startRename(p)} className="text-xs text-brand-600 hover:underline">Rename</button>
+                    <button
+                      onClick={() => handleDelete(p.id, p._appliedPlanCount)}
+                      className={`text-xs hover:underline ${(p._appliedPlanCount ?? 0) > 0 ? 'text-gray-400' : 'text-red-500'}`}
+                    >
+                      Delete
+                    </button>
+                  </>
                 )}
               </div>
             </div>
