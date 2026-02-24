@@ -43,6 +43,7 @@ export interface Programme {
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | null;
   latestVersionId?: string | null;
   _count?: { planBlocks: number };
+  _appliedPlanCount?: number;
 }
 
 export interface PlanBlock {

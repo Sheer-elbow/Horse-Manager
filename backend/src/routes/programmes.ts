@@ -26,9 +26,23 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     const programmes = await prisma.programme.findMany({
       where,
       orderBy: { name: 'asc' },
-      include: { _count: { select: { planBlocks: true } } },
+      include: {
+        _count: { select: { planBlocks: true } },
+        versions: {
+          select: {
+            _count: { select: { appliedPlans: true } },
+          },
+        },
+      },
     });
-    res.json(programmes);
+
+    // Flatten the applied plan count across all versions
+    const result = programmes.map(({ versions, ...p }) => ({
+      ...p,
+      _appliedPlanCount: versions.reduce((sum, v) => sum + v._count.appliedPlans, 0),
+    }));
+
+    res.json(result);
   } catch (err) {
     console.error('List programmes error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -295,10 +309,26 @@ router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: Au
 });
 
 // DELETE /api/programmes/:id (admin + trainer, owner only)
+// Blocked if any applied plans exist for any version of this programme.
 router.delete('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: AuthRequest, res: Response) => {
   try {
     const owned = await loadOwnedProgramme(req, res);
     if (!owned) return;
+
+    // Check if any applied plans reference any version of this programme
+    const appliedPlanCount = await prisma.appliedPlan.count({
+      where: {
+        programmeVersion: { programmeId: req.params.id },
+      },
+    });
+
+    if (appliedPlanCount > 0) {
+      res.status(409).json({
+        error: `Cannot delete: this programme is still applied to horses (${appliedPlanCount} applied plan${appliedPlanCount === 1 ? '' : 's'}). Remove it from all horses first.`,
+        appliedPlanCount,
+      });
+      return;
+    }
 
     await prisma.programme.delete({ where: { id: req.params.id } });
     res.json({ message: 'Programme deleted' });
