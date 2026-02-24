@@ -22,12 +22,6 @@ export default function Programmes() {
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionError, setVersionError] = useState('');
 
-  // Manual viewer modal
-  const [showManual, setShowManual] = useState(false);
-  const [manualTitle, setManualTitle] = useState('');
-  const [manualHtml, setManualHtml] = useState<string | null>(null);
-  const [manualLoading, setManualLoading] = useState(false);
-
   // Apply modal
   const [applyVersion, setApplyVersion] = useState<{ programmeId: string; versionId: string; programmeName: string; version: number } | null>(null);
   const [horses, setHorses] = useState<Horse[]>([]);
@@ -160,22 +154,17 @@ export default function Programmes() {
   };
 
   const openManual = async (p: Programme) => {
-    setManualTitle(p.name);
-    setManualHtml(null);
-    setManualLoading(true);
-    setShowManual(true);
     try {
       const v = await api<ProgrammeVersion[]>(`/programmes/${p.id}/versions`);
-      if (v.length === 0) {
-        setManualHtml('<p>No versions found.</p>');
-        return;
-      }
+      if (v.length === 0) { alert('No versions found.'); return; }
       const full = await api<ProgrammeVersion>(`/programmes/${p.id}/versions/${v[0].id}`);
-      setManualHtml(full.manualHtml || null);
+      if (!full.manualHtml) { alert('No manual included in this version.'); return; }
+      const blob = new Blob([full.manualHtml], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch {
-      setManualHtml('<p class="text-red-600">Failed to load manual.</p>');
-    } finally {
-      setManualLoading(false);
+      alert('Failed to load manual.');
     }
   };
 
@@ -383,20 +372,6 @@ export default function Programmes() {
             className="prose prose-sm max-w-none overflow-auto max-h-[70vh]"
             dangerouslySetInnerHTML={{ __html: viewProgramme.htmlContent }}
           />
-        )}
-      </Modal>
-
-      {/* ─── Manual viewer modal ─────────────────────────────── */}
-      <Modal open={showManual} onClose={() => setShowManual(false)} title={`${manualTitle} — Manual`} wide>
-        {manualLoading ? (
-          <div className="text-center py-8 text-gray-400">Loading manual...</div>
-        ) : manualHtml ? (
-          <div
-            className="prose prose-sm max-w-none overflow-auto max-h-[70vh]"
-            dangerouslySetInnerHTML={{ __html: manualHtml }}
-          />
-        ) : (
-          <div className="text-center py-8 text-gray-400">No manual included in this programme version.</div>
         )}
       </Modal>
 
