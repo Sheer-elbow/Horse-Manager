@@ -22,6 +22,12 @@ export default function Programmes() {
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionError, setVersionError] = useState('');
 
+  // Manual viewer modal
+  const [showManual, setShowManual] = useState(false);
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualHtml, setManualHtml] = useState<string | null>(null);
+  const [manualLoading, setManualLoading] = useState(false);
+
   // Apply modal
   const [applyVersion, setApplyVersion] = useState<{ programmeId: string; versionId: string; programmeName: string; version: number } | null>(null);
   const [horses, setHorses] = useState<Horse[]>([]);
@@ -153,6 +159,26 @@ export default function Programmes() {
     }
   };
 
+  const openManual = async (p: Programme) => {
+    setManualTitle(p.name);
+    setManualHtml(null);
+    setManualLoading(true);
+    setShowManual(true);
+    try {
+      const v = await api<ProgrammeVersion[]>(`/programmes/${p.id}/versions`);
+      if (v.length === 0) {
+        setManualHtml('<p>No versions found.</p>');
+        return;
+      }
+      const full = await api<ProgrammeVersion>(`/programmes/${p.id}/versions/${v[0].id}`);
+      setManualHtml(full.manualHtml || null);
+    } catch {
+      setManualHtml('<p class="text-red-600">Failed to load manual.</p>');
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
   const handlePublish = async (programmeId: string, versionId: string) => {
     setVersionError('');
     try {
@@ -269,6 +295,10 @@ export default function Programmes() {
                 {isVersioned(p) && (
                   <button onClick={() => openVersions(p)} className="text-xs text-brand-600 hover:underline">Versions</button>
                 )}
+                {/* View manual from latest version */}
+                {isVersioned(p) && (
+                  <button onClick={() => openManual(p)} className="text-xs text-indigo-600 hover:underline">Manual</button>
+                )}
                 {canManage && (
                   <button onClick={() => handleDelete(p.id)} className="text-xs text-red-500 hover:underline">Delete</button>
                 )}
@@ -353,6 +383,20 @@ export default function Programmes() {
             className="prose prose-sm max-w-none overflow-auto max-h-[70vh]"
             dangerouslySetInnerHTML={{ __html: viewProgramme.htmlContent }}
           />
+        )}
+      </Modal>
+
+      {/* ─── Manual viewer modal ─────────────────────────────── */}
+      <Modal open={showManual} onClose={() => setShowManual(false)} title={`${manualTitle} — Manual`} wide>
+        {manualLoading ? (
+          <div className="text-center py-8 text-gray-400">Loading manual...</div>
+        ) : manualHtml ? (
+          <div
+            className="prose prose-sm max-w-none overflow-auto max-h-[70vh]"
+            dangerouslySetInnerHTML={{ __html: manualHtml }}
+          />
+        ) : (
+          <div className="text-center py-8 text-gray-400">No manual included in this programme version.</div>
         )}
       </Modal>
 

@@ -159,6 +159,7 @@ export interface ProgrammeVersion {
   version: number;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   numWeeks: number;
+  manualHtml?: string | null;
   manualFileName: string | null;
   publishedAt: string | null;
   createdAt: string;

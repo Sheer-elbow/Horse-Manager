@@ -9,3 +9,4 @@ coverage/
 backend/prisma/*.db
 backend/prisma/migrations/*.sql.bak
 frontend/.vite/
+*.tsbuildinfo
