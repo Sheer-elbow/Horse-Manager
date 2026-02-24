@@ -125,11 +125,16 @@ router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), up
     // Helper: get the bare filename from a ZIP entry (strips folder path)
     const bareFilename = (e: AdmZip.IZipEntry) => (e.entryName.split('/').pop() || '').toLowerCase();
 
-    // Find schedule CSV (required) — prefer exact "schedule.csv", fall back to any .csv file
-    const csvFiles = entries.filter(e => !e.isDirectory && bareFilename(e).endsWith('.csv'));
-    const csvEntry = csvFiles.find(e => bareFilename(e) === 'schedule.csv') || csvFiles[0] || null;
+    // Find schedule CSV (required) — prefer "schedule.csv", fall back to any .csv/.tsv/.txt with schedule-like name, then any .csv
+    const csvFiles = entries.filter(e => !e.isDirectory && /\.(csv|tsv|txt)$/i.test(bareFilename(e)));
+    const csvEntry =
+      csvFiles.find(e => bareFilename(e) === 'schedule.csv') ||
+      csvFiles.find(e => /schedule/i.test(bareFilename(e))) ||
+      csvFiles.find(e => /\.(csv|tsv)$/i.test(bareFilename(e))) ||
+      csvFiles[0] ||
+      null;
     if (!csvEntry) {
-      res.status(400).json({ error: 'ZIP must contain a .csv schedule file (e.g. schedule.csv)' });
+      res.status(400).json({ error: 'ZIP must contain a schedule file (.csv or .tsv). Examples: schedule.csv, my-schedule.csv, training.csv' });
       return;
     }
 
@@ -144,11 +149,19 @@ router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), up
       return;
     }
 
-    // Reject unexpected file types (only allow .csv, .html, .htm, .pdf, .txt, .md)
-    const allowedExtensions = ['.csv', '.html', '.htm', '.pdf', '.txt', '.md'];
+    // Reject unexpected file types (allow docs, images, and common assets that manuals may reference)
+    const allowedExtensions = [
+      '.csv', '.tsv', '.txt',               // data / text
+      '.html', '.htm', '.pdf', '.md',       // documents
+      '.png', '.jpg', '.jpeg', '.gif',      // images (often in HTML manuals)
+      '.svg', '.webp', '.ico',              // more images
+      '.css',                                // stylesheets for HTML manuals
+    ];
     for (const entry of entries) {
       if (entry.isDirectory) continue;
       const entryName = entry.entryName.split('/').pop() || '';
+      // Skip hidden files (e.g. __MACOSX/._file)
+      if (entryName.startsWith('.') || entryName.startsWith('_')) continue;
       const ext = entryName.includes('.') ? '.' + entryName.split('.').pop()!.toLowerCase() : '';
       if (ext && !allowedExtensions.includes(ext)) {
         res.status(400).json({ error: `ZIP contains disallowed file type: "${entryName}". Allowed: ${allowedExtensions.join(', ')}` });
@@ -157,15 +170,19 @@ router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), up
     }
 
     // Parse schedule CSV
+    const csvFilename = csvEntry.entryName.split('/').pop() || 'schedule.csv';
     const csvContent = csvEntry.getData().toString('utf-8');
     const parseResult = parseScheduleCsv(csvContent);
     const fatalErrors = parseResult.errors.filter(e => !e.startsWith('Warning:'));
     if (fatalErrors.length > 0) {
-      res.status(400).json({ error: 'Invalid schedule.csv', details: parseResult.errors });
+      res.status(400).json({
+        error: `Could not parse "${csvFilename}". Check that it has columns: week, day, title, category`,
+        details: parseResult.errors,
+      });
       return;
     }
     if (parseResult.scheduleData.length === 0) {
-      res.status(400).json({ error: 'schedule.csv produced no valid entries' });
+      res.status(400).json({ error: `"${csvFilename}" was read but produced no valid schedule entries. Check that data rows are present after the header.` });
       return;
     }
 

@@ -469,4 +469,195 @@ describe('parseScheduleCsv', () => {
       expect(result.numWeeks).toBe(2);
     });
   });
+
+  // ─── Tab-delimited CSV ──────────────────────────────────
+
+  describe('tab-delimited CSV', () => {
+    it('parses tab-delimited data (Excel copy-paste)', () => {
+      const header = 'week\tday\ttitle\tcategory';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1\t${i + 1}\t${i === 6 ? 'Rest' : 'Training'}\t${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].title).toBe('Training');
+    });
+  });
+
+  // ─── Day name support ──────────────────────────────────
+
+  describe('day name support', () => {
+    it('accepts day names like Monday, Tue, etc.', () => {
+      const header = 'week,day,title,category';
+      const rows = [
+        '1,Monday,Flat work,training',
+        '1,Tue,Jumping,training',
+        '1,Wed,Rest,rest',
+        '1,Thursday,Hack,training',
+        '1,Fri,Lunging,training',
+        '1,Sat,Polo,training',
+        '1,Sunday,Recovery,recovery',
+      ];
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].day).toBe(1);
+      expect(result.scheduleData[6].day).toBe(7);
+    });
+  });
+
+  // ─── Flexible week/day values ──────────────────────────
+
+  describe('flexible week/day values', () => {
+    it('accepts "Week 1", "Day 3" style values', () => {
+      const header = 'week,day,title,category';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `Week 1,Day ${i + 1},${i === 6 ? 'Rest' : 'Training'},${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].week).toBe(1);
+    });
+
+    it('accepts "W1", "D3" shorthand values', () => {
+      const header = 'week,day,title,category';
+      const csv = [header, 'W2,D4,Hack,training'].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData.find(d => d.week === 2 && d.day === 4)).toBeTruthy();
+    });
+  });
+
+  // ─── Additional header aliases ──────────────────────────
+
+  describe('additional header aliases', () => {
+    it('maps "Activity" to title and "Discipline" to category', () => {
+      const header = 'week,day,activity,discipline';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Rest' : 'Flatwork'},${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].title).toBe('Flatwork');
+    });
+
+    it('maps "Plan Summary" → title, "Work Type" → category, "Planned Total Minutes" → duration_min', () => {
+      const header = 'Week,Day,Plan Summary,Work Type,Planned Total Minutes';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Full rest' : 'Walker 40 min'},${i === 6 ? 'Rest' : 'Walker'},${i === 6 ? '0' : '40'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].title).toBe('Walker 40 min');
+      expect(result.scheduleData[0].category).toBe('walker');
+      expect(result.scheduleData[0].durationMin).toBe(40);
+    });
+
+    it('handles "Monitoring & Red Flags" header with ampersand', () => {
+      const header = 'Week,Day,Plan Summary,Work Type,Monitoring & Red Flags';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Rest' : 'Training'},${i === 6 ? 'Rest' : 'Riding'},Check legs`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+    });
+  });
+
+  // ─── Rich 13-column format (Horse/Plan Summary/Work Type) ─────
+
+  describe('rich 13-column format', () => {
+    function makeRichCsv(opts: { horses?: string[], weeks?: number } = {}): string {
+      const horses = opts.horses ?? ['Zen'];
+      const weeks = opts.weeks ?? 1;
+      const header = 'Horse\tWeek\tDay\tIs Rest Day\tWork Type\tPlanned Total Minutes\tPlan Summary\tExercise Details\tStretching Protocol\tMonitoring & Red Flags\tRelevant Anatomy\tAnatomy Image URLs\tVideo URLs';
+      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const rows: string[] = [];
+      for (const horse of horses) {
+        for (let w = 1; w <= weeks; w++) {
+          for (let d = 0; d < 7; d++) {
+            const isRest = d === 0;
+            rows.push([
+              horse, w, days[d],
+              isRest ? 'Yes' : 'No',
+              isRest ? 'Rest' : 'Walker',
+              isRest ? '0' : '40',
+              isRest ? 'Full rest.' : 'Walker 40 min.',
+              'Exercise details here',
+              'Stretching info',
+              'Check legs',
+              'Anatomy notes',
+              'https://example.com/img1.png;https://example.com/img2.png',
+              'https://youtube.com/watch?v=abc',
+            ].join('\t'));
+          }
+        }
+      }
+      return [header, ...rows].join('\n');
+    }
+
+    it('parses tab-delimited 13-column format with all extra columns', () => {
+      const csv = makeRichCsv();
+      const result = parseScheduleCsv(csv);
+      const fatal = result.errors.filter(e => !e.startsWith('Warning:'));
+      expect(fatal).toEqual([]);
+      expect(result.numWeeks).toBe(1);
+      expect(result.scheduleData).toHaveLength(7);
+    });
+
+    it('maps Plan Summary to title and Work Type to category', () => {
+      const csv = makeRichCsv();
+      const result = parseScheduleCsv(csv);
+      // Monday is rest day (day 1)
+      const monday = result.scheduleData.find(d => d.day === 1)!;
+      expect(monday.title).toBe('Full rest.');
+      expect(monday.category).toBe('rest');
+      // Tuesday is walker (day 2)
+      const tuesday = result.scheduleData.find(d => d.day === 2)!;
+      expect(tuesday.title).toBe('Walker 40 min.');
+      expect(tuesday.category).toBe('walker');
+      expect(tuesday.durationMin).toBe(40);
+    });
+
+    it('uses Is Rest Day column for rest detection', () => {
+      const csv = makeRichCsv();
+      const result = parseScheduleCsv(csv);
+      const monday = result.scheduleData.find(d => d.day === 1)!;
+      expect(monday.blocks[0].name).toBe('Rest');
+    });
+
+    it('filters to first horse when multiple horses present', () => {
+      const csv = makeRichCsv({ horses: ['Zen', 'Sakura'] });
+      const result = parseScheduleCsv(csv);
+      const fatal = result.errors.filter(e => !e.startsWith('Warning:'));
+      expect(fatal).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7); // Only Zen's 7 days
+      expect(result.errors.some(e => e.includes('using schedule for "Zen"'))).toBe(true);
+    });
+
+    it('handles multi-week rich format', () => {
+      const csv = makeRichCsv({ weeks: 6 });
+      const result = parseScheduleCsv(csv);
+      const fatal = result.errors.filter(e => !e.startsWith('Warning:'));
+      expect(fatal).toEqual([]);
+      expect(result.numWeeks).toBe(6);
+      expect(result.scheduleData).toHaveLength(42); // 6 weeks * 7 days
+    });
+
+    it('does not warn about known extra columns', () => {
+      const csv = makeRichCsv();
+      const result = parseScheduleCsv(csv);
+      // Should not have warnings about horse, is_rest_day, stretching_protocol, etc.
+      const unknownWarnings = result.errors.filter(e => e.startsWith('Warning:') && e.includes('unknown column'));
+      expect(unknownWarnings).toEqual([]);
+    });
+  });
 });

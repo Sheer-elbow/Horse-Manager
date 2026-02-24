@@ -4,13 +4,24 @@
  * Required CSV columns (case-insensitive, trimmed):
  *   week, day, title, category
  *
+ * Common aliases accepted:
+ *   "Plan Summary" → title, "Work Type" → category,
+ *   "Planned Total Minutes" → duration_min, "Session" → title, etc.
+ *
  * Optional CSV columns:
  *   duration_min, duration_max, intensity_label, intensity_rpe_min, intensity_rpe_max,
  *   blocks, substitution, manual_ref
  *
+ * Extra columns (silently accepted, not used in schedule):
+ *   horse, is_rest_day, stretching_protocol, monitoring_red_flags,
+ *   relevant_anatomy, anatomy_image_urls, video_urls, exercise_details
+ *
  * "blocks" column format: pipe-separated "Name: text" entries.
  *   e.g. "Warm-up: 15 min walk | Main: 3x5 min canter | Cool-down: 10 min walk"
  *   If omitted, a single "Main" block is created from the title.
+ *
+ * Supports comma, semicolon, and tab delimiters (auto-detected).
+ * If a "horse" column is present, rows are filtered to the first horse found.
  */
 
 export interface ScheduleBlock {
@@ -46,30 +57,89 @@ const KNOWN_COLUMNS = [
   'duration_min', 'duration_max',
   'intensity_label', 'intensity_rpe_min', 'intensity_rpe_max',
   'blocks', 'substitution', 'manual_ref',
+  // Extra columns accepted from rich schedule formats (silently ignored)
+  'horse', 'is_rest_day',
+  'exercise_details', 'stretching_protocol', 'monitoring_red_flags',
+  'relevant_anatomy', 'anatomy_image_urls', 'video_urls',
 ];
 
 /** Common header aliases → canonical name */
 const HEADER_ALIASES: Record<string, string> = {
+  // title aliases
   session: 'title',
   session_title: 'title',
   workout: 'title',
   workout_title: 'title',
   exercise: 'title',
   name: 'title',
+  activity: 'title',
+  activity_name: 'title',
+  description: 'title',
+  session_name: 'title',
+  task: 'title',
+  plan_summary: 'title',
+  summary: 'title',
+  // category aliases
   type: 'category',
   session_type: 'category',
   workout_type: 'category',
+  activity_type: 'category',
+  work_type: 'category',
+  cat: 'category',
+  discipline: 'category',
+  // week aliases
+  week_number: 'week',
+  week_no: 'week',
+  wk: 'week',
+  // day aliases
+  day_number: 'day',
+  day_no: 'day',
+  day_of_week: 'day',
+  dow: 'day',
+  // duration aliases
   duration: 'duration_min',
+  time: 'duration_min',
+  time_min: 'duration_min',
+  minutes: 'duration_min',
+  min_duration: 'duration_min',
+  planned_total_minutes: 'duration_min',
+  total_minutes: 'duration_min',
+  planned_minutes: 'duration_min',
+  max_duration: 'duration_max',
+  // intensity aliases
   rpe_min: 'intensity_rpe_min',
   rpe_max: 'intensity_rpe_max',
   rpe: 'intensity_rpe_min',
   intensity: 'intensity_label',
+  effort: 'intensity_label',
+  // substitution aliases
   sub: 'substitution',
   alternative: 'substitution',
+  alt: 'substitution',
+  swap: 'substitution',
+  // manual_ref aliases
   ref: 'manual_ref',
   manual_reference: 'manual_ref',
   page: 'manual_ref',
+  reference: 'manual_ref',
+  // blocks aliases
   exercises: 'blocks',
+  steps: 'blocks',
+  detail: 'blocks',
+  details: 'blocks',
+  notes: 'blocks',
+  // extra rich-format columns (mapped to their canonical known names)
+  horse_name: 'horse',
+  rest_day: 'is_rest_day',
+  rest: 'is_rest_day',
+  monitoring_and_red_flags: 'monitoring_red_flags',
+  monitoring: 'monitoring_red_flags',
+  red_flags: 'monitoring_red_flags',
+  stretching: 'stretching_protocol',
+  anatomy: 'relevant_anatomy',
+  image_urls: 'anatomy_image_urls',
+  images: 'anatomy_image_urls',
+  videos: 'video_urls',
 };
 
 const REST_CATEGORIES = ['rest', 'recovery'];
@@ -80,24 +150,29 @@ function normalizeHeader(h: string): string {
   norm = norm.replace(/\s*#$/, '');
   // Strip parenthetical content, e.g. "Duration (min)" → "duration"
   norm = norm.replace(/\s*\([^)]*\)/, '');
-  // Replace spaces, hyphens, multiple underscores with single _
-  norm = norm.replace(/[\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  // Replace spaces, hyphens, ampersands, and other punctuation with single _
+  // e.g. "Monitoring & Red Flags" → "monitoring_red_flags"
+  norm = norm.replace(/[\s\-&/]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
   // Apply alias mapping
   return HEADER_ALIASES[norm] ?? norm;
 }
 
-/** Detect whether the header uses semicolons (European Excel) or commas */
+/** Detect whether the header uses tabs, semicolons (European Excel), or commas */
 function detectDelimiter(headerLine: string): string {
-  // Count unquoted semicolons vs commas
+  // Count unquoted delimiters
   let inQuotes = false;
   let commas = 0;
   let semis = 0;
+  let tabs = 0;
   for (const ch of headerLine) {
     if (ch === '"') { inQuotes = !inQuotes; continue; }
     if (inQuotes) continue;
     if (ch === ',') commas++;
     if (ch === ';') semis++;
+    if (ch === '\t') tabs++;
   }
+  // Tab-delimited wins if any tabs are present (common Excel copy-paste)
+  if (tabs > 0 && tabs >= commas && tabs >= semis) return '\t';
   return semis > commas ? ';' : ',';
 }
 
@@ -161,11 +236,37 @@ function parseBlocks(raw: string, title: string, isRest: boolean): ScheduleBlock
   return blocks.length > 0 ? blocks : [{ name: 'Main', text: title }];
 }
 
+/** Extract a number from strings like "Week 3", "Day 2", "3", "#3", "W3" */
+function extractInt(val: string): number {
+  // Strip common prefixes: "Week", "Day", "W", "D", "#"
+  const cleaned = val.replace(/^(week|day|wk|w|d|#)\s*/i, '').trim();
+  return parseInt(cleaned, 10);
+}
+
 function parseOptionalInt(val: string | undefined): number | null {
   if (!val || val === '') return null;
   const n = parseInt(val, 10);
   if (isNaN(n)) return null;
   return n;
+}
+
+/** Map day names to numbers */
+const DAY_NAME_MAP: Record<string, number> = {
+  mon: 1, monday: 1,
+  tue: 2, tuesday: 2, tues: 2,
+  wed: 3, wednesday: 3, weds: 3,
+  thu: 4, thursday: 4, thur: 4, thurs: 4,
+  fri: 5, friday: 5,
+  sat: 6, saturday: 6,
+  sun: 7, sunday: 7,
+};
+
+function parseDay(val: string): number {
+  const lower = val.trim().toLowerCase();
+  // Try day name first
+  if (DAY_NAME_MAP[lower] !== undefined) return DAY_NAME_MAP[lower];
+  // Try numeric extraction
+  return extractInt(val);
 }
 
 export function parseScheduleCsv(csvContent: string): ParseResult {
@@ -205,6 +306,21 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
 
   // Build column index map
   const colIdx = (name: string) => headers.indexOf(name);
+  const hasHorseCol = headers.includes('horse');
+  const hasRestDayCol = headers.includes('is_rest_day');
+
+  // If a "horse" column exists, discover which horse appears first and filter to it
+  let targetHorse: string | null = null;
+  if (hasHorseCol) {
+    for (let i = 1; i < lines.length; i++) {
+      const fields = parseCsvLine(lines[i], delimiter);
+      const horse = (fields[colIdx('horse')] ?? '').trim();
+      if (horse) { targetHorse = horse; break; }
+    }
+    if (targetHorse) {
+      errors.push(`Warning: "horse" column detected — using schedule for "${targetHorse}"`);
+    }
+  }
 
   const scheduleData: ScheduleDay[] = [];
 
@@ -215,22 +331,28 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
     // Skip empty rows
     if (fields.every(f => f === '')) continue;
 
+    // If filtering by horse, skip rows for other horses
+    if (hasHorseCol && targetHorse) {
+      const horse = (fields[colIdx('horse')] ?? '').trim();
+      if (horse && horse.toLowerCase() !== targetHorse.toLowerCase()) continue;
+    }
+
     const weekStr = fields[colIdx('week')] ?? '';
     const dayStr = fields[colIdx('day')] ?? '';
     const title = fields[colIdx('title')] ?? '';
     const category = fields[colIdx('category')] ?? '';
 
-    // Validate week
-    const week = parseInt(weekStr, 10);
+    // Validate week (accept "Week 1", "W1", "#1", "1", etc.)
+    const week = extractInt(weekStr);
     if (isNaN(week) || week < 1) {
       errors.push(`Row ${lineNum}: "week" must be a positive integer, got "${weekStr}"`);
       continue;
     }
 
-    // Validate day
-    const day = parseInt(dayStr, 10);
+    // Validate day (accept "Monday", "Mon", "Day 1", "D1", "1", etc.)
+    const day = parseDay(dayStr);
     if (isNaN(day) || day < 1 || day > 7) {
-      errors.push(`Row ${lineNum}: "day" must be 1-7, got "${dayStr}"`);
+      errors.push(`Row ${lineNum}: "day" must be 1-7 (or a day name like Mon/Tuesday), got "${dayStr}"`);
       continue;
     }
 
@@ -246,7 +368,13 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
       continue;
     }
 
-    const isRest = REST_CATEGORIES.includes(category.toLowerCase()) || title.toLowerCase() === 'rest';
+    // Detect rest day: explicit "Is Rest Day" column, or category/title matching
+    const isRestDayCol = hasRestDayCol
+      ? (fields[colIdx('is_rest_day')] ?? '').trim().toLowerCase()
+      : '';
+    const isRest = isRestDayCol === 'yes' || isRestDayCol === 'true' || isRestDayCol === '1'
+      || REST_CATEGORIES.includes(category.toLowerCase())
+      || title.toLowerCase() === 'rest';
 
     const durationMin = parseOptionalInt(fields[colIdx('duration_min')]);
     const durationMax = parseOptionalInt(fields[colIdx('duration_max')]);
