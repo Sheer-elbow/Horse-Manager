@@ -28,6 +28,7 @@ echo "2/4  Building containers..."
 docker compose build --no-cache
 
 echo "3/4  Starting services..."
+docker compose down --remove-orphans
 docker compose up -d
 
 echo "4/4  Running database migrations and seed..."
