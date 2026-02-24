@@ -4,13 +4,24 @@
  * Required CSV columns (case-insensitive, trimmed):
  *   week, day, title, category
  *
+ * Common aliases accepted:
+ *   "Plan Summary" → title, "Work Type" → category,
+ *   "Planned Total Minutes" → duration_min, "Session" → title, etc.
+ *
  * Optional CSV columns:
  *   duration_min, duration_max, intensity_label, intensity_rpe_min, intensity_rpe_max,
  *   blocks, substitution, manual_ref
  *
+ * Extra columns (silently accepted, not used in schedule):
+ *   horse, is_rest_day, stretching_protocol, monitoring_red_flags,
+ *   relevant_anatomy, anatomy_image_urls, video_urls, exercise_details
+ *
  * "blocks" column format: pipe-separated "Name: text" entries.
  *   e.g. "Warm-up: 15 min walk | Main: 3x5 min canter | Cool-down: 10 min walk"
  *   If omitted, a single "Main" block is created from the title.
+ *
+ * Supports comma, semicolon, and tab delimiters (auto-detected).
+ * If a "horse" column is present, rows are filtered to the first horse found.
  */
 
 export interface ScheduleBlock {
@@ -46,10 +57,15 @@ const KNOWN_COLUMNS = [
   'duration_min', 'duration_max',
   'intensity_label', 'intensity_rpe_min', 'intensity_rpe_max',
   'blocks', 'substitution', 'manual_ref',
+  // Extra columns accepted from rich schedule formats (silently ignored)
+  'horse', 'is_rest_day',
+  'exercise_details', 'stretching_protocol', 'monitoring_red_flags',
+  'relevant_anatomy', 'anatomy_image_urls', 'video_urls',
 ];
 
 /** Common header aliases → canonical name */
 const HEADER_ALIASES: Record<string, string> = {
+  // title aliases
   session: 'title',
   session_title: 'title',
   workout: 'title',
@@ -61,43 +77,69 @@ const HEADER_ALIASES: Record<string, string> = {
   description: 'title',
   session_name: 'title',
   task: 'title',
+  plan_summary: 'title',
+  summary: 'title',
+  // category aliases
   type: 'category',
   session_type: 'category',
   workout_type: 'category',
   activity_type: 'category',
+  work_type: 'category',
   cat: 'category',
   discipline: 'category',
+  // week aliases
   week_number: 'week',
   week_no: 'week',
   wk: 'week',
+  // day aliases
   day_number: 'day',
   day_no: 'day',
   day_of_week: 'day',
   dow: 'day',
+  // duration aliases
   duration: 'duration_min',
   time: 'duration_min',
   time_min: 'duration_min',
   minutes: 'duration_min',
   min_duration: 'duration_min',
+  planned_total_minutes: 'duration_min',
+  total_minutes: 'duration_min',
+  planned_minutes: 'duration_min',
   max_duration: 'duration_max',
+  // intensity aliases
   rpe_min: 'intensity_rpe_min',
   rpe_max: 'intensity_rpe_max',
   rpe: 'intensity_rpe_min',
   intensity: 'intensity_label',
   effort: 'intensity_label',
+  // substitution aliases
   sub: 'substitution',
   alternative: 'substitution',
   alt: 'substitution',
   swap: 'substitution',
+  // manual_ref aliases
   ref: 'manual_ref',
   manual_reference: 'manual_ref',
   page: 'manual_ref',
   reference: 'manual_ref',
+  // blocks aliases
   exercises: 'blocks',
   steps: 'blocks',
   detail: 'blocks',
   details: 'blocks',
   notes: 'blocks',
+  // extra rich-format columns (mapped to their canonical known names)
+  horse_name: 'horse',
+  rest_day: 'is_rest_day',
+  rest: 'is_rest_day',
+  monitoring_and_red_flags: 'monitoring_red_flags',
+  monitoring: 'monitoring_red_flags',
+  red_flags: 'monitoring_red_flags',
+  stretching: 'stretching_protocol',
+  anatomy: 'relevant_anatomy',
+  image_urls: 'anatomy_image_urls',
+  images: 'anatomy_image_urls',
+  videos: 'video_urls',
 };
 
 const REST_CATEGORIES = ['rest', 'recovery'];
@@ -108,8 +150,9 @@ function normalizeHeader(h: string): string {
   norm = norm.replace(/\s*#$/, '');
   // Strip parenthetical content, e.g. "Duration (min)" → "duration"
   norm = norm.replace(/\s*\([^)]*\)/, '');
-  // Replace spaces, hyphens, multiple underscores with single _
-  norm = norm.replace(/[\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  // Replace spaces, hyphens, ampersands, and other punctuation with single _
+  // e.g. "Monitoring & Red Flags" → "monitoring_red_flags"
+  norm = norm.replace(/[\s\-&/]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
   // Apply alias mapping
   return HEADER_ALIASES[norm] ?? norm;
 }
@@ -263,6 +306,21 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
 
   // Build column index map
   const colIdx = (name: string) => headers.indexOf(name);
+  const hasHorseCol = headers.includes('horse');
+  const hasRestDayCol = headers.includes('is_rest_day');
+
+  // If a "horse" column exists, discover which horse appears first and filter to it
+  let targetHorse: string | null = null;
+  if (hasHorseCol) {
+    for (let i = 1; i < lines.length; i++) {
+      const fields = parseCsvLine(lines[i], delimiter);
+      const horse = (fields[colIdx('horse')] ?? '').trim();
+      if (horse) { targetHorse = horse; break; }
+    }
+    if (targetHorse) {
+      errors.push(`Warning: "horse" column detected — using schedule for "${targetHorse}"`);
+    }
+  }
 
   const scheduleData: ScheduleDay[] = [];
 
@@ -272,6 +330,12 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
 
     // Skip empty rows
     if (fields.every(f => f === '')) continue;
+
+    // If filtering by horse, skip rows for other horses
+    if (hasHorseCol && targetHorse) {
+      const horse = (fields[colIdx('horse')] ?? '').trim();
+      if (horse && horse.toLowerCase() !== targetHorse.toLowerCase()) continue;
+    }
 
     const weekStr = fields[colIdx('week')] ?? '';
     const dayStr = fields[colIdx('day')] ?? '';
@@ -304,7 +368,13 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
       continue;
     }
 
-    const isRest = REST_CATEGORIES.includes(category.toLowerCase()) || title.toLowerCase() === 'rest';
+    // Detect rest day: explicit "Is Rest Day" column, or category/title matching
+    const isRestDayCol = hasRestDayCol
+      ? (fields[colIdx('is_rest_day')] ?? '').trim().toLowerCase()
+      : '';
+    const isRest = isRestDayCol === 'yes' || isRestDayCol === 'true' || isRestDayCol === '1'
+      || REST_CATEGORIES.includes(category.toLowerCase())
+      || title.toLowerCase() === 'rest';
 
     const durationMin = parseOptionalInt(fields[colIdx('duration_min')]);
     const durationMax = parseOptionalInt(fields[colIdx('duration_max')]);
