@@ -2,7 +2,6 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
-import sanitizeHtml from 'sanitize-html';
 import * as cheerio from 'cheerio';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
@@ -192,22 +191,10 @@ router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), up
 
     if (htmlEntry) {
       const rawHtml = htmlEntry.getData().toString('utf-8');
-      // Sanitize HTML: allow safe tags for a training manual
-      manualHtml = sanitizeHtml(rawHtml, {
-        allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-          'img', 'figure', 'figcaption', 'section', 'article',
-          'table', 'thead', 'tbody', 'tr', 'th', 'td',
-          'dl', 'dt', 'dd', 'hr', 'br', 'span', 'div',
-        ]),
-        allowedAttributes: {
-          ...sanitizeHtml.defaults.allowedAttributes,
-          '*': ['id', 'class', 'style'],
-          'img': ['src', 'alt', 'width', 'height'],
-          'a': ['href', 'name', 'id'],
-        },
-        allowedSchemes: ['http', 'https', 'data'],
-      });
+      // Strip only <script> tags — keep full document structure (<html>, <head>,
+      // <style>, etc.) so the manual renders with original styling when opened
+      // in a new browser tab (sandboxed blob: URL, no access to app origin).
+      manualHtml = rawHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script\s*>/gi, '');
       manualFileName = htmlEntry.entryName.split('/').pop() || 'manual.html';
     } else if (pdfEntry) {
       // Store PDF note — actual PDF viewer is a next-iteration feature
