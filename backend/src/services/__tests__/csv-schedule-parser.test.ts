@@ -469,4 +469,82 @@ describe('parseScheduleCsv', () => {
       expect(result.numWeeks).toBe(2);
     });
   });
+
+  // ─── Tab-delimited CSV ──────────────────────────────────
+
+  describe('tab-delimited CSV', () => {
+    it('parses tab-delimited data (Excel copy-paste)', () => {
+      const header = 'week\tday\ttitle\tcategory';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1\t${i + 1}\t${i === 6 ? 'Rest' : 'Training'}\t${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].title).toBe('Training');
+    });
+  });
+
+  // ─── Day name support ──────────────────────────────────
+
+  describe('day name support', () => {
+    it('accepts day names like Monday, Tue, etc.', () => {
+      const header = 'week,day,title,category';
+      const rows = [
+        '1,Monday,Flat work,training',
+        '1,Tue,Jumping,training',
+        '1,Wed,Rest,rest',
+        '1,Thursday,Hack,training',
+        '1,Fri,Lunging,training',
+        '1,Sat,Polo,training',
+        '1,Sunday,Recovery,recovery',
+      ];
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].day).toBe(1);
+      expect(result.scheduleData[6].day).toBe(7);
+    });
+  });
+
+  // ─── Flexible week/day values ──────────────────────────
+
+  describe('flexible week/day values', () => {
+    it('accepts "Week 1", "Day 3" style values', () => {
+      const header = 'week,day,title,category';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `Week 1,Day ${i + 1},${i === 6 ? 'Rest' : 'Training'},${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData).toHaveLength(7);
+      expect(result.scheduleData[0].week).toBe(1);
+    });
+
+    it('accepts "W1", "D3" shorthand values', () => {
+      const header = 'week,day,title,category';
+      const csv = [header, 'W2,D4,Hack,training'].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData.find(d => d.week === 2 && d.day === 4)).toBeTruthy();
+    });
+  });
+
+  // ─── Additional header aliases ──────────────────────────
+
+  describe('additional header aliases', () => {
+    it('maps "Activity" to title and "Discipline" to category', () => {
+      const header = 'week,day,activity,discipline';
+      const rows = Array.from({ length: 7 }, (_, i) =>
+        `1,${i + 1},${i === 6 ? 'Rest' : 'Flatwork'},${i === 6 ? 'rest' : 'training'}`
+      );
+      const csv = [header, ...rows].join('\n');
+      const result = parseScheduleCsv(csv);
+      expect(result.errors.filter(e => !e.startsWith('Warning:'))).toEqual([]);
+      expect(result.scheduleData[0].title).toBe('Flatwork');
+    });
+  });
 });

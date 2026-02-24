@@ -56,20 +56,48 @@ const HEADER_ALIASES: Record<string, string> = {
   workout_title: 'title',
   exercise: 'title',
   name: 'title',
+  activity: 'title',
+  activity_name: 'title',
+  description: 'title',
+  session_name: 'title',
+  task: 'title',
   type: 'category',
   session_type: 'category',
   workout_type: 'category',
+  activity_type: 'category',
+  cat: 'category',
+  discipline: 'category',
+  week_number: 'week',
+  week_no: 'week',
+  wk: 'week',
+  day_number: 'day',
+  day_no: 'day',
+  day_of_week: 'day',
+  dow: 'day',
   duration: 'duration_min',
+  time: 'duration_min',
+  time_min: 'duration_min',
+  minutes: 'duration_min',
+  min_duration: 'duration_min',
+  max_duration: 'duration_max',
   rpe_min: 'intensity_rpe_min',
   rpe_max: 'intensity_rpe_max',
   rpe: 'intensity_rpe_min',
   intensity: 'intensity_label',
+  effort: 'intensity_label',
   sub: 'substitution',
   alternative: 'substitution',
+  alt: 'substitution',
+  swap: 'substitution',
   ref: 'manual_ref',
   manual_reference: 'manual_ref',
   page: 'manual_ref',
+  reference: 'manual_ref',
   exercises: 'blocks',
+  steps: 'blocks',
+  detail: 'blocks',
+  details: 'blocks',
+  notes: 'blocks',
 };
 
 const REST_CATEGORIES = ['rest', 'recovery'];
@@ -86,18 +114,22 @@ function normalizeHeader(h: string): string {
   return HEADER_ALIASES[norm] ?? norm;
 }
 
-/** Detect whether the header uses semicolons (European Excel) or commas */
+/** Detect whether the header uses tabs, semicolons (European Excel), or commas */
 function detectDelimiter(headerLine: string): string {
-  // Count unquoted semicolons vs commas
+  // Count unquoted delimiters
   let inQuotes = false;
   let commas = 0;
   let semis = 0;
+  let tabs = 0;
   for (const ch of headerLine) {
     if (ch === '"') { inQuotes = !inQuotes; continue; }
     if (inQuotes) continue;
     if (ch === ',') commas++;
     if (ch === ';') semis++;
+    if (ch === '\t') tabs++;
   }
+  // Tab-delimited wins if any tabs are present (common Excel copy-paste)
+  if (tabs > 0 && tabs >= commas && tabs >= semis) return '\t';
   return semis > commas ? ';' : ',';
 }
 
@@ -161,11 +193,37 @@ function parseBlocks(raw: string, title: string, isRest: boolean): ScheduleBlock
   return blocks.length > 0 ? blocks : [{ name: 'Main', text: title }];
 }
 
+/** Extract a number from strings like "Week 3", "Day 2", "3", "#3", "W3" */
+function extractInt(val: string): number {
+  // Strip common prefixes: "Week", "Day", "W", "D", "#"
+  const cleaned = val.replace(/^(week|day|wk|w|d|#)\s*/i, '').trim();
+  return parseInt(cleaned, 10);
+}
+
 function parseOptionalInt(val: string | undefined): number | null {
   if (!val || val === '') return null;
   const n = parseInt(val, 10);
   if (isNaN(n)) return null;
   return n;
+}
+
+/** Map day names to numbers */
+const DAY_NAME_MAP: Record<string, number> = {
+  mon: 1, monday: 1,
+  tue: 2, tuesday: 2, tues: 2,
+  wed: 3, wednesday: 3, weds: 3,
+  thu: 4, thursday: 4, thur: 4, thurs: 4,
+  fri: 5, friday: 5,
+  sat: 6, saturday: 6,
+  sun: 7, sunday: 7,
+};
+
+function parseDay(val: string): number {
+  const lower = val.trim().toLowerCase();
+  // Try day name first
+  if (DAY_NAME_MAP[lower] !== undefined) return DAY_NAME_MAP[lower];
+  // Try numeric extraction
+  return extractInt(val);
 }
 
 export function parseScheduleCsv(csvContent: string): ParseResult {
@@ -220,17 +278,17 @@ export function parseScheduleCsv(csvContent: string): ParseResult {
     const title = fields[colIdx('title')] ?? '';
     const category = fields[colIdx('category')] ?? '';
 
-    // Validate week
-    const week = parseInt(weekStr, 10);
+    // Validate week (accept "Week 1", "W1", "#1", "1", etc.)
+    const week = extractInt(weekStr);
     if (isNaN(week) || week < 1) {
       errors.push(`Row ${lineNum}: "week" must be a positive integer, got "${weekStr}"`);
       continue;
     }
 
-    // Validate day
-    const day = parseInt(dayStr, 10);
+    // Validate day (accept "Monday", "Mon", "Day 1", "D1", "1", etc.)
+    const day = parseDay(dayStr);
     if (isNaN(day) || day < 1 || day > 7) {
-      errors.push(`Row ${lineNum}: "day" must be 1-7, got "${dayStr}"`);
+      errors.push(`Row ${lineNum}: "day" must be 1-7 (or a day name like Mon/Tuesday), got "${dayStr}"`);
       continue;
     }
 
