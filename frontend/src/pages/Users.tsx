@@ -3,6 +3,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { User, InviteToken } from '../types';
 import Modal from '../components/Modal';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { toast } from 'sonner';
 
 export default function Users() {
   const { user: currentUser } = useAuth();
@@ -16,6 +19,9 @@ export default function Users() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: '', role: '' as User['role'] });
   const [inviteRole, setInviteRole] = useState<'TRAINER' | 'RIDER' | 'OWNER'>('RIDER');
+
+  // Delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const load = async () => {
     try {
@@ -44,10 +50,9 @@ export default function Users() {
         body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       });
       if (result.emailError) {
-        // Email failed but invite was created - show the link
         setSuccess(`${result.message}\n\nInvite link: ${result.inviteUrl}`);
       } else {
-        setSuccess(`Invite sent to ${inviteEmail}`);
+        toast.success(`Invite sent to ${inviteEmail}`);
       }
       setInviteEmail('');
       setShowInvite(false);
@@ -71,6 +76,7 @@ export default function Users() {
         body: JSON.stringify({ name: editForm.name || null, role: editForm.role }),
       });
       setEditUser(null);
+      toast.success('User updated');
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update user');
@@ -78,9 +84,30 @@ export default function Users() {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Delete this user? This cannot be undone.')) return;
-    await api(`/users/${userId}`, { method: 'DELETE' });
-    load();
+    const u = users.find((u) => u.id === userId);
+    setDeleteTarget({ id: userId, name: u?.name || u?.email || 'this user' });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api(`/users/${deleteTarget.id}`, { method: 'DELETE' });
+      toast.success('User deleted');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  const roleBadge = (role: string) => {
+    switch (role) {
+      case 'ADMIN': return <Badge variant="brand">{role}</Badge>;
+      case 'TRAINER': return <Badge variant="info">{role}</Badge>;
+      case 'RIDER': return <Badge variant="success">{role}</Badge>;
+      default: return <Badge variant="warning">{role}</Badge>;
+    }
   };
 
   if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
@@ -89,9 +116,7 @@ export default function Users() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Users</h2>
-        <button onClick={() => setShowInvite(true)} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700">
-          Invite user
-        </button>
+        <Button onClick={() => setShowInvite(true)}>Invite user</Button>
       </div>
 
       {success && (
@@ -118,26 +143,17 @@ export default function Users() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-b last:border-0">
+              <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3">{u.email}</td>
                 <td className="px-4 py-3">{u.name || '-'}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
-                    u.role === 'TRAINER' ? 'bg-blue-100 text-blue-700' :
-                    u.role === 'RIDER' ? 'bg-green-100 text-green-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {u.role}
-                  </span>
-                </td>
+                <td className="px-4 py-3">{roleBadge(u.role)}</td>
                 <td className="px-4 py-3 text-gray-500">
                   {u.assignments?.map((a) => a.horse?.name).filter(Boolean).join(', ') || '-'}
                 </td>
                 <td className="px-4 py-3 text-right space-x-2">
-                  <button onClick={() => openEditUser(u)} className="text-brand-600 hover:underline text-xs">Edit</button>
+                  <Button variant="link" size="sm" onClick={() => openEditUser(u)}>Edit</Button>
                   {u.id !== currentUser?.id && (
-                    <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:underline text-xs">Delete</button>
+                    <Button variant="link" size="sm" className="text-red-500 hover:text-red-600" onClick={() => handleDeleteUser(u.id)}>Delete</Button>
                   )}
                 </td>
               </tr>
@@ -164,18 +180,18 @@ export default function Users() {
             </thead>
             <tbody>
               {invites.map((inv) => (
-                <tr key={inv.id} className="border-b last:border-0">
+                <tr key={inv.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                   <td className="px-4 py-3">{inv.email}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{inv.role}</td>
+                  <td className="px-4 py-3">{roleBadge(inv.role)}</td>
                   <td className="px-4 py-3 text-gray-500">{new Date(inv.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-gray-500">{new Date(inv.expiresAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     {inv.usedAt ? (
-                      <span className="text-xs text-green-600">Accepted</span>
+                      <Badge variant="success">Accepted</Badge>
                     ) : new Date(inv.expiresAt) < new Date() ? (
-                      <span className="text-xs text-red-500">Expired</span>
+                      <Badge variant="danger">Expired</Badge>
                     ) : (
-                      <span className="text-xs text-amber-600">Pending</span>
+                      <Badge variant="warning">Pending</Badge>
                     )}
                   </td>
                 </tr>
@@ -185,9 +201,20 @@ export default function Users() {
         )}
       </div>
 
+      {/* Delete user confirmation modal */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete user">
+        <p className="text-sm text-gray-600 mb-4">
+          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmDeleteUser}>Delete</Button>
+        </div>
+      </Modal>
+
       {/* Invite modal */}
       <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Invite user">
-        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
+        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
         <form onSubmit={handleInvite} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
@@ -202,13 +229,13 @@ export default function Users() {
             </select>
           </div>
           <p className="text-xs text-gray-500">An invite link will be sent to this email. The invite expires in 72 hours.</p>
-          <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Send invite</button>
+          <Button type="submit" className="w-full">Send invite</Button>
         </form>
       </Modal>
 
       {/* Edit user modal */}
       <Modal open={!!editUser} onClose={() => setEditUser(null)} title="Edit user">
-        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
+        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
         <form onSubmit={handleEditUser} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
@@ -228,7 +255,7 @@ export default function Users() {
             </select>
             {editUser?.id === currentUser?.id && <p className="text-xs text-gray-400 mt-1">Cannot change your own role</p>}
           </div>
-          <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Save changes</button>
+          <Button type="submit" className="w-full">Save changes</Button>
         </form>
       </Modal>
     </div>

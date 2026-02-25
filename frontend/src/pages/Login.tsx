@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
+import { Button } from '../components/ui/button';
 
 export default function Login() {
   const { login } = useAuth();
@@ -57,16 +58,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-sidebar px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-brand-700">Stable Manager</h1>
-          <p className="text-gray-500 mt-2">
+          <h1 className="text-3xl font-bold text-white">Stable Manager</h1>
+          <p className="text-sidebar-muted mt-2">
             {inviteToken ? 'Accept your invitation' : 'Sign in to your account'}
           </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div className="bg-white rounded-xl shadow-lg border p-6">
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
               {error}
@@ -96,13 +97,9 @@ export default function Login() {
                   minLength={8}
                 />
               </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
-              >
+              <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Setting up...' : 'Create account'}
-              </button>
+              </Button>
             </form>
           ) : (
             <form onSubmit={handleLogin} className="space-y-4">
@@ -126,13 +123,9 @@ export default function Login() {
                   required
                 />
               </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
-              >
+              <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Signing in...' : 'Sign in'}
-              </button>
+              </Button>
             </form>
           )}
         </div>

@@ -3,6 +3,17 @@ import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../api/client';
 import { Programme, ProgrammeVersion, Horse } from '../types';
 import Modal from '../components/Modal';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '../components/ui/dropdown-menu';
+import { MoreVertical, Pencil, Trash2, Eye, Layers, BookOpen } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function Programmes() {
   const { user } = useAuth();
@@ -32,6 +43,9 @@ export default function Programmes() {
   // Rename state
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const canManage = user?.role === 'ADMIN' || user?.role === 'TRAINER';
 
@@ -137,15 +151,22 @@ export default function Programmes() {
 
   const handleDelete = async (id: string, appliedCount?: number) => {
     if (appliedCount && appliedCount > 0) {
-      alert(`Cannot delete: this programme is still applied to horses (${appliedCount} applied plan${appliedCount === 1 ? '' : 's'}). Remove it from all horses first.`);
+      toast.error(`Cannot delete: this programme is still applied to ${appliedCount} horse${appliedCount === 1 ? '' : 's'}. Remove it from all horses first.`);
       return;
     }
-    if (!confirm('Delete this programme? This cannot be undone.')) return;
+    setDeleteTarget({ id, name: programmes.find((p) => p.id === id)?.name || 'this programme' });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api(`/programmes/${id}`, { method: 'DELETE' });
+      await api(`/programmes/${deleteTarget.id}`, { method: 'DELETE' });
+      toast.success('Programme deleted');
       load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Delete failed');
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -163,9 +184,10 @@ export default function Programmes() {
         body: JSON.stringify({ name: trimmed }),
       });
       setRenamingId(null);
+      toast.success('Programme renamed');
       load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Rename failed');
+      toast.error(err instanceof Error ? err.message : 'Rename failed');
     }
   };
 
@@ -188,15 +210,15 @@ export default function Programmes() {
   const openManual = async (p: Programme) => {
     try {
       const v = await api<ProgrammeVersion[]>(`/programmes/${p.id}/versions`);
-      if (v.length === 0) { alert('No versions found.'); return; }
+      if (v.length === 0) { toast.error('No versions found.'); return; }
       const full = await api<ProgrammeVersion>(`/programmes/${p.id}/versions/${v[0].id}`);
-      if (!full.manualHtml) { alert('No manual included in this version.'); return; }
+      if (!full.manualHtml) { toast.error('No manual included in this version.'); return; }
       const blob = new Blob([full.manualHtml], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch {
-      alert('Failed to load manual.');
+      toast.error('Failed to load manual.');
     }
   };
 
@@ -204,9 +226,9 @@ export default function Programmes() {
     setVersionError('');
     try {
       await api(`/programmes/${programmeId}/versions/${versionId}/publish`, { method: 'POST' });
-      // Reload versions and programme list
       const v = await api<ProgrammeVersion[]>(`/programmes/${programmeId}/versions`);
       setVersions(v);
+      toast.success('Version published');
       load();
     } catch (err) {
       setVersionError(err instanceof Error ? err.message : 'Publish failed');
@@ -242,6 +264,7 @@ export default function Programmes() {
         }),
       });
       setApplyVersion(null);
+      toast.success('Programme applied to horse');
     } catch (err: unknown) {
       if (err instanceof ApiError && err.body && typeof err.body === 'object' && 'conflictDates' in (err.body as Record<string, unknown>)) {
         const body = err.body as { conflictDates: string[] };
@@ -260,9 +283,9 @@ export default function Programmes() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case 'PUBLISHED': return <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">Published</span>;
-      case 'DRAFT': return <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">Draft</span>;
-      case 'ARCHIVED': return <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-500 font-medium">Archived</span>;
+      case 'PUBLISHED': return <Badge variant="success">Published</Badge>;
+      case 'DRAFT': return <Badge variant="warning">Draft</Badge>;
+      case 'ARCHIVED': return <Badge variant="default">Archived</Badge>;
       default: return null;
     }
   };
@@ -274,9 +297,7 @@ export default function Programmes() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Programmes</h2>
         {canManage && (
-          <button onClick={() => setShowAdd(true)} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700">
-            New programme
-          </button>
+          <Button onClick={() => setShowAdd(true)}>New programme</Button>
         )}
       </div>
 
@@ -287,7 +308,7 @@ export default function Programmes() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {programmes.map((p) => (
-            <div key={p.id} className="bg-white rounded-xl border p-5">
+            <div key={p.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition-shadow">
               <div className="flex items-start justify-between">
                 {renamingId === p.id ? (
                   <form
@@ -297,21 +318,58 @@ export default function Programmes() {
                     <input
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      className="border rounded px-2 py-1 text-sm font-semibold flex-1 min-w-0"
+                      className="border rounded-lg px-2 py-1 text-sm font-semibold flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-brand-500"
                       autoFocus
                       onKeyDown={(e) => { if (e.key === 'Escape') setRenamingId(null); }}
                     />
-                    <button type="submit" className="text-xs text-green-600 hover:underline">Save</button>
-                    <button type="button" onClick={() => setRenamingId(null)} className="text-xs text-gray-400 hover:underline">Cancel</button>
+                    <Button size="sm" type="submit">Save</Button>
+                    <Button size="sm" variant="ghost" type="button" onClick={() => setRenamingId(null)}>Cancel</Button>
                   </form>
                 ) : (
                   <div className="font-semibold text-gray-900">{p.name}</div>
                 )}
-                <div className="flex gap-1.5 ml-2 shrink-0">
+                <div className="flex items-center gap-1.5 ml-2 shrink-0">
                   {isVersioned(p) ? (
                     statusBadge(p.status!)
                   ) : (
-                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600 font-medium">Legacy</span>
+                    <Badge variant="info">Legacy</Badge>
+                  )}
+                  {canManage && renamingId !== p.id && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1 hover:bg-gray-100 rounded-md transition-colors">
+                          <MoreVertical className="w-4 h-4 text-gray-400" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {p.htmlContent && (
+                          <DropdownMenuItem onClick={() => setViewProgramme(p)}>
+                            <Eye className="w-4 h-4" /> View HTML
+                          </DropdownMenuItem>
+                        )}
+                        {isVersioned(p) && (
+                          <>
+                            <DropdownMenuItem onClick={() => openVersions(p)}>
+                              <Layers className="w-4 h-4" /> Versions
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openManual(p)}>
+                              <BookOpen className="w-4 h-4" /> Manual
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        <DropdownMenuItem onClick={() => startRename(p)}>
+                          <Pencil className="w-4 h-4" /> Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          destructive
+                          disabled={(p._appliedPlanCount ?? 0) > 0}
+                          onClick={() => handleDelete(p.id, p._appliedPlanCount)}
+                        >
+                          <Trash2 className="w-4 h-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>
@@ -325,35 +383,9 @@ export default function Programmes() {
               <div className="text-xs text-gray-400 mt-2">
                 {p._count?.planBlocks || 0} plan blocks
                 {(p._appliedPlanCount ?? 0) > 0 && (
-                  <span className="ml-2 text-amber-600">
+                  <Badge variant="warning" className="ml-2 text-[10px]">
                     Applied to {p._appliedPlanCount} horse{p._appliedPlanCount === 1 ? '' : 's'}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2 mt-3">
-                {/* Legacy: view HTML */}
-                {p.htmlContent && (
-                  <button onClick={() => setViewProgramme(p)} className="text-xs text-blue-600 hover:underline">View HTML</button>
-                )}
-                {/* Versioned: manage versions */}
-                {isVersioned(p) && (
-                  <button onClick={() => openVersions(p)} className="text-xs text-brand-600 hover:underline">Versions</button>
-                )}
-                {/* View manual from latest version */}
-                {isVersioned(p) && (
-                  <button onClick={() => openManual(p)} className="text-xs text-indigo-600 hover:underline">Manual</button>
-                )}
-                {canManage && (
-                  <>
-                    <button onClick={() => startRename(p)} className="text-xs text-brand-600 hover:underline">Rename</button>
-                    <button
-                      onClick={() => handleDelete(p.id, p._appliedPlanCount)}
-                      className={`text-xs hover:underline ${(p._appliedPlanCount ?? 0) > 0 ? 'text-gray-400' : 'text-red-500'}`}
-                    >
-                      Delete
-                    </button>
-                  </>
+                  </Badge>
                 )}
               </div>
             </div>
@@ -361,9 +393,20 @@ export default function Programmes() {
         </div>
       )}
 
+      {/* ─── Delete confirmation modal ─────────────────────────── */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete programme">
+        <p className="text-sm text-gray-600 mb-4">
+          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+        </div>
+      </Modal>
+
       {/* ─── Add programme modal ─────────────────────────────── */}
       <Modal open={showAdd} onClose={() => { setShowAdd(false); setError(''); }} title="New programme" wide>
-        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm whitespace-pre-line">{error}</div>}
+        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm whitespace-pre-line">{error}</div>}
 
         {/* Upload ZIP package */}
         <form onSubmit={handleZipUpload} className="space-y-3 mb-4">
@@ -376,9 +419,9 @@ export default function Programmes() {
               className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
             />
           </div>
-          <button type="submit" disabled={uploading} className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50">
+          <Button type="submit" disabled={uploading} className="w-full">
             {uploading ? 'Uploading...' : 'Upload ZIP package'}
-          </button>
+          </Button>
         </form>
 
         <div className="relative my-4">
@@ -405,9 +448,9 @@ export default function Programmes() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
           </div>
-          <button type="submit" disabled={uploading} className="w-full bg-gray-600 text-white py-2 rounded-lg font-medium hover:bg-gray-700 disabled:opacity-50">
+          <Button type="submit" disabled={uploading} variant="secondary" className="w-full">
             {uploading ? 'Uploading...' : 'Upload HTML file'}
-          </button>
+          </Button>
         </form>
 
         <div className="relative my-4">
@@ -425,7 +468,7 @@ export default function Programmes() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
           </div>
-          <button type="submit" className="w-full bg-gray-600 text-white py-2 rounded-lg font-medium hover:bg-gray-700">Create manually</button>
+          <Button type="submit" variant="secondary" className="w-full">Create manually</Button>
         </form>
       </Modal>
 
@@ -441,7 +484,7 @@ export default function Programmes() {
 
       {/* ─── Versions modal ──────────────────────────────────── */}
       <Modal open={!!versionProgramme} onClose={() => { setVersionProgramme(null); setVersionError(''); }} title={`${versionProgramme?.name || ''} — Versions`} wide>
-        {versionError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{versionError}</div>}
+        {versionError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{versionError}</div>}
 
         {versionsLoading ? (
           <div className="text-center py-6 text-gray-400">Loading versions...</div>
@@ -467,20 +510,14 @@ export default function Programmes() {
                 </div>
                 <div className="flex gap-2 shrink-0 ml-3">
                   {v.status === 'DRAFT' && canManage && (
-                    <button
-                      onClick={() => handlePublish(v.programmeId, v.id)}
-                      className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700"
-                    >
+                    <Button size="sm" variant="outline" onClick={() => handlePublish(v.programmeId, v.id)} className="text-green-600 hover:text-green-700 hover:bg-green-50">
                       Publish
-                    </button>
+                    </Button>
                   )}
                   {v.status === 'PUBLISHED' && canManage && (
-                    <button
-                      onClick={() => openApply(v.programmeId, v.id, versionProgramme?.name || '', v.version)}
-                      className="text-xs bg-brand-600 text-white px-3 py-1.5 rounded-lg hover:bg-brand-700"
-                    >
+                    <Button size="sm" onClick={() => openApply(v.programmeId, v.id, versionProgramme?.name || '', v.version)}>
                       Apply to horse
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -491,7 +528,7 @@ export default function Programmes() {
 
       {/* ─── Apply to horse modal ────────────────────────────── */}
       <Modal open={!!applyVersion} onClose={() => setApplyVersion(null)} title={`Apply ${applyVersion?.programmeName || ''} v${applyVersion?.version || ''}`}>
-        {applyError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{applyError}</div>}
+        {applyError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{applyError}</div>}
 
         <form onSubmit={handleApply} className="space-y-4">
           <div>
@@ -518,13 +555,9 @@ export default function Programmes() {
               required
             />
           </div>
-          <button
-            type="submit"
-            disabled={applying}
-            className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={applying} className="w-full">
             {applying ? 'Applying...' : 'Apply programme'}
-          </button>
+          </Button>
         </form>
       </Modal>
     </div>

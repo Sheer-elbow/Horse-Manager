@@ -675,10 +675,28 @@ router.delete('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req:
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Delete PlanBlocks (cascades to PlannedSessions; ActualSessionLogs.plannedSessionId → null)
+      // 1. Nullify sourceAppliedPlanId on any derived plans
+      await tx.appliedPlan.updateMany({
+        where: { sourceAppliedPlanId: plan.id },
+        data: { sourceAppliedPlanId: null },
+      });
+
+      // 2. Delete PlanShares
+      await tx.planShare.deleteMany({ where: { appliedPlanId: plan.id } });
+
+      // 3. Unlink PlannedSessions from Workouts (avoids FK issues during cascade)
+      await tx.plannedSession.updateMany({
+        where: { workout: { appliedPlanId: plan.id } },
+        data: { workoutId: null },
+      });
+
+      // 4. Delete PlanBlocks (cascades to PlannedSessions; ActualSessionLogs.plannedSessionId → null)
       await tx.planBlock.deleteMany({ where: { appliedPlanId: plan.id } });
 
-      // 2. Delete AppliedPlan (cascades to Workouts and PlanShares)
+      // 5. Delete Workouts
+      await tx.workout.deleteMany({ where: { appliedPlanId: plan.id } });
+
+      // 6. Delete the AppliedPlan itself
       await tx.appliedPlan.delete({ where: { id: plan.id } });
     });
 

@@ -35,19 +35,19 @@ export default function Dashboard() {
       <h2 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white rounded-xl border p-6">
+        <div className="bg-white rounded-xl border p-6 hover:shadow-sm transition-shadow">
           <div className="text-3xl font-bold text-brand-600">{horses.length}</div>
           <div className="text-sm text-gray-500 mt-1">Horses</div>
           <Link to="/horses" className="text-sm text-brand-600 hover:underline mt-2 inline-block">View all</Link>
         </div>
         {user?.role === 'ADMIN' && (
-          <div className="bg-white rounded-xl border p-6">
+          <div className="bg-white rounded-xl border p-6 hover:shadow-sm transition-shadow">
             <div className="text-3xl font-bold text-brand-600">{users.length}</div>
             <div className="text-sm text-gray-500 mt-1">Users</div>
             <Link to="/admin/users" className="text-sm text-brand-600 hover:underline mt-2 inline-block">Manage</Link>
           </div>
         )}
-        <div className="bg-white rounded-xl border p-6">
+        <div className="bg-white rounded-xl border p-6 hover:shadow-sm transition-shadow">
           <div className="text-3xl font-bold text-brand-600">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</div>
           <div className="text-sm text-gray-500 mt-1">Today</div>
         </div>
