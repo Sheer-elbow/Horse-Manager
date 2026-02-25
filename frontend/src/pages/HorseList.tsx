@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Horse } from '../types';
 import Modal from '../components/Modal';
+import { Button } from '../components/ui/button';
 
 export default function HorseList() {
   const { user } = useAuth();
@@ -56,9 +57,7 @@ export default function HorseList() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Horses</h2>
         {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
-          <button onClick={() => setShowAdd(true)} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700">
-            Add horse
-          </button>
+          <Button onClick={() => setShowAdd(true)}>Add horse</Button>
         )}
       </div>
 
@@ -87,7 +86,7 @@ export default function HorseList() {
       )}
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add horse">
-        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{error}</div>}
+        {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
         <form onSubmit={handleAdd} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -115,7 +114,7 @@ export default function HorseList() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Owner notes</label>
             <textarea value={form.ownerNotes} onChange={(e) => setForm({ ...form, ownerNotes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={2} />
           </div>
-          <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Add horse</button>
+          <Button type="submit" className="w-full">Add horse</Button>
         </form>
       </Modal>
     </div>

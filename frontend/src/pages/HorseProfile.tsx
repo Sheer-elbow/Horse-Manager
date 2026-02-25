@@ -4,6 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../api/client';
 import { Horse, User, AppliedPlan, PlanShare } from '../types';
 import Modal from '../components/Modal';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { ArrowLeft, Calendar, Repeat, Share2, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type Tab = 'overview' | 'vet' | 'farrier' | 'vaccinations' | 'expenses' | 'programmes';
 
@@ -66,6 +70,10 @@ export default function HorseProfile() {
   const [shareForm, setShareForm] = useState({ userId: '', permission: 'VIEW' as 'VIEW' | 'EDIT' });
   const [shareError, setShareError] = useState('');
 
+  // Delete confirmation
+  const [deleteHorseConfirm, setDeleteHorseConfirm] = useState(false);
+  const [removePlanTarget, setRemovePlanTarget] = useState<string | null>(null);
+
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = isAdmin || horse?._permission === 'EDIT';
 
@@ -109,12 +117,17 @@ export default function HorseProfile() {
       }),
     });
     setEditing(false);
+    toast.success('Horse updated');
     loadHorse();
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this horse? This cannot be undone.')) return;
+    setDeleteHorseConfirm(true);
+  };
+
+  const confirmDeleteHorse = async () => {
     await api(`/horses/${id}`, { method: 'DELETE' });
+    toast.success('Horse deleted');
     navigate('/horses');
   };
 
@@ -131,11 +144,13 @@ export default function HorseProfile() {
       body: JSON.stringify({ userId: assignUserId, permission: assignPerm }),
     });
     setShowAssign(false);
+    toast.success('User assigned');
     loadHorse();
   };
 
   const handleRemoveAssignment = async (assignmentId: string) => {
     await api(`/horses/${id}/assignments/${assignmentId}`, { method: 'DELETE' });
+    toast.success('Assignment removed');
     loadHorse();
   };
 
@@ -148,6 +163,7 @@ export default function HorseProfile() {
       const formData = new FormData();
       formData.append('photo', file);
       await api(`/horses/${id}/photo`, { method: 'POST', body: formData });
+      toast.success('Photo updated');
       loadHorse();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
@@ -160,6 +176,7 @@ export default function HorseProfile() {
 
   const handleRemovePhoto = async () => {
     await api(`/horses/${id}/photo`, { method: 'DELETE' });
+    toast.success('Photo removed');
     loadHorse();
   };
 
@@ -184,6 +201,7 @@ export default function HorseProfile() {
       setShowAddRecord(false);
       setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '' });
       if (recFileRef.current) recFileRef.current.value = '';
+      toast.success('Record added');
       loadRecords(tab);
     } catch (err: unknown) {
       setRecError(err instanceof Error ? err.message : 'Failed to add record');
@@ -193,6 +211,7 @@ export default function HorseProfile() {
   const handleDeleteRecord = async (recordId: string) => {
     const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
     await api(`/health/${id}/${endpoint}/${recordId}`, { method: 'DELETE' });
+    toast.success('Record deleted');
     loadRecords(tab);
   };
 
@@ -233,6 +252,7 @@ export default function HorseProfile() {
         body: JSON.stringify({ mode: repeatForm.mode, startDate: repeatForm.startDate }),
       });
       setShowRepeat(false);
+      toast.success('Programme repeated');
       loadAppliedPlans();
     } catch (err: unknown) {
       if (err instanceof ApiError && err.body && typeof err.body === 'object' && 'conflictDates' in (err.body as Record<string, unknown>)) {
@@ -270,6 +290,7 @@ export default function HorseProfile() {
         body: JSON.stringify({ userId: shareForm.userId, permission: shareForm.permission }),
       });
       setShareForm({ userId: '', permission: 'VIEW' });
+      toast.success('Share added');
       const s = await api<PlanShare[]>(`/applied-plans/${sharePlanId}/shares`);
       setShares(s);
     } catch (err: unknown) {
@@ -280,17 +301,25 @@ export default function HorseProfile() {
   const handleRemoveShare = async (shareId: string) => {
     if (!sharePlanId) return;
     await api(`/applied-plans/${sharePlanId}/shares/${shareId}`, { method: 'DELETE' });
+    toast.success('Share removed');
     const s = await api<PlanShare[]>(`/applied-plans/${sharePlanId}/shares`);
     setShares(s);
   };
 
   const handleRemovePlan = async (planId: string) => {
-    if (!confirm('Remove this programme from the horse? Scheduled workouts and planned sessions will be deleted, but actual session logs will be preserved.')) return;
+    setRemovePlanTarget(planId);
+  };
+
+  const confirmRemovePlan = async () => {
+    if (!removePlanTarget) return;
     try {
-      await api(`/applied-plans/${planId}`, { method: 'DELETE' });
+      await api(`/applied-plans/${removePlanTarget}`, { method: 'DELETE' });
+      toast.success('Programme removed. Actual session logs have been preserved.');
       loadAppliedPlans();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to remove plan');
+      toast.error(err instanceof Error ? err.message : 'Failed to remove plan');
+    } finally {
+      setRemovePlanTarget(null);
     }
   };
 
@@ -321,11 +350,16 @@ export default function HorseProfile() {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/horses" className="text-gray-400 hover:text-gray-600">&larr;</Link>
-        <h2 className="text-2xl font-bold text-gray-900">{horse.name}</h2>
-        <Link to={`/horses/${id}/planner`} className="ml-auto bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700">
-          Planner
+        <Link to="/horses" className="text-gray-400 hover:text-gray-600 transition-colors">
+          <ArrowLeft className="w-5 h-5" />
         </Link>
+        <h2 className="text-2xl font-bold text-gray-900">{horse.name}</h2>
+        <Button asChild className="ml-auto">
+          <Link to={`/horses/${id}/planner`}>
+            <Calendar className="w-4 h-4 mr-2" />
+            Planner
+          </Link>
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -360,11 +394,11 @@ export default function HorseProfile() {
               {isAdmin && (
                 <div className="flex flex-col gap-2">
                   <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                  <button onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} className="text-sm text-brand-600 hover:underline">
+                  <Button variant="link" size="sm" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto}>
                     {uploadingPhoto ? 'Uploading...' : horse.photoUrl ? 'Change photo' : 'Upload photo'}
-                  </button>
+                  </Button>
                   {horse.photoUrl && (
-                    <button onClick={handleRemovePhoto} className="text-sm text-red-500 hover:underline">Remove photo</button>
+                    <Button variant="link" size="sm" className="text-red-500 hover:text-red-600" onClick={handleRemovePhoto}>Remove photo</Button>
                   )}
                   {photoError && <div className="text-sm text-red-600">{photoError}</div>}
                 </div>
@@ -403,8 +437,8 @@ export default function HorseProfile() {
                   <textarea value={editForm.ownerNotes} onChange={(e) => setEditForm({ ...editForm, ownerNotes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={3} />
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-brand-700">Save</button>
-                  <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50">Cancel</button>
+                  <Button type="submit">Save</Button>
+                  <Button type="button" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
                 </div>
               </form>
             ) : (
@@ -418,8 +452,8 @@ export default function HorseProfile() {
                 {horse.ownerNotes && <div className="mt-4"><span className="text-sm text-gray-500">Notes</span><div className="mt-1">{horse.ownerNotes}</div></div>}
                 {isAdmin && (
                   <div className="flex gap-2 mt-4 pt-4 border-t">
-                    <button onClick={() => setEditing(true)} className="text-sm text-brand-600 hover:underline">Edit</button>
-                    <button onClick={handleDelete} className="text-sm text-red-600 hover:underline">Delete</button>
+                    <Button variant="link" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+                    <Button variant="link" size="sm" className="text-red-500 hover:text-red-600" onClick={handleDelete}>Delete</Button>
                   </div>
                 )}
               </div>
@@ -431,19 +465,19 @@ export default function HorseProfile() {
             <div className="bg-white rounded-xl border p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold">User assignments</h3>
-                <button onClick={openAssign} className="text-sm text-brand-600 hover:underline">Assign user</button>
+                <Button variant="link" size="sm" onClick={openAssign}>Assign user</Button>
               </div>
               {horse.assignments && horse.assignments.length > 0 ? (
                 <div className="space-y-2">
                   {horse.assignments.map((a) => (
                     <div key={a.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="font-medium">{a.user?.name || a.user?.email}</span>
-                        <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${a.permission === 'EDIT' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        <Badge variant={a.permission === 'EDIT' ? 'success' : 'default'}>
                           {a.permission}
-                        </span>
+                        </Badge>
                       </div>
-                      <button onClick={() => handleRemoveAssignment(a.id)} className="text-sm text-red-500 hover:underline">Remove</button>
+                      <Button variant="link" size="sm" className="text-red-500 hover:text-red-600" onClick={() => handleRemoveAssignment(a.id)}>Remove</Button>
                     </div>
                   ))}
                 </div>
@@ -471,7 +505,7 @@ export default function HorseProfile() {
                 const isAssigner = user?.id === plan.assignedById;
                 const canManage = isAdmin || isAssigner;
                 return (
-                  <div key={plan.id} className="border rounded-lg p-4">
+                  <div key={plan.id} className="border rounded-lg p-4 hover:shadow-sm transition-shadow">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -481,13 +515,13 @@ export default function HorseProfile() {
                           {pv && (
                             <span className="text-xs text-gray-500">v{pv.version}</span>
                           )}
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            plan.status === 'ACTIVE' ? 'bg-green-100 text-green-700'
-                              : plan.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}>
+                          <Badge variant={
+                            plan.status === 'ACTIVE' ? 'success'
+                              : plan.status === 'COMPLETED' ? 'info'
+                              : 'default'
+                          }>
                             {plan.status}
-                          </span>
+                          </Badge>
                         </div>
                         <div className="text-sm text-gray-500 mt-1">
                           {formatDateRange(plan)}
@@ -503,24 +537,31 @@ export default function HorseProfile() {
                       <div className="flex gap-2 shrink-0">
                         {canManage && (
                           <>
-                            <button
+                            <Button
+                              size="sm"
+                              variant="outline"
                               onClick={() => openRepeat(plan.id)}
-                              className="text-xs px-3 py-1.5 rounded-lg border text-brand-600 hover:bg-brand-50"
                             >
+                              <Repeat className="w-3.5 h-3.5 mr-1.5" />
                               Repeat
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
                               onClick={() => openShare(plan.id, plan.assignedById)}
-                              className="text-xs px-3 py-1.5 rounded-lg border text-brand-600 hover:bg-brand-50"
                             >
+                              <Share2 className="w-3.5 h-3.5 mr-1.5" />
                               Share
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
                               onClick={() => handleRemovePlan(plan.id)}
-                              className="text-xs px-3 py-1.5 rounded-lg border text-red-500 hover:bg-red-50"
                             >
+                              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                               Remove
-                            </button>
+                            </Button>
                           </>
                         )}
                       </div>
@@ -539,9 +580,9 @@ export default function HorseProfile() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab}</h3>
             {canEdit && (
-              <button onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '' }); setShowAddRecord(true); }} className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700">
+              <Button size="sm" onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '' }); setShowAddRecord(true); }}>
                 Add record
-              </button>
+              </Button>
             )}
           </div>
 
@@ -572,7 +613,7 @@ export default function HorseProfile() {
                     )}
                   </div>
                   {canEdit && (
-                    <button onClick={() => handleDeleteRecord(r.id)} className="text-xs text-red-500 hover:underline shrink-0 ml-3">Delete</button>
+                    <Button variant="link" size="sm" className="text-red-500 hover:text-red-600 shrink-0 ml-3" onClick={() => handleDeleteRecord(r.id)}>Delete</Button>
                   )}
                 </div>
               ))}
@@ -580,6 +621,28 @@ export default function HorseProfile() {
           )}
         </div>
       )}
+
+      {/* Delete horse confirmation modal */}
+      <Modal open={deleteHorseConfirm} onClose={() => setDeleteHorseConfirm(false)} title="Delete horse">
+        <p className="text-sm text-gray-600 mb-4">
+          Are you sure you want to delete <strong>{horse.name}</strong>? This cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setDeleteHorseConfirm(false)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmDeleteHorse}>Delete</Button>
+        </div>
+      </Modal>
+
+      {/* Remove plan confirmation modal */}
+      <Modal open={!!removePlanTarget} onClose={() => setRemovePlanTarget(null)} title="Remove programme">
+        <p className="text-sm text-gray-600 mb-4">
+          Remove this programme from the horse? Scheduled workouts and planned sessions will be deleted, but actual session logs will be preserved.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setRemovePlanTarget(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmRemovePlan}>Remove</Button>
+        </div>
+      </Modal>
 
       {/* Assign user modal */}
       <Modal open={showAssign} onClose={() => setShowAssign(false)} title="Assign user to horse">
@@ -600,13 +663,13 @@ export default function HorseProfile() {
               <option value="EDIT">Editor</option>
             </select>
           </div>
-          <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Assign</button>
+          <Button type="submit" className="w-full">Assign</Button>
         </form>
       </Modal>
 
       {/* Add record modal */}
       <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setRecError(''); }} title={`Add ${tab} record`}>
-        {recError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded text-sm">{recError}</div>}
+        {recError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{recError}</div>}
         <form onSubmit={handleAddRecord} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -638,7 +701,7 @@ export default function HorseProfile() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Attach file (image or PDF)</label>
             <input ref={recFileRef} type="file" accept="image/*,.pdf" className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100" />
           </div>
-          <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Save</button>
+          <Button type="submit" className="w-full">Save</Button>
         </form>
       </Modal>
 
@@ -670,15 +733,11 @@ export default function HorseProfile() {
             />
           </div>
           {repeatError && (
-            <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{repeatError}</div>
+            <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{repeatError}</div>
           )}
-          <button
-            type="submit"
-            disabled={repeatLoading}
-            className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={repeatLoading} className="w-full">
             {repeatLoading ? 'Creating...' : 'Repeat programme'}
-          </button>
+          </Button>
         </form>
       </Modal>
 
@@ -694,19 +753,21 @@ export default function HorseProfile() {
               <div className="space-y-2">
                 {shares.map((s) => (
                   <div key={s.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{s.sharedWith.name || s.sharedWith.email}</span>
-                      <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${s.permission === 'EDIT' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                      <Badge variant={s.permission === 'EDIT' ? 'success' : 'default'}>
                         {s.permission}
-                      </span>
+                      </Badge>
                     </div>
                     {(isAdmin || user?.id === sharePlanAssignerId) && (
-                      <button
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600"
                         onClick={() => handleRemoveShare(s.id)}
-                        className="text-xs text-red-500 hover:underline"
                       >
                         Remove
-                      </button>
+                      </Button>
                     )}
                   </div>
                 ))}
@@ -747,11 +808,9 @@ export default function HorseProfile() {
                   </select>
                 </div>
                 {shareError && (
-                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{shareError}</div>
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">{shareError}</div>
                 )}
-                <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">
-                  Add share
-                </button>
+                <Button type="submit" className="w-full">Add share</Button>
               </form>
             </div>
           )}

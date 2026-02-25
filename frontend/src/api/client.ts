@@ -67,11 +67,19 @@ export async function api<T = unknown>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new ApiError(res.status, body.error || 'Request failed', body);
+    const text = await res.text().catch(() => '');
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = { error: text || `Request failed (${res.status})` };
+    }
+    throw new ApiError(res.status, (body.error as string) || `Request failed (${res.status})`, body);
   }
 
-  return res.json();
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export class ApiError extends Error {
