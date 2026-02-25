@@ -83,6 +83,10 @@ export default function Planner() {
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
 
+  // "Completed as planned" refs for the log actual modal
+  const [logPlannedRef, setLogPlannedRef] = useState<PlannedSession | null>(null);
+  const [logWorkoutRef, setLogWorkoutRef] = useState<Workout | null>(null);
+
   // Move modal state
   const [moveWorkoutId, setMoveWorkoutId] = useState<string | null>(null);
   const [moveForm, setMoveForm] = useState({ targetDate: '', slot: 'AM' as 'AM' | 'PM' });
@@ -251,6 +255,9 @@ export default function Planner() {
     const dateStr = toDateStr(addDays(currentWeekStart, dayOffset));
     const existing = getActualForSlot(dayOffset, slot);
     const planned = getPlannedForSlot(dayOffset, slot);
+    const workout = planned?.workoutId ? workoutMap.get(planned.workoutId) : undefined;
+    setLogPlannedRef(planned || null);
+    setLogWorkoutRef(workout || null);
     setActualForm({
       date: dateStr,
       slot,
@@ -263,6 +270,43 @@ export default function Planner() {
       existingId: existing?.id || '',
     });
     setShowLogActual(true);
+  };
+
+  const fillCompletedAsPlanned = () => {
+    const workout = logWorkoutRef;
+    const planned = logPlannedRef;
+
+    if (workout && !workout.isRest) {
+      const entry = workout.currentData;
+      // Use midpoint of duration range, or the single value
+      const dur = entry.durationMin != null && entry.durationMax != null
+        ? Math.round((entry.durationMin + entry.durationMax) / 2)
+        : entry.durationMin ?? entry.durationMax ?? null;
+      // Use midpoint of RPE range, or the single value
+      const rpe = entry.intensityRpeMin != null && entry.intensityRpeMax != null
+        ? Math.round((entry.intensityRpeMin + entry.intensityRpeMax) / 2)
+        : entry.intensityRpeMin ?? entry.intensityRpeMax ?? null;
+
+      setActualForm((prev) => ({
+        ...prev,
+        sessionType: entry.title || entry.category || prev.sessionType,
+        durationMinutes: dur != null ? dur.toString() : prev.durationMinutes,
+        intensityRpe: rpe != null ? rpe.toString() : prev.intensityRpe,
+        notes: entry.blocks.length > 0
+          ? entry.blocks.map((b) => `${b.name}: ${b.text}`).join('\n')
+          : prev.notes,
+        deviationReason: '',
+      }));
+    } else if (planned) {
+      setActualForm((prev) => ({
+        ...prev,
+        sessionType: planned.sessionType || prev.sessionType,
+        durationMinutes: planned.durationMinutes?.toString() || prev.durationMinutes,
+        intensityRpe: planned.intensityRpe?.toString() || prev.intensityRpe,
+        notes: planned.notes || planned.description || prev.notes,
+        deviationReason: '',
+      }));
+    }
   };
 
   const handleSaveActual = async (e: FormEvent) => {
@@ -732,6 +776,17 @@ export default function Planner() {
       {/* Log actual session modal */}
       <Modal open={showLogActual} onClose={() => setShowLogActual(false)} title={`Log session - ${actualForm.date} ${actualForm.slot}`}>
         <form onSubmit={handleSaveActual} className="space-y-3">
+          {/* Completed as planned button */}
+          {(logPlannedRef || logWorkoutRef) && !actualForm.existingId && (
+            <button
+              type="button"
+              onClick={fillCompletedAsPlanned}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border-2 border-green-200 bg-green-50 text-green-700 font-medium text-sm hover:bg-green-100 hover:border-green-300 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              Completed as planned
+            </button>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Session type</label>
             <div className="flex flex-wrap gap-1 mb-2">
