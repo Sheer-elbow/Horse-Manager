@@ -287,14 +287,20 @@ export default function Planner() {
         ? Math.round((entry.intensityRpeMin + entry.intensityRpeMax) / 2)
         : entry.intensityRpeMin ?? entry.intensityRpeMax ?? null;
 
+      // Build a readable summary for notes
+      const noteParts: string[] = [];
+      if (entry.blocks.length > 0 && !(entry.blocks.length === 1 && entry.blocks[0].name === 'Main' && entry.blocks[0].text === entry.title)) {
+        noteParts.push(entry.blocks.map((b) => `${b.name}: ${b.text}`).join('\n'));
+      }
+      if (entry.intensityLabel) noteParts.push(`Intensity: ${entry.intensityLabel}`);
+      if (entry.substitution) noteParts.push(`Substitution option: ${entry.substitution}`);
+
       setActualForm((prev) => ({
         ...prev,
         sessionType: entry.title || entry.category || prev.sessionType,
         durationMinutes: dur != null ? dur.toString() : prev.durationMinutes,
         intensityRpe: rpe != null ? rpe.toString() : prev.intensityRpe,
-        notes: entry.blocks.length > 0
-          ? entry.blocks.map((b) => `${b.name}: ${b.text}`).join('\n')
-          : prev.notes,
+        notes: noteParts.length > 0 ? noteParts.join('\n') : 'Completed as planned',
         deviationReason: '',
       }));
     } else if (planned) {
@@ -303,7 +309,7 @@ export default function Planner() {
         sessionType: planned.sessionType || prev.sessionType,
         durationMinutes: planned.durationMinutes?.toString() || prev.durationMinutes,
         intensityRpe: planned.intensityRpe?.toString() || prev.intensityRpe,
-        notes: planned.notes || planned.description || prev.notes,
+        notes: planned.notes || planned.description || 'Completed as planned',
         deviationReason: '',
       }));
     }
@@ -777,7 +783,7 @@ export default function Planner() {
       <Modal open={showLogActual} onClose={() => setShowLogActual(false)} title={`Log session - ${actualForm.date} ${actualForm.slot}`}>
         <form onSubmit={handleSaveActual} className="space-y-3">
           {/* Completed as planned button */}
-          {(logPlannedRef || logWorkoutRef) && !actualForm.existingId && (
+          {(logPlannedRef || logWorkoutRef) && (
             <button
               type="button"
               onClick={fillCompletedAsPlanned}
