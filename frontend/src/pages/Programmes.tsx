@@ -308,8 +308,8 @@ export default function Programmes() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {programmes.map((p) => (
-            <div key={p.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between">
+            <div key={p.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition-shadow overflow-hidden">
+              <div className="flex items-start justify-between gap-2">
                 {renamingId === p.id ? (
                   <form
                     onSubmit={(e) => { e.preventDefault(); handleRename(p.id); }}
@@ -326,9 +326,9 @@ export default function Programmes() {
                     <Button size="sm" variant="ghost" type="button" onClick={() => setRenamingId(null)}>Cancel</Button>
                   </form>
                 ) : (
-                  <div className="font-semibold text-gray-900">{p.name}</div>
+                  <div className="font-semibold text-gray-900 min-w-0 truncate">{p.name}</div>
                 )}
-                <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   {isVersioned(p) ? (
                     statusBadge(p.status!)
                   ) : (
