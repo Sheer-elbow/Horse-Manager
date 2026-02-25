@@ -40,7 +40,4 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/stable-manager
-            git pull origin main
-            docker compose up -d --build
-            docker image prune -f
-            echo "Deploy complete: $(date)"
+            ./deploy.sh
