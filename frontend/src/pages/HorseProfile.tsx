@@ -341,34 +341,35 @@ export default function HorseProfile() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'programmes', label: 'Programmes' },
-    { key: 'vet', label: 'Vet visits' },
+    { key: 'vet', label: 'Vet' },
     { key: 'farrier', label: 'Farrier' },
-    { key: 'vaccinations', label: 'Vaccinations' },
+    { key: 'vaccinations', label: 'Vaccines' },
     { key: 'expenses', label: 'Expenses' },
   ];
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/horses" className="text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+        <Link to="/horses" className="text-gray-400 hover:text-gray-600 transition-colors shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h2 className="text-2xl font-bold text-gray-900">{horse.name}</h2>
-        <Button asChild className="ml-auto">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate min-w-0">{horse.name}</h2>
+        <Button asChild size="sm" className="ml-auto shrink-0">
           <Link to={`/horses/${id}/planner`}>
-            <Calendar className="w-4 h-4 mr-2" />
-            Planner
+            <Calendar className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Planner</span>
           </Link>
         </Button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 overflow-x-auto border-b">
+      <div className="flex gap-0.5 sm:gap-1 mb-4 sm:mb-6 overflow-x-auto border-b scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+            className={`px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
               tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -378,21 +379,21 @@ export default function HorseProfile() {
       </div>
 
       {tab === 'overview' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Horse photo */}
-          <div className="bg-white rounded-xl border p-5">
-            <div className="flex items-start gap-5">
+          <div className="bg-white rounded-xl border p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
               <div className="shrink-0">
                 {horse.photoUrl ? (
-                  <img src={horse.photoUrl} alt={horse.name} className="w-32 h-32 rounded-xl object-cover border" />
+                  <img src={horse.photoUrl} alt={horse.name} className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl object-cover border" />
                 ) : (
-                  <div className="w-32 h-32 rounded-xl bg-gray-100 border flex items-center justify-center text-gray-300 text-4xl">
+                  <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-gray-100 border flex items-center justify-center text-gray-300 text-4xl">
                     &#x1f40e;
                   </div>
                 )}
               </div>
               {isAdmin && (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-row sm:flex-col gap-2">
                   <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                   <Button variant="link" size="sm" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto}>
                     {uploadingPhoto ? 'Uploading...' : horse.photoUrl ? 'Change photo' : 'Upload photo'}
@@ -407,7 +408,7 @@ export default function HorseProfile() {
           </div>
 
           {/* Horse details */}
-          <div className="bg-white rounded-xl border p-5">
+          <div className="bg-white rounded-xl border p-4 sm:p-5">
             {editing ? (
               <form onSubmit={handleEditHorse} className="space-y-3">
                 <div>
@@ -462,9 +463,9 @@ export default function HorseProfile() {
 
           {/* Assignments */}
           {isAdmin && (
-            <div className="bg-white rounded-xl border p-5">
+            <div className="bg-white rounded-xl border p-4 sm:p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold">User assignments</h3>
+                <h3 className="font-semibold text-sm sm:text-base">User assignments</h3>
                 <Button variant="link" size="sm" onClick={openAssign}>Assign user</Button>
               </div>
               {horse.assignments && horse.assignments.length > 0 ? (
@@ -492,7 +493,7 @@ export default function HorseProfile() {
 
       {/* Programmes tab */}
       {tab === 'programmes' && (
-        <div className="bg-white rounded-xl border p-5">
+        <div className="bg-white rounded-xl border p-4 sm:p-5">
           <h3 className="font-semibold mb-4">Applied Programmes</h3>
           {plansLoading ? (
             <p className="text-sm text-gray-500">Loading...</p>
@@ -505,67 +506,63 @@ export default function HorseProfile() {
                 const isAssigner = user?.id === plan.assignedById;
                 const canManage = isAdmin || isAssigner;
                 return (
-                  <div key={plan.id} className="border rounded-lg p-4 hover:shadow-sm transition-shadow">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">
-                            {pv?.programme?.name || 'Unknown programme'}
-                          </span>
-                          {pv && (
-                            <span className="text-xs text-gray-500">v{pv.version}</span>
-                          )}
-                          <Badge variant={
-                            plan.status === 'ACTIVE' ? 'success'
-                              : plan.status === 'COMPLETED' ? 'info'
-                              : 'default'
-                          }>
-                            {plan.status}
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          {formatDateRange(plan)}
-                          {pv?.numWeeks && <span className="ml-2">({pv.numWeeks} weeks)</span>}
-                        </div>
-                        <div className="text-sm text-gray-400 mt-0.5">
-                          Assigned by {plan.assignedBy?.name || plan.assignedBy?.email || 'Unknown'}
-                        </div>
-                        {plan._count?.workouts != null && (
-                          <div className="text-xs text-gray-400 mt-0.5">{plan._count.workouts} workouts</div>
+                  <div key={plan.id} className="border rounded-lg p-3 sm:p-4 hover:shadow-sm transition-shadow">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm sm:text-base">
+                          {pv?.programme?.name || 'Unknown programme'}
+                        </span>
+                        {pv && (
+                          <span className="text-xs text-gray-500">v{pv.version}</span>
                         )}
+                        <Badge variant={
+                          plan.status === 'ACTIVE' ? 'success'
+                            : plan.status === 'COMPLETED' ? 'info'
+                            : 'default'
+                        }>
+                          {plan.status}
+                        </Badge>
                       </div>
-                      <div className="flex gap-2 shrink-0">
-                        {canManage && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openRepeat(plan.id)}
-                            >
-                              <Repeat className="w-3.5 h-3.5 mr-1.5" />
-                              Repeat
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openShare(plan.id, plan.assignedById)}
-                            >
-                              <Share2 className="w-3.5 h-3.5 mr-1.5" />
-                              Share
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
-                              onClick={() => handleRemovePlan(plan.id)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                              Remove
-                            </Button>
-                          </>
-                        )}
+                      <div className="text-xs sm:text-sm text-gray-500 mt-1">
+                        {formatDateRange(plan)}
+                        {pv?.numWeeks && <span className="ml-2">({pv.numWeeks} wks)</span>}
                       </div>
+                      <div className="text-xs sm:text-sm text-gray-400 mt-0.5">
+                        Assigned by {plan.assignedBy?.name || plan.assignedBy?.email || 'Unknown'}
+                      </div>
+                      {plan._count?.workouts != null && (
+                        <div className="text-xs text-gray-400 mt-0.5">{plan._count.workouts} workouts</div>
+                      )}
                     </div>
+                    {canManage && (
+                      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openRepeat(plan.id)}
+                        >
+                          <Repeat className="w-3.5 h-3.5 mr-1.5" />
+                          Repeat
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openShare(plan.id, plan.assignedById)}
+                        >
+                          <Share2 className="w-3.5 h-3.5 mr-1.5" />
+                          Share
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+                          onClick={() => handleRemovePlan(plan.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                          Remove
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -576,7 +573,7 @@ export default function HorseProfile() {
 
       {/* Health / expense records tab */}
       {!['overview', 'programmes'].includes(tab) && (
-        <div className="bg-white rounded-xl border p-5">
+        <div className="bg-white rounded-xl border p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab}</h3>
             {canEdit && (
@@ -602,7 +599,7 @@ export default function HorseProfile() {
                       <div className="mt-2">
                         {r.fileName?.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
                           <a href={r.fileUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={r.fileUrl} alt={r.fileName || 'Attachment'} className="max-w-xs max-h-40 rounded-lg border object-cover" />
+                            <img src={r.fileUrl} alt={r.fileName || 'Attachment'} className="max-w-full sm:max-w-xs max-h-40 rounded-lg border object-cover" />
                           </a>
                         ) : (
                           <a href={r.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline">

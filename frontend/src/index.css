@@ -20,3 +20,12 @@
     outline-offset: 2px;
   }
 }
+
+/* Hide scrollbar for tab bars on mobile */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
