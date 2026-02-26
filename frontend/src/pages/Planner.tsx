@@ -446,22 +446,33 @@ export default function Planner() {
           <div className="text-[9px] text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
         )}
         {/* Action buttons */}
-        {canEditPlan && !weekLocked && workout.appliedPlan?.status === 'ACTIVE' && (
-          <div className="flex gap-1 mt-1">
+        {canEditPlan && !weekLocked && (
+          <div className="flex gap-1 mt-1 flex-wrap">
             <button
-              onClick={(e) => { e.stopPropagation(); handleResetWorkout(workout.id); }}
-              className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
-              title="Reset to original programme data"
+              onClick={(e) => { e.stopPropagation(); openEditPlanned(dayIdx, slot); }}
+              className="text-[9px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+              title="Edit planned session"
             >
-              Reset
+              Edit
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); openMoveModal(workout.id); }}
-              className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
-              title="Move or swap with another day"
-            >
-              Move
-            </button>
+            {workout.appliedPlan?.status === 'ACTIVE' && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleResetWorkout(workout.id); }}
+                  className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  title="Reset to original programme data"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); openMoveModal(workout.id); }}
+                  className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  title="Move or swap with another day"
+                >
+                  Move
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
