@@ -364,7 +364,7 @@ export default function HorseProfile() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 sm:gap-1 mb-4 sm:mb-6 overflow-x-auto border-b scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="flex gap-0.5 sm:gap-1 mb-4 sm:mb-6 overflow-x-auto border-b scrollbar-hide">
         {tabs.map((t) => (
           <button
             key={t.key}

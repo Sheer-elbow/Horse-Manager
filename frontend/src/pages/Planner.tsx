@@ -611,7 +611,7 @@ export default function Planner() {
           </div>
 
           {/* Grid */}
-          <div className="overflow-x-auto w-full">
+          <div className="overflow-x-auto">
             <div className="min-w-[700px]">
               {/* Header row */}
               <div className="grid grid-cols-8 gap-1 mb-1">
