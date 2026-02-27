@@ -40,7 +40,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="w-6" />
       </div>
 
-      <div className="flex">
+      <div className="flex overflow-hidden">
         {/* Sidebar */}
         <aside className={`
           fixed inset-y-0 left-0 z-30 w-64 bg-sidebar text-sidebar-foreground transform transition-transform duration-200

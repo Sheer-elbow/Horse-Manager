@@ -502,15 +502,15 @@ export default function Planner() {
   if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
 
   return (
-    <div>
+    <div className="overflow-hidden">
       {/* Header */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <Link to={`/horses/${horseId}`} className="text-gray-400 hover:text-gray-600">&larr;</Link>
-        <h2 className="text-2xl font-bold text-gray-900">{horse?.name} - Planner</h2>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
+        <Link to={`/horses/${horseId}`} className="text-gray-400 hover:text-gray-600 shrink-0">&larr;</Link>
+        <h2 className="text-lg sm:text-2xl font-bold text-gray-900 truncate min-w-0">{horse?.name} - Planner</h2>
       </div>
 
       {/* Block selector */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4">
         {blocks.map((b) => (
           <button
             key={b.id}
@@ -518,7 +518,7 @@ export default function Planner() {
               setActiveBlock(b);
               setCurrentWeekStart(new Date(b.startDate));
             }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+            className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium ${
               activeBlock?.id === b.id ? 'bg-brand-600 text-white' : 'bg-white border text-gray-700 hover:bg-gray-50'
             }`}
           >
@@ -546,20 +546,20 @@ export default function Planner() {
       ) : (
         <>
           {/* Week navigation */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4">
             <button
               onClick={() => setCurrentWeekStart(addDays(currentWeekStart, -7))}
-              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 border rounded-lg text-xs sm:text-sm hover:bg-gray-50 shrink-0"
             >
-              &larr; Prev
+              &larr;
             </button>
 
-            <div className="flex gap-1 overflow-x-auto">
+            <div className="flex gap-1 overflow-x-auto scrollbar-hide min-w-0">
               {blockWeeks.map((w, i) => (
                 <button
                   key={i}
                   onClick={() => setCurrentWeekStart(w)}
-                  className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
+                  className={`px-1.5 sm:px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
                     toDateStr(w) === toDateStr(currentWeekStart)
                       ? 'bg-brand-600 text-white'
                       : isWeekInPast(w)
@@ -574,9 +574,9 @@ export default function Planner() {
 
             <button
               onClick={() => setCurrentWeekStart(addDays(currentWeekStart, 7))}
-              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 border rounded-lg text-xs sm:text-sm hover:bg-gray-50 shrink-0"
             >
-              Next &rarr;
+              &rarr;
             </button>
 
             {canEditPlan && !weekLocked && (
@@ -586,17 +586,17 @@ export default function Planner() {
                   if (targets.length > 0) setCopyTargetWeek(toDateStr(targets[0]));
                   setShowCopyWeek(true);
                 }}
-                className="px-3 py-1.5 border rounded-lg text-sm text-brand-600 hover:bg-brand-50 ml-auto"
+                className="px-2 sm:px-3 py-1 sm:py-1.5 border rounded-lg text-xs sm:text-sm text-brand-600 hover:bg-brand-50 ml-auto shrink-0"
               >
-                Copy week
+                Copy
               </button>
             )}
           </div>
 
           {/* Week info bar */}
-          <div className="flex items-center gap-3 mb-4 text-sm">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 text-xs sm:text-sm">
             <span className="font-medium">
-              Week {weekNumber} of {activeBlock.numWeeks}
+              Week {weekNumber}/{activeBlock.numWeeks}
             </span>
             <span className="text-gray-400">
               {currentWeekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
@@ -605,13 +605,13 @@ export default function Planner() {
             </span>
             {weekLocked && (
               <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                Locked (past week)
+                Locked
               </span>
             )}
           </div>
 
           {/* Grid */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             <div className="min-w-[700px]">
               {/* Header row */}
               <div className="grid grid-cols-8 gap-1 mb-1">
