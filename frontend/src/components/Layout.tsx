@@ -28,7 +28,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const items = user?.role === 'ADMIN' ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 max-w-[100vw] overflow-x-hidden">
       <Toaster position="top-right" richColors closeButton />
 
       {/* Mobile header */}
