@@ -471,9 +471,9 @@ export default function HorseProfile() {
               {horse.assignments && horse.assignments.length > 0 ? (
                 <div className="space-y-2">
                   {horse.assignments.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{a.user?.name || a.user?.email}</span>
+                    <div key={a.id} className="flex items-center justify-between gap-2 py-2 border-b last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium truncate">{a.user?.name || a.user?.email}</span>
                         <Badge variant={a.permission === 'EDIT' ? 'success' : 'default'}>
                           {a.permission}
                         </Badge>

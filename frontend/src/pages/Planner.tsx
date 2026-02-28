@@ -610,9 +610,11 @@ export default function Planner() {
             )}
           </div>
 
-          {/* Grid */}
-          <div className="overflow-x-auto">
-            <div className="min-w-[700px]">
+          {/* Grid - Desktop: 8-column layout, Mobile: vertical day cards */}
+
+          {/* Desktop grid (hidden on mobile) */}
+          <div className="hidden lg:block">
+            <div>
               {/* Header row */}
               <div className="grid grid-cols-8 gap-1 mb-1">
                 <div className="p-2 text-sm font-medium text-gray-500"></div>
@@ -678,6 +680,64 @@ export default function Planner() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Mobile day cards (hidden on desktop) */}
+          <div className="lg:hidden space-y-2">
+            {DAYS.map((day, dayIdx) => {
+              const d = addDays(currentWeekStart, dayIdx);
+              const isToday = toDateStr(d) === toDateStr(new Date());
+              return (
+                <div key={day} className={`bg-white border rounded-lg p-3 ${isToday ? 'ring-2 ring-brand-200' : ''}`}>
+                  <div className={`text-sm font-medium mb-2 ${isToday ? 'text-brand-700' : 'text-gray-700'}`}>
+                    {day} <span className="text-gray-400 font-normal">{d.getUTCDate()}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['AM', 'PM'] as const).map((slot) => {
+                      const planned = getPlannedForSlot(dayIdx, slot);
+                      const actual = getActualForSlot(dayIdx, slot);
+                      const workout = planned?.workoutId ? workoutMap.get(planned.workoutId) : undefined;
+                      return (
+                        <div key={slot} className="text-xs space-y-1">
+                          <div className="text-[10px] font-medium text-gray-500">{slot}</div>
+                          {workout ? (
+                            <WorkoutCard workout={workout} planned={planned!} slot={slot} dayIdx={dayIdx} />
+                          ) : (
+                            <LegacyPlannedCard planned={planned} dayIdx={dayIdx} slot={slot} />
+                          )}
+                          <div
+                            className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canLogSession ? 'cursor-pointer hover:bg-green-100' : ''}`}
+                            onClick={() => canLogSession && openLogActual(dayIdx, slot)}
+                          >
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-gray-400 uppercase">Actual</span>
+                              {actual?._edited && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
+                                  className="text-[9px] text-amber-600 hover:underline"
+                                >
+                                  edited
+                                </button>
+                              )}
+                            </div>
+                            {actual ? (
+                              <>
+                                <div className="font-medium text-green-800">{actual.sessionType || '-'}</div>
+                                {actual.durationMinutes && <div className="text-gray-500">{actual.durationMinutes}min</div>}
+                                {actual.intensityRpe && <div className="text-gray-500">RPE {actual.intensityRpe}</div>}
+                                {actual.rider && <div className="text-gray-400">{actual.rider}</div>}
+                              </>
+                            ) : (
+                              <div className="text-gray-300">{canLogSession ? '+ Log' : '-'}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Unscheduled workouts tray */}
