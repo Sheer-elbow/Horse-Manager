@@ -131,6 +131,7 @@ export default function Users() {
 
       {/* Users table */}
       <div className="bg-white rounded-xl border overflow-hidden mb-8">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
@@ -160,6 +161,7 @@ export default function Users() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pending invites */}
@@ -168,6 +170,7 @@ export default function Users() {
         {invites.filter((i) => !i.usedAt).length === 0 ? (
           <div className="px-4 py-6 text-center text-gray-500 text-sm">No pending invites</div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
@@ -198,6 +201,7 @@ export default function Users() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

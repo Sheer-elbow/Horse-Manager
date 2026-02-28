@@ -502,7 +502,7 @@ export default function Planner() {
   if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
 
   return (
-    <div className="overflow-hidden">
+    <div>
       {/* Header */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
         <Link to={`/horses/${horseId}`} className="text-gray-400 hover:text-gray-600 shrink-0">&larr;</Link>
