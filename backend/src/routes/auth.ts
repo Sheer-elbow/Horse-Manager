@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth';
 import { loginLimiter } from '../middleware/rateLimiter';
 import { sendInviteEmail } from '../services/email';
 import { AuthRequest, JwtPayload } from '../types';
+import { passwordSchema } from '../lib/password';
 
 const router = Router();
 
@@ -105,7 +106,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
 // POST /api/auth/change-password
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8),
+  newPassword: passwordSchema,
 });
 
 router.post('/change-password', authenticate, async (req: AuthRequest, res: Response) => {
@@ -210,7 +211,7 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
 const acceptInviteSchema = z.object({
   token: z.string(),
   name: z.string().min(1),
-  password: z.string().min(8),
+  password: passwordSchema,
 });
 
 router.post('/accept-invite', async (req, res: Response) => {
