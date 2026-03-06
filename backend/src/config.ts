@@ -19,8 +19,8 @@ export const config = {
   },
 
   admin: {
-    email: process.env.ADMIN_EMAIL || '',
-    password: process.env.ADMIN_PASSWORD || '',
+    email: process.env.ADMIN_EMAIL ?? '',
+    password: process.env.ADMIN_PASSWORD ?? '',
   },
 
   appUrl: process.env.APP_URL || 'http://localhost:5173',

@@ -78,10 +78,36 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Validate required environment variables before startup
+function validateEnv() {
+  const missing: string[] = [];
+
+  if (!config.admin.email) missing.push('ADMIN_EMAIL');
+  if (!config.admin.password) missing.push('ADMIN_PASSWORD');
+
+  if (missing.length > 0) {
+    console.error(`[FATAL] Missing required environment variables: ${missing.join(', ')}`);
+    console.error('[FATAL] Set these in your .env file before starting the server.');
+    process.exit(1);
+  }
+
+  if (config.admin.password.length < 16) {
+    console.error('[FATAL] ADMIN_PASSWORD must be at least 16 characters long.');
+    console.error('[FATAL] Choose a strong, unique password before starting the server.');
+    process.exit(1);
+  }
+
+  if (
+    config.jwt.secret === 'dev-secret-change-me' ||
+    config.jwt.refreshSecret === 'dev-refresh-secret-change-me'
+  ) {
+    console.error('[FATAL] JWT_SECRET and JWT_REFRESH_SECRET must be changed from their default values.');
+    process.exit(1);
+  }
+}
+
 // Seed admin user on startup
 async function seedAdmin() {
-  if (!config.admin.email || !config.admin.password) return;
-
   const existing = await prisma.user.findUnique({ where: { email: config.admin.email } });
   if (existing) return;
 
@@ -95,11 +121,14 @@ async function seedAdmin() {
       mustChangePassword: true,
     },
   });
-  console.log(`Admin user seeded: ${config.admin.email}`);
+  console.log(`[INFO] Admin user seeded: ${config.admin.email}`);
+  console.warn('[SECURITY] REMINDER: Log in as admin and change the password immediately.');
+  console.warn('[SECURITY] The admin password from .env should not be used as a permanent password.');
 }
 
 // Start server
 async function main() {
+  validateEnv();
   await seedAdmin();
   app.listen(config.port, () => {
     console.log(`Backend running on port ${config.port} (${config.nodeEnv})`);
