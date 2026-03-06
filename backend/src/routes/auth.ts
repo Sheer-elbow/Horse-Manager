@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { config } from '../config';
 import { authenticate } from '../middleware/auth';
-import { loginLimiter } from '../middleware/rateLimiter';
+import { loginLimiter, refreshLimiter } from '../middleware/rateLimiter';
 import { sendInviteEmail } from '../services/email';
 import { AuthRequest, JwtPayload } from '../types';
 import { passwordSchema } from '../lib/password';
@@ -62,7 +62,7 @@ router.post('/login', loginLimiter, async (req, res: Response) => {
 });
 
 // POST /api/auth/refresh
-router.post('/refresh', async (req, res: Response) => {
+router.post('/refresh', refreshLimiter, async (req, res: Response) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) {
@@ -214,7 +214,7 @@ const acceptInviteSchema = z.object({
   password: passwordSchema,
 });
 
-router.post('/accept-invite', async (req, res: Response) => {
+router.post('/accept-invite', loginLimiter, async (req, res: Response) => {
   try {
     const body = acceptInviteSchema.parse(req.body);
 
