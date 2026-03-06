@@ -19,6 +19,24 @@ import workoutRoutes from './routes/workouts';
 
 const app = express();
 
+// Remove the X-Powered-By header that fingerprints the server as Express
+app.disable('x-powered-by');
+
+// Security headers
+app.use((_req, res, next) => {
+  // Prevent MIME-type sniffing (defence-in-depth alongside upload validation)
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Deny embedding in iframes (clickjacking)
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Limit referrer information leakage
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // HSTS — only in production where TLS is guaranteed
+  if (config.nodeEnv === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 // Middleware
 app.use(cors({
   origin: config.nodeEnv === 'production' ? config.appUrl : true,
