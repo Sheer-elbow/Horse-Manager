@@ -22,10 +22,19 @@ router.get('/blocks', authenticate, async (req: AuthRequest, res: Response) => {
   const horseId = req.query.horseId as string | undefined;
   const where = horseId ? { horseId } : {};
 
-  if (req.user!.role !== 'ADMIN' && !horseId) {
-    // Non-admin must specify horse (access checked per horse)
-    res.status(400).json({ error: 'horseId query parameter required' });
-    return;
+  if (req.user!.role !== 'ADMIN') {
+    if (!horseId) {
+      res.status(400).json({ error: 'horseId query parameter required' });
+      return;
+    }
+    // Verify the non-admin user is assigned to this horse
+    const assignment = await prisma.horseAssignment.findUnique({
+      where: { userId_horseId: { userId: req.user!.userId, horseId } },
+    });
+    if (!assignment) {
+      res.status(403).json({ error: 'No access to this horse' });
+      return;
+    }
   }
 
   try {
@@ -159,6 +168,23 @@ function isWeekLocked(dateStr: string): boolean {
 // GET /api/plans/sessions?horseId=xxx&blockId=yyy&weekStart=YYYY-MM-DD
 router.get('/sessions', authenticate, async (req: AuthRequest, res: Response) => {
   const { horseId, blockId, weekStart } = req.query;
+
+  // Non-admins must supply a horseId and be assigned to that horse.
+  // Without this check any authenticated user could read planned sessions
+  // for every horse in the system.
+  if (req.user!.role !== 'ADMIN') {
+    if (!horseId) {
+      res.status(400).json({ error: 'horseId query parameter required' });
+      return;
+    }
+    const assignment = await prisma.horseAssignment.findUnique({
+      where: { userId_horseId: { userId: req.user!.userId, horseId: horseId as string } },
+    });
+    if (!assignment) {
+      res.status(403).json({ error: 'No access to this horse' });
+      return;
+    }
+  }
 
   const where: Record<string, unknown> = {};
   if (horseId) where.horseId = horseId;
