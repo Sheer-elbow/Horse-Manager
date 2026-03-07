@@ -36,14 +36,27 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       where.date = { gte: start, lt: end };
     }
 
-    // Check access for non-admin
-    if (req.user!.role !== 'ADMIN' && horseId) {
-      const assignment = await prisma.horseAssignment.findUnique({
-        where: { userId_horseId: { userId: req.user!.userId, horseId: horseId as string } },
-      });
-      if (!assignment) {
-        res.status(403).json({ error: 'No access to this horse' });
-        return;
+    // Enforce horse-level access for non-admins
+    if (req.user!.role !== 'ADMIN') {
+      if (horseId) {
+        // Specific horse requested — verify the user is assigned to it
+        const assignment = await prisma.horseAssignment.findUnique({
+          where: { userId_horseId: { userId: req.user!.userId, horseId: horseId as string } },
+        });
+        if (!assignment) {
+          res.status(403).json({ error: 'No access to this horse' });
+          return;
+        }
+      } else {
+        // No specific horse — restrict to only the horses this user is assigned to.
+        // Without this, a non-admin could enumerate all session logs across the
+        // entire system by omitting the horseId query parameter.
+        const assignments = await prisma.horseAssignment.findMany({
+          where: { userId: req.user!.userId },
+          select: { horseId: true },
+        });
+        const accessibleHorseIds = assignments.map((a) => a.horseId);
+        where.horseId = { in: accessibleHorseIds };
       }
     }
 

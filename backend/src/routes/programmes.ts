@@ -13,6 +13,50 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB max
 const uploadPackage = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB for ZIP
 
+/**
+ * Sanitize an HTML string for safe storage and display.
+ *
+ * Why a regex script-strip is insufficient:
+ *   Blob URLs created via URL.createObjectURL() inherit the app's origin, so
+ *   JavaScript in event handlers (onerror=, onload=, …) or javascript: URLs
+ *   executes in the same security context as the main application — giving it
+ *   full access to cookies, localStorage, and the DOM.
+ *
+ * Strategy (using the already-imported cheerio):
+ *   1. Remove all <script> and <noscript> elements.
+ *   2. Strip every attribute whose name starts with "on" (event handlers).
+ *   3. Remove href/src/action/data attributes whose value begins with
+ *      "javascript:" or "vbscript:" (URL-based code execution vectors).
+ */
+function sanitizeHtml(rawHtml: string): string {
+  const $ = cheerio.load(rawHtml, { decodeEntities: false });
+
+  $('script, noscript').remove();
+
+  $('*').each((_idx, el) => {
+    if (el.type !== 'tag') return;
+    const attribs = (el as cheerio.Element & { attribs: Record<string, string> }).attribs;
+    if (!attribs) return;
+
+    for (const attr of Object.keys(attribs)) {
+      // Remove all event-handler attributes (onclick, onerror, onload, …)
+      if (attr.toLowerCase().startsWith('on')) {
+        delete attribs[attr];
+        continue;
+      }
+      // Remove javascript:/vbscript: navigation targets
+      if (['href', 'src', 'action', 'data'].includes(attr.toLowerCase())) {
+        const val = attribs[attr].trim().replace(/[\s\u0000-\u001f]+/g, '').toLowerCase();
+        if (val.startsWith('javascript:') || val.startsWith('vbscript:')) {
+          delete attribs[attr];
+        }
+      }
+    }
+  });
+
+  return $.html();
+}
+
 const programmeSchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable().optional(),
@@ -75,7 +119,7 @@ router.post('/upload', authenticate, requireRole('ADMIN', 'TRAINER'), upload.sin
       return;
     }
 
-    const htmlContent = req.file.buffer.toString('utf-8');
+    const htmlContent = sanitizeHtml(req.file.buffer.toString('utf-8'));
     const originalFileName = req.file.originalname;
 
     // Use filename (without extension) as programme name, or use form field
@@ -205,10 +249,10 @@ router.post('/upload-package', authenticate, requireRole('ADMIN', 'TRAINER'), up
 
     if (htmlEntry) {
       const rawHtml = htmlEntry.getData().toString('utf-8');
-      // Strip only <script> tags — keep full document structure (<html>, <head>,
-      // <style>, etc.) so the manual renders with original styling when opened
-      // in a new browser tab (sandboxed blob: URL, no access to app origin).
-      manualHtml = rawHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script\s*>/gi, '');
+      // Sanitize: remove scripts, event-handler attributes, and javascript: URLs.
+      // Blob URLs created by the frontend share the app's origin, so any JS left
+      // in event handlers would execute with full access to the app's session.
+      manualHtml = sanitizeHtml(rawHtml);
       manualFileName = htmlEntry.entryName.split('/').pop() || 'manual.html';
     } else if (pdfEntry) {
       // Store PDF note — actual PDF viewer is a next-iteration feature

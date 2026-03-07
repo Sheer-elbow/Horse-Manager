@@ -22,13 +22,20 @@ const photoStorage = multer.diskStorage({
   },
 });
 
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
 const photoUpload = multer({
   storage: photoStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) {
+    if (ALLOWED_IMAGE_EXTENSIONS.has(ext) && ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Only image files (jpg, png, webp, gif) are allowed'));
