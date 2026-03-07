@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissors, Syringe, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
+import TrainingLoadChart from '../components/TrainingLoadChart';
 import { toast } from 'sonner';
 
 interface HealthSummary {
@@ -602,6 +603,9 @@ export default function HorseProfile() {
               </div>
             </div>
           )}
+
+          {/* Training load chart */}
+          <TrainingLoadChart horseId={id!} />
 
           {/* Horse photo */}
           <div className="bg-white rounded-xl border p-4 sm:p-5">
