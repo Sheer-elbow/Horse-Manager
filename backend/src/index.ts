@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import multer from 'multer';
 import path from 'path';
+import jwt from 'jsonwebtoken';
 import { config } from './config';
 import { prisma } from './db';
 import bcrypt from 'bcryptjs';
@@ -51,8 +52,23 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Static file serving for uploads
-app.use('/api/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Static file serving for uploads — authentication required.
+// Without this gate the entire uploads/ directory is publicly accessible to
+// any anonymous HTTP client that can guess or enumerate a filename.
+app.use('/api/uploads', (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  try {
+    jwt.verify(token, config.jwt.secret);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}, express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);
