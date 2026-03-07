@@ -179,13 +179,12 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
 
     // Try to send email, but always return the invite link as fallback
     let emailSent = false;
-    let emailError = '';
     try {
       await sendInviteEmail(body.email, token);
       emailSent = true;
     } catch (err) {
-      emailError = err instanceof Error ? err.message : 'Unknown email error';
-      console.error('Failed to send invite email:', emailError);
+      // Log the detail server-side only — never expose SMTP internals to the client
+      console.error('Failed to send invite email:', err instanceof Error ? err.message : err);
     }
 
     if (emailSent) {
@@ -194,7 +193,6 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
       res.json({
         message: `Invite created but email could not be sent. Share the link manually.`,
         inviteUrl,
-        emailError,
       });
     }
   } catch (err) {
