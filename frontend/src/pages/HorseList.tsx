@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { Horse } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
+import { Skeleton } from '../components/Skeleton';
 
 export default function HorseList() {
   const { user } = useAuth();
@@ -50,7 +51,28 @@ export default function HorseList() {
     }
   };
 
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
+  if (loading) return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-8 w-24" />
+        <Skeleton className="h-9 w-28" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border p-5">
+            <div className="flex items-center gap-4 mb-3">
+              <Skeleton className="w-16 h-16 shrink-0" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div>

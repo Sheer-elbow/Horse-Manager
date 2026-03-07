@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Horse, User } from '../types';
 import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity } from 'lucide-react';
+import { Skeleton } from '../components/Skeleton';
 
 interface TodayWorkout {
   id: string;
@@ -93,7 +94,50 @@ export default function Dashboard() {
     load();
   }, [user]);
 
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-8 w-36 mb-1" />
+        <Skeleton className="h-4 w-48" />
+      </div>
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border p-4 space-y-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-8 w-12" />
+          </div>
+        ))}
+      </div>
+      {/* Today's workouts */}
+      <div className="bg-white rounded-xl border p-5 space-y-3">
+        <Skeleton className="h-5 w-40 mb-4" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 py-2 border-b last:border-0">
+            <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <Skeleton className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+      {/* Recent activity */}
+      <div className="bg-white rounded-xl border p-5 space-y-3">
+        <Skeleton className="h-5 w-32 mb-4" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 py-2 border-b last:border-0">
+            <Skeleton className="w-8 h-8 rounded-full shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const isNewAdmin = user?.role === 'ADMIN' && horses.length === 0;
   const hasNoHorses = horses.length === 0;

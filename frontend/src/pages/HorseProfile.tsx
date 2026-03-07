@@ -7,6 +7,7 @@ import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissors, Syringe, AlertTriangle } from 'lucide-react';
+import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
 
 interface HealthSummary {
@@ -94,6 +95,8 @@ export default function HorseProfile() {
   // Delete confirmation
   const [deleteHorseConfirm, setDeleteHorseConfirm] = useState(false);
   const [removePlanTarget, setRemovePlanTarget] = useState<string | null>(null);
+  const [deleteRecordTarget, setDeleteRecordTarget] = useState<{ id: string; label: string } | null>(null);
+  const [removeAssignmentTarget, setRemoveAssignmentTarget] = useState<{ id: string; name: string } | null>(null);
 
   // Health summary (for overview tab status card)
   const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
@@ -219,9 +222,17 @@ export default function HorseProfile() {
     loadHorse();
   };
 
-  const handleRemoveAssignment = async (assignmentId: string) => {
-    await api(`/horses/${id}/assignments/${assignmentId}`, { method: 'DELETE' });
+  const handleRemoveAssignment = (assignmentId: string) => {
+    const assignment = horse?.assignments?.find((a) => a.id === assignmentId);
+    const name = assignment?.user?.name || assignment?.user?.email || 'this user';
+    setRemoveAssignmentTarget({ id: assignmentId, name });
+  };
+
+  const confirmRemoveAssignment = async () => {
+    if (!removeAssignmentTarget) return;
+    await api(`/horses/${id}/assignments/${removeAssignmentTarget.id}`, { method: 'DELETE' });
     toast.success('Assignment removed');
+    setRemoveAssignmentTarget(null);
     loadHorse();
   };
 
@@ -279,10 +290,18 @@ export default function HorseProfile() {
     }
   };
 
-  const handleDeleteRecord = async (recordId: string) => {
+  const handleDeleteRecord = (recordId: string) => {
+    const record = records.find((r) => r.id === recordId);
+    const label = record?.name || new Date(record?.date || '').toLocaleDateString('en-GB') || 'this record';
+    setDeleteRecordTarget({ id: recordId, label });
+  };
+
+  const confirmDeleteRecord = async () => {
+    if (!deleteRecordTarget) return;
     const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
-    await api(`/health/${id}/${endpoint}/${recordId}`, { method: 'DELETE' });
+    await api(`/health/${id}/${endpoint}/${deleteRecordTarget.id}`, { method: 'DELETE' });
     toast.success('Record deleted');
+    setDeleteRecordTarget(null);
     loadRecords(tab);
   };
 
@@ -443,7 +462,39 @@ export default function HorseProfile() {
     return startStr;
   };
 
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
+  if (loading) return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6">
+        <Skeleton className="w-5 h-5 shrink-0" />
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-9 w-28 ml-auto" />
+      </div>
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6 border-b pb-2">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-5 w-16" />)}
+      </div>
+      {/* Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border p-5 space-y-3">
+          <Skeleton className="w-full h-48 mb-2" />
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-xl border p-5 space-y-3">
+            <Skeleton className="h-5 w-32 mb-2" />
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+          <div className="bg-white rounded-xl border p-5 space-y-3">
+            <Skeleton className="h-5 w-40 mb-2" />
+            {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
   if (!horse) return null;
 
   const tabs: { key: Tab; label: string }[] = [
@@ -916,6 +967,28 @@ export default function HorseProfile() {
         <div className="flex gap-2 justify-end">
           <Button variant="outline" onClick={() => setRemovePlanTarget(null)}>Cancel</Button>
           <Button variant="destructive" onClick={confirmRemovePlan}>Remove</Button>
+        </div>
+      </Modal>
+
+      {/* Delete health record confirmation modal */}
+      <Modal open={!!deleteRecordTarget} onClose={() => setDeleteRecordTarget(null)} title="Delete record">
+        <p className="text-sm text-gray-600 mb-4">
+          Delete <strong>{deleteRecordTarget?.label}</strong>? This cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setDeleteRecordTarget(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmDeleteRecord}>Delete</Button>
+        </div>
+      </Modal>
+
+      {/* Remove user assignment confirmation modal */}
+      <Modal open={!!removeAssignmentTarget} onClose={() => setRemoveAssignmentTarget(null)} title="Remove assignment">
+        <p className="text-sm text-gray-600 mb-4">
+          Remove <strong>{removeAssignmentTarget?.name}</strong>'s access to this horse?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setRemoveAssignmentTarget(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmRemoveAssignment}>Remove</Button>
         </div>
       </Modal>
 
