@@ -18,3 +18,14 @@ export const refreshLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Strict limiter for password reset requests — applies regardless of whether
+// the email exists (we always return 200 to prevent user enumeration, so we
+// must not rely on skipSuccessfulRequests here).
+export const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  message: { error: 'Too many password reset requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

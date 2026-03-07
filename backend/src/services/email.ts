@@ -92,6 +92,21 @@ function createEmailAdapter(): EmailAdapter {
 
 export const emailAdapter = createEmailAdapter();
 
+export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
+  const resetUrl = `${config.appUrl}/reset-password?token=${token}`;
+  await emailAdapter.sendMail({
+    to: email,
+    subject: 'Reset your Smart Stable Manager password',
+    html: `
+      <h2>Password Reset Request</h2>
+      <p>We received a request to reset the password for your account.</p>
+      <p><a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;">Reset Password</a></p>
+      <p>Or copy this link: ${resetUrl}</p>
+      <p>This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+    `,
+  });
+}
+
 export async function sendInviteEmail(email: string, token: string): Promise<void> {
   const inviteUrl = `${config.appUrl}/accept-invite?token=${token}`;
   await emailAdapter.sendMail({

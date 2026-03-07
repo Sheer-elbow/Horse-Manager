@@ -1,13 +1,14 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { config } from '../config';
 import { authenticate } from '../middleware/auth';
-import { loginLimiter, refreshLimiter } from '../middleware/rateLimiter';
-import { sendInviteEmail } from '../services/email';
+import { loginLimiter, refreshLimiter, forgotPasswordLimiter } from '../middleware/rateLimiter';
+import { sendInviteEmail, sendPasswordResetEmail } from '../services/email';
 import { AuthRequest, JwtPayload } from '../types';
 import { passwordSchema } from '../lib/password';
 
@@ -259,6 +260,101 @@ router.post('/accept-invite', loginLimiter, async (req, res: Response) => {
       return;
     }
     console.error('Accept invite error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/forgot-password
+// Always responds 200 so attackers cannot enumerate registered emails.
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res: Response) => {
+  const GENERIC_OK = { message: 'If that email is registered, a reset link has been sent.' };
+  try {
+    const body = forgotPasswordSchema.parse(req.body);
+    const user = await prisma.user.findUnique({ where: { email: body.email } });
+
+    if (user) {
+      // Invalidate any existing unused tokens for this user
+      await prisma.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      // 256-bit random token — only the SHA-256 hash is stored
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
+
+      try {
+        await sendPasswordResetEmail(user.email, rawToken);
+      } catch (err) {
+        console.error('Failed to send password reset email:', err instanceof Error ? err.message : err);
+      }
+    }
+
+    res.json(GENERIC_OK);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Forgot password error:', err);
+    // Still return the generic message to avoid leaking server errors
+    res.json(GENERIC_OK);
+  }
+});
+
+// POST /api/auth/reset-password
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: passwordSchema,
+});
+
+router.post('/reset-password', loginLimiter, async (req, res: Response) => {
+  try {
+    const body = resetPasswordSchema.parse(req.body);
+    const tokenHash = crypto.createHash('sha256').update(body.token).digest('hex');
+
+    const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!record) {
+      res.status(400).json({ error: 'Invalid or expired reset token' });
+      return;
+    }
+    if (record.usedAt) {
+      res.status(400).json({ error: 'Reset token has already been used' });
+      return;
+    }
+    if (record.expiresAt < new Date()) {
+      res.status(400).json({ error: 'Reset token has expired' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(body.newPassword, 12);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash, mustChangePassword: false },
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Reset password error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
