@@ -6,8 +6,29 @@ import { Horse, User, AppliedPlan, PlanShare } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { ArrowLeft, Calendar, Repeat, Share2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissors, Syringe, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface HealthSummary {
+  lastVetDate: string | null;
+  lastFarrierDate: string | null;
+  overdueVaccinations: { id: string; name: string | null; dueDate: string }[];
+  dueSoonVaccinations: { id: string; name: string | null; dueDate: string }[];
+}
+
+function daysSince(dateStr: string): number {
+  const d = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function daysUntil(dateStr: string): number {
+  const d = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 type Tab = 'overview' | 'vet' | 'farrier' | 'vaccinations' | 'expenses' | 'programmes';
 
@@ -74,6 +95,23 @@ export default function HorseProfile() {
   const [deleteHorseConfirm, setDeleteHorseConfirm] = useState(false);
   const [removePlanTarget, setRemovePlanTarget] = useState<string | null>(null);
 
+  // Health summary (for overview tab status card)
+  const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
+
+  // Quick-log FAB modal
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const [quickLogForm, setQuickLogForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    slot: 'AM' as 'AM' | 'PM',
+    sessionType: '',
+    durationMinutes: '',
+    intensityRpe: '',
+    rider: '',
+    notes: '',
+  });
+  const [quickLogError, setQuickLogError] = useState('');
+  const [quickLogLoading, setQuickLogLoading] = useState(false);
+
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = isAdmin || horse?._permission === 'EDIT';
 
@@ -100,8 +138,41 @@ export default function HorseProfile() {
     setRecords(data);
   };
 
+  const loadHealthSummary = async () => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const thirtyDaysOut = new Date(today);
+      thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
+
+      const [vets, farriers, vaccinations] = await Promise.all([
+        api<{ id: string; date: string }[]>(`/health/${id}/vet-visits`),
+        api<{ id: string; date: string }[]>(`/health/${id}/farrier-visits`),
+        api<{ id: string; name: string | null; dueDate: string | null }[]>(`/health/${id}/vaccinations`),
+      ]);
+
+      const overdueVaccinations = vaccinations
+        .filter((v) => v.dueDate && new Date(v.dueDate) < today)
+        .map((v) => ({ id: v.id, name: v.name, dueDate: v.dueDate! }));
+
+      const dueSoonVaccinations = vaccinations
+        .filter((v) => v.dueDate && new Date(v.dueDate) >= today && new Date(v.dueDate) <= thirtyDaysOut)
+        .map((v) => ({ id: v.id, name: v.name, dueDate: v.dueDate! }));
+
+      setHealthSummary({
+        lastVetDate: vets.length > 0 ? vets[0].date : null,
+        lastFarrierDate: farriers.length > 0 ? farriers[0].date : null,
+        overdueVaccinations,
+        dueSoonVaccinations,
+      });
+    } catch {
+      // non-critical, ignore
+    }
+  };
+
   useEffect(() => { loadHorse(); }, [id]);
   useEffect(() => { loadRecords(tab); }, [tab, id]);
+  useEffect(() => { if (id) loadHealthSummary(); }, [id]);
 
   const handleEditHorse = async (e: FormEvent) => {
     e.preventDefault();
@@ -323,6 +394,43 @@ export default function HorseProfile() {
     }
   };
 
+  const handleQuickLog = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    setQuickLogError('');
+    setQuickLogLoading(true);
+    try {
+      await api('/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          horseId: id,
+          date: quickLogForm.date,
+          slot: quickLogForm.slot,
+          sessionType: quickLogForm.sessionType || null,
+          durationMinutes: quickLogForm.durationMinutes ? parseInt(quickLogForm.durationMinutes) : null,
+          intensityRpe: quickLogForm.intensityRpe ? parseInt(quickLogForm.intensityRpe) : null,
+          rider: quickLogForm.rider || null,
+          notes: quickLogForm.notes || null,
+        }),
+      });
+      setShowQuickLog(false);
+      setQuickLogForm({
+        date: new Date().toISOString().split('T')[0],
+        slot: 'AM',
+        sessionType: '',
+        durationMinutes: '',
+        intensityRpe: '',
+        rider: '',
+        notes: '',
+      });
+      toast.success('Session logged');
+    } catch (err: unknown) {
+      setQuickLogError(err instanceof Error ? err.message : 'Failed to log session');
+    } finally {
+      setQuickLogLoading(false);
+    }
+  };
+
   const formatDateRange = (plan: AppliedPlan): string => {
     const start = new Date(plan.startDate);
     const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -380,6 +488,70 @@ export default function HorseProfile() {
 
       {tab === 'overview' && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Health status summary */}
+          {healthSummary && (
+            <div className="bg-white rounded-xl border p-4 sm:p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Health status</h3>
+              <div className="flex flex-wrap gap-2">
+                {/* Vet */}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                  healthSummary.lastVetDate
+                    ? daysSince(healthSummary.lastVetDate) > 180
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-green-50 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <Stethoscope className="w-3.5 h-3.5" />
+                  {healthSummary.lastVetDate
+                    ? `Vet: ${daysSince(healthSummary.lastVetDate)}d ago`
+                    : 'No vet visits'}
+                </div>
+                {/* Farrier */}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                  healthSummary.lastFarrierDate
+                    ? daysSince(healthSummary.lastFarrierDate) > 56
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-green-50 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <Scissors className="w-3.5 h-3.5" />
+                  {healthSummary.lastFarrierDate
+                    ? `Farrier: ${daysSince(healthSummary.lastFarrierDate)}d ago`
+                    : 'No farrier visits'}
+                </div>
+                {/* Overdue vaccinations */}
+                {healthSummary.overdueVaccinations.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setTab('vaccinations')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {v.name ?? 'Vaccination'} overdue
+                  </button>
+                ))}
+                {/* Due soon vaccinations */}
+                {healthSummary.dueSoonVaccinations.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setTab('vaccinations')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                  >
+                    <Syringe className="w-3.5 h-3.5" />
+                    {v.name ?? 'Vaccination'} due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
+                {/* All clear */}
+                {healthSummary.overdueVaccinations.length === 0 && healthSummary.dueSoonVaccinations.length === 0 && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                    <Syringe className="w-3.5 h-3.5" />
+                    Vaccinations up to date
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Horse photo */}
           <div className="bg-white rounded-xl border p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
@@ -618,6 +790,112 @@ export default function HorseProfile() {
           )}
         </div>
       )}
+
+      {/* Quick-log FAB — visible when user has edit access */}
+      {canEdit && (
+        <button
+          onClick={() => {
+            setQuickLogForm({
+              date: new Date().toISOString().split('T')[0],
+              slot: 'AM',
+              sessionType: '',
+              durationMinutes: '',
+              intensityRpe: '',
+              rider: '',
+              notes: '',
+            });
+            setQuickLogError('');
+            setShowQuickLog(true);
+          }}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
+          title="Log a session"
+        >
+          <Plus className="w-5 h-5" />
+          <span className="hidden sm:inline">Log session</span>
+        </button>
+      )}
+
+      {/* Quick-log session modal */}
+      <Modal open={showQuickLog} onClose={() => { setShowQuickLog(false); setQuickLogError(''); }} title={`Log session — ${horse?.name}`}>
+        {quickLogError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{quickLogError}</div>}
+        <form onSubmit={handleQuickLog} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={quickLogForm.date}
+                onChange={(e) => setQuickLogForm({ ...quickLogForm, date: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Slot</label>
+              <select
+                value={quickLogForm.slot}
+                onChange={(e) => setQuickLogForm({ ...quickLogForm, slot: e.target.value as 'AM' | 'PM' })}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Session type</label>
+            <input
+              value={quickLogForm.sessionType}
+              onChange={(e) => setQuickLogForm({ ...quickLogForm, sessionType: e.target.value })}
+              placeholder="e.g. Canter work, Polo chukka, Rest"
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
+              <input
+                type="number"
+                min="1"
+                value={quickLogForm.durationMinutes}
+                onChange={(e) => setQuickLogForm({ ...quickLogForm, durationMinutes: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">RPE (1–10)</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={quickLogForm.intensityRpe}
+                onChange={(e) => setQuickLogForm({ ...quickLogForm, intensityRpe: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rider</label>
+            <input
+              value={quickLogForm.rider}
+              onChange={(e) => setQuickLogForm({ ...quickLogForm, rider: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea
+              value={quickLogForm.notes}
+              onChange={(e) => setQuickLogForm({ ...quickLogForm, notes: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              rows={2}
+            />
+          </div>
+          <Button type="submit" disabled={quickLogLoading} className="w-full">
+            {quickLogLoading ? 'Saving...' : 'Save session'}
+          </Button>
+        </form>
+      </Modal>
 
       {/* Delete horse confirmation modal */}
       <Modal open={deleteHorseConfirm} onClose={() => setDeleteHorseConfirm(false)} title="Delete horse">
