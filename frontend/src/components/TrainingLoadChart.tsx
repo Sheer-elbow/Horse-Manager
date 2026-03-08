@@ -107,12 +107,12 @@ export default function TrainingLoadChart({ horseId }: Props) {
               />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
-                formatter={(value: number | null, name: string) => {
-                  if (name === 'Duration') return [`${value} min`, 'Duration'];
-                  if (name === 'Avg RPE') return [value ?? '—', 'Avg RPE'];
-                  return [value, name];
+                formatter={(value, name) => {
+                  if (name === 'Duration') return [`${value} min`, 'Duration'] as [string, string];
+                  if (name === 'Avg RPE') return [value != null ? value : '—', 'Avg RPE'] as [unknown, string];
+                  return [value, name] as [unknown, string];
                 }}
-                labelFormatter={(label: string) => `Week of ${label}`}
+                labelFormatter={(label) => `Week of ${label}`}
               />
               <Bar
                 yAxisId="left"

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { Search, Horse, BookOpen, MapPin, Tag, Loader2 } from 'lucide-react';
+import { Search, House, BookOpen, MapPin, Tag, Loader2 } from 'lucide-react';
 
 interface HorseResult {
   id: string;
@@ -207,7 +207,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       />
                     ) : (
                       <div className="w-9 h-9 rounded-lg bg-gray-100 border flex items-center justify-center shrink-0">
-                        <Horse className="w-4 h-4 text-gray-400" />
+                        <House className="w-4 h-4 text-gray-400" />
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
