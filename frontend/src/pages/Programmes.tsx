@@ -209,16 +209,20 @@ export default function Programmes() {
   };
 
   const openManual = async (p: Programme) => {
+    // Open the window synchronously to preserve the user gesture — browsers
+    // block window.open() called after an await (async context loses gesture).
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Popup blocked — please allow popups for this site.'); return; }
     try {
       const v = await api<ProgrammeVersion[]>(`/programmes/${p.id}/versions`);
-      if (v.length === 0) { toast.error('No versions found.'); return; }
+      if (v.length === 0) { win.close(); toast.error('No versions found.'); return; }
       const full = await api<ProgrammeVersion>(`/programmes/${p.id}/versions/${v[0].id}`);
-      if (!full.manualHtml) { toast.error('No manual included in this version.'); return; }
-      const blob = new Blob([full.manualHtml], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (!full.manualHtml) { win.close(); toast.error('No manual included in this version.'); return; }
+      win.document.open();
+      win.document.write(full.manualHtml);
+      win.document.close();
     } catch {
+      win.close();
       toast.error('Failed to load manual.');
     }
   };
