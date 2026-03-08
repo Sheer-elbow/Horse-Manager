@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
 } from '../components/ui/dropdown-menu';
 import { MoreVertical, Pencil, Trash2, Eye, Layers, BookOpen } from 'lucide-react';
+import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
 
 export default function Programmes() {
@@ -290,7 +291,26 @@ export default function Programmes() {
     }
   };
 
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>;
+  if (loading) return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <Skeleton className="h-8 w-36" />
+        <Skeleton className="h-9 w-40" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border p-5 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-gray-200 animate-pulse shrink-0" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-3 w-72" />
+            </div>
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div>
