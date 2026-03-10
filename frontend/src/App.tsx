@@ -9,6 +9,7 @@ import HorseProfile from './pages/HorseProfile';
 import Planner from './pages/Planner';
 import Users from './pages/Users';
 import Programmes from './pages/Programmes';
+import SecurityDashboard from './pages/SecurityDashboard';
 import { ReactNode } from 'react';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) {
@@ -48,6 +49,7 @@ function AppRoutes() {
       <Route path="/horses/:id/planner" element={<ProtectedRoute><Planner /></ProtectedRoute>} />
       <Route path="/programmes" element={<ProtectedRoute><Programmes /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
+      <Route path="/admin/security" element={<ProtectedRoute adminOnly><SecurityDashboard /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
