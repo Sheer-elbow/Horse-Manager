@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import { Horse, User } from '../types';
 import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
+import { AuthenticatedImage } from '../components/AuthenticatedImage';
 
 interface TodayWorkout {
   id: string;
@@ -233,7 +234,7 @@ export default function Dashboard() {
                   className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow flex items-center gap-4"
                 >
                   {w.horse.photoUrl ? (
-                    <img src={w.horse.photoUrl} alt={w.horse.name} className="w-10 h-10 rounded-lg object-cover border shrink-0" />
+                    <AuthenticatedImage src={w.horse.photoUrl} alt={w.horse.name} className="w-10 h-10 rounded-lg object-cover border shrink-0" fallback={<div className="w-10 h-10 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-lg shrink-0">&#x1f40e;</div>} />
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-lg shrink-0">&#x1f40e;</div>
                   )}
@@ -315,7 +316,7 @@ export default function Dashboard() {
               {horses.slice(0, 5).map((h) => (
                 <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border p-3 hover:shadow-md transition-shadow flex items-center gap-3">
                   {h.photoUrl ? (
-                    <img src={h.photoUrl} alt={h.name} className="w-10 h-10 rounded-lg object-cover border shrink-0" />
+                    <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-10 h-10 rounded-lg object-cover border shrink-0" fallback={<div className="w-10 h-10 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-lg shrink-0">&#x1f40e;</div>} />
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-lg shrink-0">&#x1f40e;</div>
                   )}
