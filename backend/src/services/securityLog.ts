@@ -1,4 +1,4 @@
-import { SecurityEventType } from '@prisma/client';
+import { Prisma, SecurityEventType } from '@prisma/client';
 import { Request } from 'express';
 import { prisma } from '../db';
 
@@ -44,7 +44,7 @@ export async function logSecurityEvent(
         ipAddress: getIp(req),
         userAgent: req.headers['user-agent'] ?? null,
         outcome: options.outcome,
-        metadata: options.metadata ?? undefined,
+        metadata: (options.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
   } catch (err) {
