@@ -14,6 +14,19 @@ enum Role {
   OWNER
 }
 
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_USED
+  PASSWORD_CHANGED
+  INVITE_SENT
+  INVITE_ACCEPTED
+  ROLE_CHANGED
+  USER_DELETED
+  ACCESS_DENIED
+}
+
 enum Permission {
   VIEW
   EDIT
@@ -51,6 +64,7 @@ model User {
   assignments              HorseAssignment[]
   invitesSent              InviteToken[]
   passwordResetTokens      PasswordResetToken[]
+  securityEvents           SecurityEvent[]
   createdProgrammes        Programme[]
   sessionLogs              ActualSessionLog[]
   auditEdits               SessionAuditLog[]
@@ -87,6 +101,29 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+model SecurityEvent {
+  id        String            @id @default(uuid())
+  eventType SecurityEventType @map("event_type")
+  // userId is nullable — failed logins may not map to any real user
+  userId    String?           @map("user_id")
+  // email captured separately so failed-login probes are still searchable
+  email     String?
+  ipAddress String            @map("ip_address")
+  userAgent String?           @map("user_agent")
+  // 'success' | 'failure' | 'info'
+  outcome   String
+  // Freeform context (old/new role, invited email, etc.) — never stores secrets
+  metadata  Json?
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([eventType])
+  @@index([ipAddress])
+  @@map("security_events")
 }
 
 // ─── Horses ──────────────────────────────────────────────────
