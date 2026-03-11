@@ -61,15 +61,16 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  assignments         HorseAssignment[]
-  invitesSent         InviteToken[]
-  passwordResetTokens PasswordResetToken[]
-  securityEvents      SecurityEvent[]
-  createdProgrammes   Programme[]
-  sessionLogs         ActualSessionLog[]
-  auditEdits          SessionAuditLog[]
-  assignedPlans       AppliedPlan[]
-  sharedPlans         PlanShare[]
+  assignments              HorseAssignment[]
+  invitesSent              InviteToken[]
+  passwordResetTokens      PasswordResetToken[]
+  securityEvents           SecurityEvent[]
+  createdProgrammes        Programme[]
+  sessionLogs              ActualSessionLog[]
+  auditEdits               SessionAuditLog[]
+  assignedPlans            AppliedPlan[]
+  sharedPlans              PlanShare[]
+  notificationPreference   NotificationPreference?
 
   @@map("users")
 }
@@ -352,6 +353,40 @@ model SessionAuditLog {
   editedBy         User             @relation(fields: [editedById], references: [id])
 
   @@map("session_audit_logs")
+}
+
+// ─── Notification Preferences ────────────────────────────────
+
+model NotificationPreference {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Master switch — when false nothing is sent regardless of other settings
+  emailEnabled Boolean @default(false) @map("email_enabled")
+
+  // Health: vaccination reminders (null = off, otherwise X days before due date)
+  vaccinationReminderDays Int? @map("vaccination_reminder_days")
+
+  // Health: overdue vaccination alert
+  overdueVaccinationAlert Boolean @default(false) @map("overdue_vaccination_alert")
+
+  // Health: vet check-up reminder (null = off, otherwise alert if no visit in X days)
+  vetCheckupReminderDays Int? @map("vet_checkup_reminder_days")
+
+  // Health: farrier reminder (null = off, otherwise alert if no visit in X days)
+  farrierReminderDays Int? @map("farrier_reminder_days")
+
+  // Training: end-of-day reminder if sessions went unlogged
+  unloggedSessionAlert Boolean @default(false) @map("unlogged_session_alert")
+
+  // Training: Monday morning weekly digest of the week ahead
+  weeklyDigest Boolean @default(false) @map("weekly_digest")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
 }
 
 // ─── Stable Manager (health / expenses) ─────────────────────

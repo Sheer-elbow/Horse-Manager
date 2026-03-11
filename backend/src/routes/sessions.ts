@@ -7,6 +7,17 @@ import { AuthRequest } from '../types';
 
 const router = Router();
 
+function weekSessions(
+  sessions: { date: Date; durationMinutes: number | null; intensityRpe: number | null }[],
+  from: Date,
+  to: Date,
+) {
+  return sessions.filter((s) => {
+    const d = new Date(s.date);
+    return d >= from && d < to;
+  });
+}
+
 const sessionLogSchema = z.object({
   horseId: z.string().uuid(),
   date: z.string(), // YYYY-MM-DD
@@ -82,7 +93,76 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/sessions - create a session log (admin + trainer + rider)
+// GET /api/sessions/analytics?horseId=xxx&weeks=12
+// Returns weekly training load buckets (totalMinutes, avgRpe, sessionCount)
+router.get('/analytics', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { horseId, weeks: weeksParam = '12' } = req.query;
+
+    if (!horseId) {
+      res.status(400).json({ error: 'horseId is required' });
+      return;
+    }
+
+    const numWeeks = Math.min(Math.max(parseInt(weeksParam as string) || 12, 4), 52);
+
+    // Access control
+    if (req.user!.role !== 'ADMIN') {
+      const assignment = await prisma.horseAssignment.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: horseId as string } },
+      });
+      if (!assignment) {
+        res.status(403).json({ error: 'No access to this horse' });
+        return;
+      }
+    }
+
+    // Start of the current week (Monday UTC)
+    const now = new Date();
+    const dow = now.getUTCDay(); // 0=Sun, 1=Mon … 6=Sat
+    const daysToMonday = dow === 0 ? 6 : dow - 1;
+    const thisMonday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysToMonday));
+
+    const rangeStart = new Date(thisMonday);
+    rangeStart.setUTCDate(thisMonday.getUTCDate() - (numWeeks - 1) * 7);
+
+    const sessions = await prisma.actualSessionLog.findMany({
+      where: {
+        horseId: horseId as string,
+        date: { gte: rangeStart },
+      },
+      select: { date: true, durationMinutes: true, intensityRpe: true },
+      orderBy: { date: 'asc' },
+    });
+
+    const buckets = Array.from({ length: numWeeks }, (_, i) => {
+      const weekStart = new Date(rangeStart);
+      weekStart.setUTCDate(rangeStart.getUTCDate() + i * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+
+      const ws = weekSessions(sessions, weekStart, weekEnd);
+      const totalMinutes = ws.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
+      const rpeValues = ws.map((s) => s.intensityRpe).filter((v): v is number => v != null);
+      const avgRpe = rpeValues.length > 0
+        ? Math.round((rpeValues.reduce((a, b) => a + b, 0) / rpeValues.length) * 10) / 10
+        : null;
+
+      return {
+        weekLabel: weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+        weekStart: weekStart.toISOString().split('T')[0],
+        totalMinutes,
+        avgRpe,
+        sessionCount: ws.length,
+      };
+    });
+
+    res.json(buckets);
+  } catch (err) {
+    console.error('Sessions analytics error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = sessionLogSchema.parse(req.body);

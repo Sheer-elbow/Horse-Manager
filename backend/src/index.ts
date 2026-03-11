@@ -18,6 +18,10 @@ import healthRoutes from './routes/health';
 import appliedPlanRoutes from './routes/applied-plans';
 import workoutRoutes from './routes/workouts';
 import securityRoutes from './routes/security';
+import dashboardRoutes from './routes/dashboard';
+import notificationRoutes from './routes/notifications';
+import searchRoutes from './routes/search';
+import { startNotificationScheduler } from './services/notification-scheduler';
 
 const app = express();
 
@@ -82,6 +86,9 @@ app.use('/api/health', healthRoutes);
 app.use('/api/applied-plans', appliedPlanRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/security', securityRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/search', searchRoutes);
 
 // Health check
 app.get('/api/ping', (_req, res) => {
@@ -169,6 +176,7 @@ async function main() {
   app.listen(config.port, () => {
     console.log(`Backend running on port ${config.port} (${config.nodeEnv})`);
   });
+  startNotificationScheduler();
 }
 
 main().catch((err) => {

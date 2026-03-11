@@ -29,13 +29,13 @@ const uploadPackage = multer({ storage: multer.memoryStorage(), limits: { fileSi
  *      "javascript:" or "vbscript:" (URL-based code execution vectors).
  */
 function sanitizeHtml(rawHtml: string): string {
-  const $ = cheerio.load(rawHtml, { decodeEntities: false });
+  const $ = cheerio.load(rawHtml);
 
   $('script, noscript').remove();
 
   $('*').each((_idx, el) => {
     if (el.type !== 'tag') return;
-    const attribs = (el as cheerio.Element & { attribs: Record<string, string> }).attribs;
+    const attribs = (el as { type: string; attribs: Record<string, string> }).attribs;
     if (!attribs) return;
 
     for (const attr of Object.keys(attribs)) {
