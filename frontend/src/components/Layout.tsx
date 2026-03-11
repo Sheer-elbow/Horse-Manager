@@ -1,6 +1,7 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home } from 'lucide-react';
 import { LayoutDashboard, Dog, BookOpen, Users, ShieldAlert, LogOut, Menu, X, Bell, Search } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
@@ -8,6 +9,7 @@ import CommandPalette from './CommandPalette';
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/horses', label: 'Horses', icon: Dog },
+  { path: '/stables', label: 'Stables', icon: Home },
   { path: '/programmes', label: 'Programmes', icon: BookOpen },
 ];
 

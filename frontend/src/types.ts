@@ -17,6 +17,15 @@ export interface HorseAssignment {
   user?: { id: string; email: string; name: string | null };
 }
 
+export interface Stable {
+  id: string;
+  name: string;
+  address: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { horses: number };
+}
+
 export interface Horse {
   id: string;
   name: string;
@@ -24,10 +33,12 @@ export interface Horse {
   breed: string | null;
   ownerNotes: string | null;
   stableLocation: string | null;
+  stableId: string | null;
   identifyingInfo: string | null;
   photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  stable?: { id: string; name: string } | null;
   _permission?: 'VIEW' | 'EDIT';
   assignments?: HorseAssignment[];
 }

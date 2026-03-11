@@ -49,6 +49,7 @@ const horseSchema = z.object({
   breed: z.string().nullable().optional(),
   ownerNotes: z.string().nullable().optional(),
   stableLocation: z.string().nullable().optional(),
+  stableId: z.string().uuid().nullable().optional(),
   identifyingInfo: z.string().nullable().optional(),
 });
 
@@ -56,7 +57,10 @@ const horseSchema = z.object({
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     if (req.user!.role === 'ADMIN') {
-      const horses = await prisma.horse.findMany({ orderBy: { name: 'asc' } });
+      const horses = await prisma.horse.findMany({
+        orderBy: { name: 'asc' },
+        include: { stable: { select: { id: true, name: true } } },
+      });
       res.json(horses);
       return;
     }
@@ -64,7 +68,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     // Non-admin: only horses they're assigned to
     const assignments = await prisma.horseAssignment.findMany({
       where: { userId: req.user!.userId },
-      include: { horse: true },
+      include: { horse: { include: { stable: { select: { id: true, name: true } } } } },
     });
     res.json(assignments.map((a) => ({ ...a.horse, _permission: a.permission })));
   } catch (err) {
@@ -77,7 +81,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 router.post('/', authenticate, requireRole('ADMIN', 'OWNER'), async (req, res: Response) => {
   try {
     const data = horseSchema.parse(req.body);
-    const horse = await prisma.horse.create({ data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, identifyingInfo: data.identifyingInfo ?? null } });
+    const horse = await prisma.horse.create({ data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, stableId: data.stableId ?? null, identifyingInfo: data.identifyingInfo ?? null } });
     res.status(201).json(horse);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -95,6 +99,7 @@ router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePe
     const horse = await prisma.horse.findUnique({
       where: { id: req.params.id },
       include: {
+        stable: { select: { id: true, name: true } },
         assignments: {
           include: { user: { select: { id: true, email: true, name: true } } },
         },
@@ -117,7 +122,7 @@ router.put('/:id', authenticate, requireAdmin, async (req, res: Response) => {
     const data = horseSchema.parse(req.body);
     const horse = await prisma.horse.update({
       where: { id: req.params.id },
-      data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, identifyingInfo: data.identifyingInfo ?? null },
+      data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, stableId: data.stableId ?? null, identifyingInfo: data.identifyingInfo ?? null },
     });
     res.json(horse);
   } catch (err) {

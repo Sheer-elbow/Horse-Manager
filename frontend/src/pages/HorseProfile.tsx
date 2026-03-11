@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, FormEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../api/client';
-import { Horse, User, AppliedPlan, PlanShare } from '../types';
+import { Horse, User, AppliedPlan, PlanShare, Stable } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
@@ -55,7 +55,8 @@ export default function HorseProfile() {
   const [records, setRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', age: '', breed: '', stableLocation: '', ownerNotes: '', identifyingInfo: '' });
+  const [editForm, setEditForm] = useState({ name: '', age: '', breed: '', stableId: '', ownerNotes: '', identifyingInfo: '' });
+  const [stables, setStables] = useState<Stable[]>([]);
 
   // Assignment modal
   const [showAssign, setShowAssign] = useState(false);
@@ -122,13 +123,17 @@ export default function HorseProfile() {
 
   const loadHorse = async () => {
     try {
-      const h = await api<Horse>(`/horses/${id}`);
+      const [h, s] = await Promise.all([
+        api<Horse>(`/horses/${id}`),
+        api<Stable[]>('/stables'),
+      ]);
       setHorse(h);
+      setStables(s);
       setEditForm({
         name: h.name,
         age: h.age?.toString() || '',
         breed: h.breed || '',
-        stableLocation: h.stableLocation || '',
+        stableId: h.stableId || '',
         ownerNotes: h.ownerNotes || '',
         identifyingInfo: h.identifyingInfo || '',
       });
@@ -187,7 +192,7 @@ export default function HorseProfile() {
         name: editForm.name,
         age: editForm.age ? parseInt(editForm.age) : null,
         breed: editForm.breed || null,
-        stableLocation: editForm.stableLocation || null,
+        stableId: editForm.stableId || null,
         ownerNotes: editForm.ownerNotes || null,
         identifyingInfo: editForm.identifyingInfo || null,
       }),
@@ -654,8 +659,13 @@ export default function HorseProfile() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stable location</label>
-                  <input value={editForm.stableLocation} onChange={(e) => setEditForm({ ...editForm, stableLocation: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stable</label>
+                  <select value={editForm.stableId} onChange={(e) => setEditForm({ ...editForm, stableId: e.target.value })} className="w-full border rounded-lg px-3 py-2">
+                    <option value="">No stable</option>
+                    {stables.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Identifying info</label>
@@ -675,7 +685,7 @@ export default function HorseProfile() {
                 <div className="grid grid-cols-2 gap-4">
                   {horse.breed && <div><span className="text-sm text-gray-500">Breed</span><div>{horse.breed}</div></div>}
                   {horse.age && <div><span className="text-sm text-gray-500">Age</span><div>{horse.age}</div></div>}
-                  {horse.stableLocation && <div><span className="text-sm text-gray-500">Stable</span><div>{horse.stableLocation}</div></div>}
+                  {(horse.stable || horse.stableLocation) && <div><span className="text-sm text-gray-500">Stable</span><div>{horse.stable?.name || horse.stableLocation}</div></div>}
                   {horse.identifyingInfo && <div><span className="text-sm text-gray-500">ID info</span><div>{horse.identifyingInfo}</div></div>}
                 </div>
                 {horse.ownerNotes && <div className="mt-4"><span className="text-sm text-gray-500">Notes</span><div className="mt-1">{horse.ownerNotes}</div></div>}

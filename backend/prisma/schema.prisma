@@ -103,6 +103,18 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// ─── Stables ─────────────────────────────────────────────────
+
+model Stable {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  horses Horse[]
+
+  @@map("stables")
 model SecurityEvent {
   id        String            @id @default(uuid())
   eventType SecurityEventType @map("event_type")
@@ -135,11 +147,13 @@ model Horse {
   breed           String?
   ownerNotes      String?  @map("owner_notes")
   stableLocation  String?  @map("stable_location")
+  stableId        String?  @map("stable_id")
   identifyingInfo String?  @map("identifying_info")
   photoUrl        String?  @map("photo_url")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  stable          Stable?  @relation(fields: [stableId], references: [id], onDelete: SetNull)
   assignments     HorseAssignment[]
   planBlocks      PlanBlock[]
   plannedSessions PlannedSession[]
