@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { authenticate, requireAdmin } from '../middleware/auth';
+import { logSecurityEvent } from '../services/securityLog';
 import { AuthRequest } from '../types';
 
 const router = Router();
@@ -80,6 +81,15 @@ router.put('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Res
       res.status(400).json({ error: 'Cannot change your own role' });
       return;
     }
+
+    // Capture existing role before the update so we can detect role changes
+    const existing = data.role !== undefined
+      ? await prisma.user.findUnique({
+          where: { id: req.params.id },
+          select: { role: true, email: true },
+        })
+      : null;
+
     const user = await prisma.user.update({
       where: { id: req.params.id },
       data: {
@@ -102,6 +112,21 @@ router.put('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Res
         },
       },
     });
+
+    if (existing && data.role !== undefined && data.role !== existing.role) {
+      void logSecurityEvent('ROLE_CHANGED', req, {
+        userId: req.user!.userId,
+        email: req.user!.email,
+        outcome: 'info',
+        metadata: {
+          targetId: user.id,
+          targetEmail: user.email,
+          fromRole: existing.role,
+          toRole: data.role,
+        },
+      });
+    }
+
     res.json(user);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -119,7 +144,23 @@ router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: 
     return;
   }
   try {
+    // Fetch before deleting so we can record who was removed
+    const toDelete = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { email: true, name: true, role: true },
+    });
     await prisma.user.delete({ where: { id: req.params.id } });
+    void logSecurityEvent('USER_DELETED', req, {
+      userId: req.user!.userId,
+      email: req.user!.email,
+      outcome: 'info',
+      metadata: {
+        deletedId: req.params.id,
+        deletedEmail: toDelete?.email,
+        deletedName: toDelete?.name,
+        deletedRole: toDelete?.role,
+      },
+    });
     res.json({ message: 'User deleted' });
   } catch {
     res.status(404).json({ error: 'User not found' });

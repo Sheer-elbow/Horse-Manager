@@ -6,6 +6,7 @@ import { Horse, Stable } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/Skeleton';
+import { AuthenticatedImage } from '../components/AuthenticatedImage';
 
 export default function HorseList() {
   const { user } = useAuth();
@@ -118,7 +119,7 @@ export default function HorseList() {
             <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border p-5 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-4 mb-3">
                 {h.photoUrl ? (
-                  <img src={h.photoUrl} alt={h.name} className="w-16 h-16 rounded-lg object-cover border shrink-0" />
+                  <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-16 h-16 rounded-lg object-cover border shrink-0" fallback={<div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>} />
                 ) : (
                   <div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>
                 )}
