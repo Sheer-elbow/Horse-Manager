@@ -21,7 +21,7 @@ export function getAccessToken() {
   return accessToken;
 }
 
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
   if (!refreshToken) return false;
   try {
     const res = await fetch(`${BASE}/auth/refresh`, {

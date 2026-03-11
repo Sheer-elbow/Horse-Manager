@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getAccessToken } from '../api/client';
+import { getAccessToken, tryRefresh } from '../api/client';
 
 interface AuthenticatedImageProps {
   src: string;
@@ -13,30 +13,41 @@ export function AuthenticatedImage({ src, alt, className, fallback }: Authentica
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    let revoked = false;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const token = getAccessToken();
+        let res = await fetch(src, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        // If 401, try refreshing the token and retry
+        if (res.status === 401) {
+          const refreshed = await tryRefresh();
+          if (refreshed) {
+            const newToken = getAccessToken();
+            res = await fetch(src, {
+              headers: newToken ? { Authorization: `Bearer ${newToken}` } : {},
+            });
+          }
+        }
+
+        if (!res.ok) throw new Error(`${res.status}`);
+        const blob = await res.blob();
+        if (!cancelled) setObjectUrl(URL.createObjectURL(blob));
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    }
+
     setError(false);
     setObjectUrl(null);
-
-    const token = getAccessToken();
-    fetch(src, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        if (!revoked) setObjectUrl(URL.createObjectURL(blob));
-      })
-      .catch(() => {
-        if (!revoked) setError(true);
-      });
+    load();
 
     return () => {
-      revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   if (error) return <>{fallback ?? null}</>;
