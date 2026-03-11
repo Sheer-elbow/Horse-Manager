@@ -9,6 +9,7 @@ import HorseProfile from './pages/HorseProfile';
 import Planner from './pages/Planner';
 import Users from './pages/Users';
 import Programmes from './pages/Programmes';
+import Stables from './pages/Stables';
 import NotificationSettings from './pages/NotificationSettings';
 import { ReactNode } from 'react';
 
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/horses" element={<ProtectedRoute><HorseList /></ProtectedRoute>} />
       <Route path="/horses/:id" element={<ProtectedRoute><HorseProfile /></ProtectedRoute>} />
       <Route path="/horses/:id/planner" element={<ProtectedRoute><Planner /></ProtectedRoute>} />
+      <Route path="/stables" element={<ProtectedRoute><Stables /></ProtectedRoute>} />
       <Route path="/programmes" element={<ProtectedRoute><Programmes /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />

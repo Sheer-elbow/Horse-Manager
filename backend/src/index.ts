@@ -20,6 +20,7 @@ import workoutRoutes from './routes/workouts';
 import dashboardRoutes from './routes/dashboard';
 import notificationRoutes from './routes/notifications';
 import searchRoutes from './routes/search';
+import stableRoutes from './routes/stables';
 import { startNotificationScheduler } from './services/notification-scheduler';
 
 const app = express();
@@ -87,6 +88,7 @@ app.use('/api/workouts', workoutRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/stables', stableRoutes);
 
 // Health check
 app.get('/api/ping', (_req, res) => {
