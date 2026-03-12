@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { prisma } from '../db';
 import { authenticate } from '../middleware/auth';
 import { requireHorseAccess } from '../middleware/rbac';
@@ -9,26 +10,19 @@ import { HorsePermissionRequest } from '../types';
 
 const router = Router();
 
-// Configure multer for health record file uploads
+// Configure multer for health record file uploads (memory storage — images processed by Sharp)
 const recordUploadsDir = path.join(process.cwd(), 'uploads', 'records');
 fs.mkdirSync(recordUploadsDir, { recursive: true });
 
-const recordStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, recordUploadsDir),
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${uniqueSuffix}${ext}`);
-  },
-});
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']);
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif']);
 
 const recordUpload = multer({
-  storage: recordStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // generous raw limit; compressed output will be much smaller
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf', '.heic'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) {
+    if (IMAGE_EXTENSIONS.has(ext) || IMAGE_MIME_TYPES.has(file.mimetype) || ext === '.pdf') {
       cb(null, true);
     } else {
       cb(new Error('Only images (jpg, png, webp, gif, heic) and PDF files are allowed'));
@@ -36,9 +30,9 @@ const recordUpload = multer({
   },
 });
 
-// Helper: parse file upload with multer, returning a promise
-function handleFileUpload(req: Request, res: Response): Promise<void> {
-  return new Promise((resolve, reject) => {
+// Helper: parse file upload with multer then process images with Sharp
+async function handleFileUpload(req: Request, res: Response): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
     recordUpload.single('file')(req, res, (err) => {
       if (err) {
         const msg = err instanceof multer.MulterError
@@ -50,6 +44,27 @@ function handleFileUpload(req: Request, res: Response): Promise<void> {
       }
     });
   });
+
+  if (!req.file) return;
+
+  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  const isImage = IMAGE_MIME_TYPES.has(req.file.mimetype) || IMAGE_EXTENSIONS.has(ext);
+
+  if (isImage) {
+    // Compress and convert to WebP (max 1600px longest side, 85% quality)
+    const filename = `${uniqueSuffix}.webp`;
+    await sharp(req.file.buffer)
+      .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toFile(path.join(recordUploadsDir, filename));
+    req.file.filename = filename;
+  } else {
+    // PDF — write buffer directly to disk unchanged
+    const filename = `${uniqueSuffix}.pdf`;
+    fs.writeFileSync(path.join(recordUploadsDir, filename), req.file.buffer);
+    req.file.filename = filename;
+  }
 }
 
 // Helper: get file info from request

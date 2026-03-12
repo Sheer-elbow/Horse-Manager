@@ -3,6 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { prisma } from '../db';
 import { authenticate, requireAdmin, requireRole } from '../middleware/auth';
 import { requireHorseAccess } from '../middleware/rbac';
@@ -10,35 +11,29 @@ import { AuthRequest, HorsePermissionRequest } from '../types';
 
 const router = Router();
 
-// Configure multer for horse photo uploads
+// Configure multer for horse photo uploads (memory storage — Sharp processes before disk write)
 const uploadsDir = path.join(process.cwd(), 'uploads', 'horses');
 fs.mkdirSync(uploadsDir, { recursive: true });
 
-const photoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${req.params.id}${ext}`);
-  },
-});
-
-const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
 ]);
 
 const photoUpload = multer({
-  storage: photoStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // generous raw limit; Sharp output will be far smaller
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ALLOWED_IMAGE_EXTENSIONS.has(ext) && ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+    const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif']);
+    if (allowed.has(ext) || ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files (jpg, png, webp, gif) are allowed'));
+      cb(new Error('Only image files (jpg, png, webp, gif, heic) are allowed'));
     }
   },
 });
@@ -217,15 +212,19 @@ router.post('/:id/photo', authenticate, requireAdmin, (req: AuthRequest, res: Re
         res.status(400).json({ error: 'No photo uploaded' });
         return;
       }
-      // Remove old photo if extension changed
+      // Delete any existing photo for this horse (all extensions)
       const existing = await prisma.horse.findUnique({ where: { id: req.params.id } });
       if (existing?.photoUrl) {
         const oldFilename = path.basename(existing.photoUrl.split('?')[0]);
-        if (oldFilename !== req.file.filename) {
-          fs.unlink(path.join(uploadsDir, oldFilename), () => {});
-        }
+        fs.unlink(path.join(uploadsDir, oldFilename), () => {});
       }
-      const photoUrl = `/api/uploads/horses/${req.file.filename}?v=${Date.now()}`;
+      // Compress and convert to WebP (max 1200×1200, 82% quality)
+      const filename = `${req.params.id}.webp`;
+      await sharp(req.file.buffer)
+        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toFile(path.join(uploadsDir, filename));
+      const photoUrl = `/api/uploads/horses/${filename}?v=${Date.now()}`;
       const horse = await prisma.horse.update({
         where: { id: req.params.id },
         data: { photoUrl },
