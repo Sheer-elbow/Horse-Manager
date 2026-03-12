@@ -123,7 +123,14 @@ export default function HorseList() {
                 ) : (
                   <div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>
                 )}
-                <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
+                  {h._isPriority && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      Priority
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="space-y-1">
                 {h.breed && <div className="text-sm text-gray-500">Breed: {h.breed}</div>}

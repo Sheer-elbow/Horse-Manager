@@ -70,15 +70,41 @@ function deleteFile(fileUrl: string | null) {
   fs.unlink(path.join(recordUploadsDir, filename), () => {});
 }
 
+// ─── Health access helpers ────────────────────────────────────
+
+/**
+ * Checks whether a STAFF_VIEW user (rider/groom) has priority on this horse.
+ * STAFF_VIEW users can only see full health records for their priority horses.
+ */
+async function checkStaffHealthAccess(req: HorsePermissionRequest, res: Response): Promise<boolean> {
+  if (req.horseAccessType !== 'STAFF_VIEW') return true;
+  const priority = await prisma.horsePriority.findUnique({
+    where: { userId_horseId: { userId: req.user!.userId, horseId: req.params.horseId } },
+  });
+  if (!priority) {
+    res.status(403).json({ error: 'Health records are only available for your priority horses' });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Strips notes, fileUrl and fileName from records for LEAD_VIEW users (summary only).
+ */
+function toHealthSummary<T extends { notes?: string | null; fileUrl?: string | null; fileName?: string | null }>(records: T[]): Omit<T, 'notes' | 'fileUrl' | 'fileName'>[] {
+  return records.map(({ notes: _n, fileUrl: _f, fileName: _fn, ...rest }) => rest);
+}
+
 // ─── Vet Visits ──────────────────────────────────────────────
 
-router.get('/:horseId/vet-visits', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
+router.get('/:horseId/vet-visits', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
   try {
+    if (!await checkStaffHealthAccess(req, res)) return;
     const visits = await prisma.vetVisit.findMany({
       where: { horseId: req.params.horseId },
       orderBy: { date: 'desc' },
     });
-    res.json(visits);
+    res.json(req.horseAccessType === 'LEAD_VIEW' ? toHealthSummary(visits) : visits);
   } catch (err) {
     console.error('List vet visits error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -116,13 +142,14 @@ router.delete('/:horseId/vet-visits/:recordId', authenticate, requireHorseAccess
 
 // ─── Farrier Visits ──────────────────────────────────────────
 
-router.get('/:horseId/farrier-visits', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
+router.get('/:horseId/farrier-visits', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
   try {
+    if (!await checkStaffHealthAccess(req, res)) return;
     const visits = await prisma.farrierVisit.findMany({
       where: { horseId: req.params.horseId },
       orderBy: { date: 'desc' },
     });
-    res.json(visits);
+    res.json(req.horseAccessType === 'LEAD_VIEW' ? toHealthSummary(visits) : visits);
   } catch (err) {
     console.error('List farrier visits error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -160,13 +187,14 @@ router.delete('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAc
 
 // ─── Vaccinations / Deworming ────────────────────────────────
 
-router.get('/:horseId/vaccinations', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
+router.get('/:horseId/vaccinations', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
   try {
+    if (!await checkStaffHealthAccess(req, res)) return;
     const records = await prisma.vaccinationRecord.findMany({
       where: { horseId: req.params.horseId },
       orderBy: { date: 'desc' },
     });
-    res.json(records);
+    res.json(req.horseAccessType === 'LEAD_VIEW' ? toHealthSummary(records) : records);
   } catch (err) {
     console.error('List vaccinations error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -212,7 +240,12 @@ router.delete('/:horseId/vaccinations/:recordId', authenticate, requireHorseAcce
 
 // ─── Expenses ────────────────────────────────────────────────
 
-router.get('/:horseId/expenses', authenticate, requireHorseAccess('VIEW'), async (req, res: Response) => {
+router.get('/:horseId/expenses', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
+  // Only owners and admins can view expense records
+  if (req.horseAccessType !== 'ADMIN' && req.horseAccessType !== 'OWNER_EDIT') {
+    res.status(403).json({ error: 'Only horse owners can view expense records' });
+    return;
+  }
   try {
     const expenses = await prisma.expenseNote.findMany({
       where: { horseId: req.params.horseId },
