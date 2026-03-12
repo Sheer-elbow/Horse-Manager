@@ -22,19 +22,6 @@ enum MembershipType {
   APPROVED
 }
 
-enum SecurityEventType {
-  LOGIN_SUCCESS
-  LOGIN_FAILURE
-  PASSWORD_RESET_REQUESTED
-  PASSWORD_RESET_USED
-  PASSWORD_CHANGED
-  INVITE_SENT
-  INVITE_ACCEPTED
-  ROLE_CHANGED
-  USER_DELETED
-  ACCESS_DENIED
-}
-
 enum Permission {
   VIEW
   EDIT
@@ -70,12 +57,8 @@ model User {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   assignments              HorseAssignment[]
-  stableAssignments        StableAssignment[]
-  horsePriorities          HorsePriority[]
-  stableMemberships        StableMembership[]
   invitesSent              InviteToken[]
   passwordResetTokens      PasswordResetToken[]
-  securityEvents           SecurityEvent[]
   createdProgrammes        Programme[]
   sessionLogs              ActualSessionLog[]
   auditEdits               SessionAuditLog[]
@@ -123,32 +106,9 @@ model Stable {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  horses            Horse[]
-  stableAssignments StableAssignment[]
-  stableMemberships StableMembership[]
+  horses Horse[]
 
   @@map("stables")
-model SecurityEvent {
-  id        String            @id @default(uuid())
-  eventType SecurityEventType @map("event_type")
-  // userId is nullable — failed logins may not map to any real user
-  userId    String?           @map("user_id")
-  // email captured separately so failed-login probes are still searchable
-  email     String?
-  ipAddress String            @map("ip_address")
-  userAgent String?           @map("user_agent")
-  // 'success' | 'failure' | 'info'
-  outcome   String
-  // Freeform context (old/new role, invited email, etc.) — never stores secrets
-  metadata  Json?
-  createdAt DateTime          @default(now()) @map("created_at")
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([createdAt(sort: Desc)])
-  @@index([eventType])
-  @@index([ipAddress])
-  @@map("security_events")
 }
 
 // ─── Horses ──────────────────────────────────────────────────
@@ -168,7 +128,6 @@ model Horse {
 
   stable          Stable?  @relation(fields: [stableId], references: [id], onDelete: SetNull)
   assignments     HorseAssignment[]
-  priorities      HorsePriority[]
   planBlocks      PlanBlock[]
   plannedSessions PlannedSession[]
   actualSessions  ActualSessionLog[]
@@ -480,50 +439,4 @@ model ExpenseNote {
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
   @@map("expense_notes")
-}
-
-// ─── Stable Assignments (staff linked to stables) ────────────
-
-model StableAssignment {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  stableId  String   @map("stable_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stable Stable @relation(fields: [stableId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, stableId])
-  @@map("stable_assignments")
-}
-
-// ─── Horse Priorities (priority care horses for stable staff) ─
-
-model HorsePriority {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  horseId   String   @map("horse_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, horseId])
-  @@map("horse_priorities")
-}
-
-// ─── Stable Memberships (owners linked to stables) ───────────
-
-model StableMembership {
-  id        String         @id @default(uuid())
-  userId    String         @map("user_id")
-  stableId  String         @map("stable_id")
-  type      MembershipType @default(AUTO)
-  createdAt DateTime       @default(now()) @map("created_at")
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stable Stable @relation(fields: [stableId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, stableId])
-  @@map("stable_memberships")
 }

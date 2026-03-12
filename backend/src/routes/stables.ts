@@ -11,6 +11,25 @@ const stableSchema = z.object({
   address: z.string().nullable().optional(),
 });
 
+// GET /api/stables/my — stables the current user is assigned to (STABLE_LEAD)
+router.get('/my', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { userId } = req.user!;
+    const assignments = await prisma.stableAssignment.findMany({
+      where: { userId },
+      include: {
+        stable: {
+          include: { _count: { select: { horses: true, stableAssignments: true } } },
+        },
+      },
+    });
+    res.json(assignments.map((a) => a.stable));
+  } catch (err) {
+    console.error('List my stables error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/stables — list all stables (any authenticated user)
 router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
@@ -43,6 +62,50 @@ router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respo
       return;
     }
     console.error('Create stable error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/stables/:id — single stable with counts
+router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const stable = await prisma.stable.findUnique({
+      where: { id: req.params.id },
+      include: { _count: { select: { horses: true, stableAssignments: true } } },
+    });
+    if (!stable) {
+      res.status(404).json({ error: 'Stable not found' });
+      return;
+    }
+    res.json(stable);
+  } catch (err) {
+    console.error('Get stable error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/stables/:id/memberships — owners with horses in this stable
+router.get('/:id/memberships', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId, role } = req.user!;
+  // ADMIN or STABLE_LEAD of this stable
+  if (role !== 'ADMIN') {
+    const assignment = await prisma.stableAssignment.findUnique({
+      where: { userId_stableId: { userId, stableId: req.params.id } },
+    });
+    if (!assignment) {
+      res.status(403).json({ error: 'Stable Lead or Admin access required' });
+      return;
+    }
+  }
+  try {
+    const memberships = await prisma.stableMembership.findMany({
+      where: { stableId: req.params.id },
+      include: { user: { select: { id: true, email: true, name: true, role: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json(memberships);
+  } catch (err) {
+    console.error('List stable memberships error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

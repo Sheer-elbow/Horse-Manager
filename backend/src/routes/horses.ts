@@ -104,10 +104,20 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/horses (admin + owner)
-router.post('/', authenticate, requireRole('ADMIN', 'OWNER'), async (req, res: Response) => {
+router.post('/', authenticate, requireRole('ADMIN', 'OWNER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = horseSchema.parse(req.body);
     const horse = await prisma.horse.create({ data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, stableId: data.stableId ?? null, identifyingInfo: data.identifyingInfo ?? null } });
+
+    // Auto-create a StableMembership for the owner when a horse is stabled
+    if (horse.stableId && req.user!.role === 'OWNER') {
+      await prisma.stableMembership.upsert({
+        where: { userId_stableId: { userId: req.user!.userId, stableId: horse.stableId } },
+        create: { userId: req.user!.userId, stableId: horse.stableId, type: 'AUTO' },
+        update: {},
+      });
+    }
+
     res.status(201).json(horse);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -153,14 +163,24 @@ router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePe
   }
 });
 
-// PUT /api/horses/:id (admin only)
-router.put('/:id', authenticate, requireAdmin, async (req, res: Response) => {
+// PUT /api/horses/:id (admin or owner with EDIT permission)
+router.put('/:id', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
   try {
     const data = horseSchema.parse(req.body);
     const horse = await prisma.horse.update({
       where: { id: req.params.id },
       data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, stableId: data.stableId ?? null, identifyingInfo: data.identifyingInfo ?? null },
     });
+
+    // Auto-create/update StableMembership when an owner moves a horse to a stable
+    if (horse.stableId && req.user!.role === 'OWNER') {
+      await prisma.stableMembership.upsert({
+        where: { userId_stableId: { userId: req.user!.userId, stableId: horse.stableId } },
+        create: { userId: req.user!.userId, stableId: horse.stableId, type: 'AUTO' },
+        update: {},
+      });
+    }
+
     res.json(horse);
   } catch (err) {
     if (err instanceof z.ZodError) {
