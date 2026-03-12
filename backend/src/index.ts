@@ -94,6 +94,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/stables', stableRoutes);
 app.use('/api/stables/:stableId/assignments', stableAssignmentRoutes);
+app.use('/api/stables/:stableId/priorities', stableAssignmentRoutes);
 app.use('/api/horses/:horseId/priority', horsePriorityRoutes);
 
 // Health check

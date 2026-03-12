@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
-import { Horse, User } from '../types';
+import { Horse, User, Stable } from '../types';
 import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
@@ -70,6 +70,7 @@ export default function Dashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [myStableStaffCount, setMyStableStaffCount] = useState<number | null>(null);
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -85,6 +86,12 @@ export default function Dashboard() {
         if (user?.role === 'ADMIN') {
           const u = await api<User[]>('/users');
           setUsers(u);
+        }
+        if (user?.role === 'STABLE_LEAD') {
+          try {
+            const myStables = await api<{ _count?: { stableAssignments: number } }[]>('/stables/my');
+            if (myStables.length > 0) setMyStableStaffCount(myStables[0]._count?.stableAssignments ?? 0);
+          } catch { /* non-critical */ }
         }
       } catch (err) {
         console.error('Dashboard load error:', err);
@@ -166,6 +173,13 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-brand-600">{users.length}</div>
             <div className="text-xs text-gray-500 mt-0.5">Team members</div>
             <Link to="/admin/users" className="text-xs text-brand-600 hover:underline mt-1 inline-block">Manage</Link>
+          </div>
+        )}
+        {user?.role === 'STABLE_LEAD' && myStableStaffCount !== null && (
+          <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
+            <div className="text-2xl font-bold text-brand-600">{myStableStaffCount}</div>
+            <div className="text-xs text-gray-500 mt-0.5">Staff in stable</div>
+            <Link to="/stable" className="text-xs text-brand-600 hover:underline mt-1 inline-block">Manage</Link>
           </div>
         )}
         <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
