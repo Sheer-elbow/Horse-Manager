@@ -532,12 +532,13 @@ export default function HorseProfile() {
   );
   if (!horse) return null;
 
+  const canViewHealth = !isStableStaff || !!horse._isPriority;
   const allTabs: { key: Tab; label: string; visible: boolean }[] = [
     { key: 'overview', label: 'Overview', visible: true },
     { key: 'programmes', label: 'Programmes', visible: true },
-    { key: 'vet', label: 'Vet', visible: true },
-    { key: 'farrier', label: 'Farrier', visible: true },
-    { key: 'vaccinations', label: 'Vaccines', visible: true },
+    { key: 'vet', label: 'Vet', visible: canViewHealth },
+    { key: 'farrier', label: 'Farrier', visible: canViewHealth },
+    { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
     { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
   ];
   const tabs = allTabs.filter((t) => t.visible);
@@ -580,8 +581,19 @@ export default function HorseProfile() {
 
       {tab === 'overview' && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Health records restricted banner for non-priority stable staff */}
+          {isStableStaff && !horse._isPriority && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Health records not available</p>
+                <p className="text-xs text-amber-600 mt-0.5">You can only view health records for horses you're assigned as priority carer for. Contact your stable lead to be assigned.</p>
+              </div>
+            </div>
+          )}
+
           {/* Health status summary */}
-          {healthSummary && (
+          {healthSummary && canViewHealth && (
             <div className="bg-white rounded-xl border p-4 sm:p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Health status</h3>
               <div className="flex flex-wrap gap-2">
