@@ -147,6 +147,9 @@ export default function Dashboard() {
     </div>
   );
 
+  const isStableStaff = user?.role === 'RIDER' || user?.role === 'GROOM';
+  const priorityHorses = isStableStaff ? horses.filter((h) => h._isPriority) : [];
+
   const isNewAdmin = user?.role === 'ADMIN' && horses.length === 0;
   const hasNoHorses = horses.length === 0;
 
@@ -180,6 +183,13 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-brand-600">{myStableStaffCount}</div>
             <div className="text-xs text-gray-500 mt-0.5">Staff in stable</div>
             <Link to="/stable" className="text-xs text-brand-600 hover:underline mt-1 inline-block">Manage</Link>
+          </div>
+        )}
+        {isStableStaff && (
+          <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
+            <div className="text-2xl font-bold text-amber-600">{priorityHorses.length}</div>
+            <div className="text-xs text-gray-500 mt-0.5">Priority horses</div>
+            <Link to="/horses" className="text-xs text-brand-600 hover:underline mt-1 inline-block">View all</Link>
           </div>
         )}
         <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
@@ -303,6 +313,32 @@ export default function Dashboard() {
                 <span className={`text-xs font-medium shrink-0 ${v.overdue ? 'text-red-600' : 'text-amber-600'}`}>
                   {formatRelativeDate(v.dueDate)}
                 </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Priority horses section for stable staff */}
+      {isStableStaff && priorityHorses.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-amber-500 text-sm">★</span>
+            <h3 className="text-base font-semibold text-gray-900">Your priority horses</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {priorityHorses.map((h) => (
+              <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border border-amber-200 p-4 hover:shadow-md transition-shadow flex items-center gap-3">
+                {h.photoUrl ? (
+                  <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-12 h-12 rounded-lg object-cover border shrink-0" fallback={<div className="w-12 h-12 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-300 text-xl shrink-0">&#x1f40e;</div>} />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-300 text-xl shrink-0">&#x1f40e;</div>
+                )}
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 truncate">{h.name}</div>
+                  {h.breed && <div className="text-xs text-gray-500 truncate">{h.breed}</div>}
+                  <div className="text-xs text-amber-600 mt-0.5 font-medium">Priority care</div>
+                </div>
               </Link>
             ))}
           </div>

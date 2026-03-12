@@ -17,6 +17,9 @@ export default function HorseList() {
   const [form, setForm] = useState({ name: '', age: '', breed: '', stableId: '', ownerNotes: '', identifyingInfo: '' });
   const [error, setError] = useState('');
   const [stableFilter, setStableFilter] = useState<string>('all');
+  const [priorityOnly, setPriorityOnly] = useState(false);
+
+  const isStableStaff = user?.role === 'RIDER' || user?.role === 'GROOM';
 
   const load = async () => {
     try {
@@ -58,11 +61,12 @@ export default function HorseList() {
     }
   };
 
-  const filteredHorses = stableFilter === 'all'
+  const filteredHorses = (stableFilter === 'all'
     ? horses
     : stableFilter === 'none'
       ? horses.filter((h) => !h.stableId)
-      : horses.filter((h) => h.stableId === stableFilter);
+      : horses.filter((h) => h.stableId === stableFilter)
+  ).filter((h) => !priorityOnly || h._isPriority);
 
   if (loading) return (
     <div>
@@ -92,7 +96,19 @@ export default function HorseList() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Horses</h2>
         <div className="flex items-center gap-3">
-          {stables.length > 0 && (
+          {isStableStaff && (
+            <button
+              onClick={() => setPriorityOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                priorityOnly
+                  ? 'bg-amber-50 border-amber-300 text-amber-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-amber-300 hover:text-amber-700'
+              }`}
+            >
+              <span>★</span> Priority only
+            </button>
+          )}
+          {stables.length > 0 && !isStableStaff && (
             <select
               value={stableFilter}
               onChange={(e) => setStableFilter(e.target.value)}
