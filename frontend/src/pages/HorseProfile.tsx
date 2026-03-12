@@ -772,8 +772,8 @@ export default function HorseProfile() {
             </div>
           )}
 
-          {/* Priority care panel — visible to stable lead and admin */}
-          {(isAdmin || user?.role === 'STABLE_LEAD') && horse?.stableId && (
+          {/* Priority care panel — visible to owner, stable lead, and admin */}
+          {(isAdmin || isOwner || user?.role === 'STABLE_LEAD') && horse?.stableId && (
             <PriorityPanel horseId={id!} />
           )}
 
@@ -871,6 +871,9 @@ export default function HorseProfile() {
               </Button>
             )}
           </div>
+          {horse._accessType === 'LEAD_VIEW' && tab !== 'expenses' && (
+            <p className="text-xs text-gray-400 mb-3 italic">Dates only — detailed notes are visible to the owner.</p>
+          )}
 
           {records.length === 0 ? (
             <p className="text-sm text-gray-500">No records yet.</p>
