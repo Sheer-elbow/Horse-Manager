@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client';
 import { Horse, User, AppliedPlan, PlanShare, Stable } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
+import { AuthenticatedImage } from '../components/AuthenticatedImage';
 import { Badge } from '../components/ui/badge';
 import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissors, Syringe, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
@@ -627,7 +628,7 @@ export default function HorseProfile() {
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
               <div className="shrink-0">
                 {horse.photoUrl ? (
-                  <img src={horse.photoUrl} alt={horse.name} className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl object-cover border" />
+                  <AuthenticatedImage src={horse.photoUrl} alt={horse.name} className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl object-cover border" fallback={<div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-gray-100 border flex items-center justify-center text-gray-300 text-4xl">&#x1f40e;</div>} />
                 ) : (
                   <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-gray-100 border flex items-center justify-center text-gray-300 text-4xl">
                     &#x1f40e;

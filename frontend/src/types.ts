@@ -236,3 +236,44 @@ export interface AuthTokens {
   refreshToken: string;
   user: User;
 }
+
+export type SecurityEventType =
+  | 'LOGIN_SUCCESS'
+  | 'LOGIN_FAILURE'
+  | 'PASSWORD_RESET_REQUESTED'
+  | 'PASSWORD_RESET_USED'
+  | 'PASSWORD_CHANGED'
+  | 'INVITE_SENT'
+  | 'INVITE_ACCEPTED'
+  | 'ROLE_CHANGED'
+  | 'USER_DELETED'
+  | 'ACCESS_DENIED';
+
+export interface SecurityEvent {
+  id: string;
+  eventType: SecurityEventType;
+  email: string | null;
+  ipAddress: string;
+  userAgent: string | null;
+  outcome: 'success' | 'failure' | 'info';
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  user: { id: string; name: string | null; email: string } | null;
+}
+
+export interface SecuritySummary {
+  loginsToday: number;
+  failedLoginsLast24h: number;
+  accountChangesLast7d: number;
+  pendingInvites: number;
+  recentAlerts: SecurityEvent[];
+  topFailingIps: { ip: string; count: number }[];
+  topFailingEmails: { email: string | null; count: number }[];
+}
+
+export interface SecurityEventsPage {
+  events: SecurityEvent[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

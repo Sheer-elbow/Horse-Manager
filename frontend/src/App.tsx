@@ -10,6 +10,7 @@ import Planner from './pages/Planner';
 import Users from './pages/Users';
 import Programmes from './pages/Programmes';
 import Stables from './pages/Stables';
+import SecurityDashboard from './pages/SecurityDashboard';
 import NotificationSettings from './pages/NotificationSettings';
 import { ReactNode } from 'react';
 
@@ -51,6 +52,7 @@ function AppRoutes() {
       <Route path="/stables" element={<ProtectedRoute><Stables /></ProtectedRoute>} />
       <Route path="/programmes" element={<ProtectedRoute><Programmes /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
+      <Route path="/admin/security" element={<ProtectedRoute adminOnly><SecurityDashboard /></ProtectedRoute>} />
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

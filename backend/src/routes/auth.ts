@@ -9,6 +9,7 @@ import { config } from '../config';
 import { authenticate } from '../middleware/auth';
 import { loginLimiter, refreshLimiter, forgotPasswordLimiter } from '../middleware/rateLimiter';
 import { sendInviteEmail, sendPasswordResetEmail } from '../services/email';
+import { logSecurityEvent } from '../services/securityLog';
 import { AuthRequest, JwtPayload } from '../types';
 import { passwordSchema } from '../lib/password';
 
@@ -35,12 +36,14 @@ router.post('/login', loginLimiter, async (req, res: Response) => {
     const body = loginSchema.parse(req.body);
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
+      void logSecurityEvent('LOGIN_FAILURE', req, { email: body.email, outcome: 'failure' });
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
     const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
     const tokens = generateTokens(payload);
+    void logSecurityEvent('LOGIN_SUCCESS', req, { userId: user.id, email: user.email, outcome: 'success' });
 
     res.json({
       ...tokens,
@@ -129,6 +132,7 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
       where: { id: user.id },
       data: { passwordHash, mustChangePassword: false },
     });
+    void logSecurityEvent('PASSWORD_CHANGED', req, { userId: user.id, email: user.email, outcome: 'success' });
 
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
@@ -188,6 +192,13 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
       console.error('Failed to send invite email:', err instanceof Error ? err.message : err);
     }
 
+    void logSecurityEvent('INVITE_SENT', req, {
+      userId: req.user!.userId,
+      email: req.user!.email,
+      outcome: 'info',
+      metadata: { invitedEmail: body.email, role: body.role },
+    });
+
     if (emailSent) {
       res.json({ message: `Invite sent to ${body.email}`, inviteUrl });
     } else {
@@ -246,6 +257,12 @@ router.post('/accept-invite', loginLimiter, async (req, res: Response) => {
       where: { id: invite.id },
       data: { usedAt: new Date() },
     });
+    void logSecurityEvent('INVITE_ACCEPTED', req, {
+      userId: user.id,
+      email: user.email,
+      outcome: 'success',
+      metadata: { name: body.name, role: invite.role },
+    });
 
     const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
     const tokens = generateTokens(payload);
@@ -290,6 +307,12 @@ router.post('/forgot-password', forgotPasswordLimiter, async (req, res: Response
 
       await prisma.passwordResetToken.create({
         data: { userId: user.id, tokenHash, expiresAt },
+      });
+
+      void logSecurityEvent('PASSWORD_RESET_REQUESTED', req, {
+        userId: user.id,
+        email: user.email,
+        outcome: 'info',
       });
 
       try {
@@ -348,6 +371,7 @@ router.post('/reset-password', loginLimiter, async (req, res: Response) => {
       }),
     ]);
 
+    void logSecurityEvent('PASSWORD_RESET_USED', req, { userId: record.userId, outcome: 'success' });
     res.json({ message: 'Password reset successfully. You can now log in.' });
   } catch (err) {
     if (err instanceof z.ZodError) {
