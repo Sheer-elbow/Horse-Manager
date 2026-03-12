@@ -2,8 +2,6 @@ import { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert } from 'lucide-react';
-import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home } from 'lucide-react';
-import { LayoutDashboard, Dog, BookOpen, Users, ShieldAlert, LogOut, Menu, X, Bell, Search } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
 
@@ -43,7 +41,14 @@ export default function Layout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const items = user?.role === 'ADMIN' ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
+  const STABLE_LEAD_ITEMS = [
+    { path: '/stable', label: 'My Stable', icon: ShieldAlert },
+  ];
+  const items = user?.role === 'ADMIN'
+    ? [...NAV_ITEMS, ...ADMIN_ITEMS]
+    : user?.role === 'STABLE_LEAD'
+      ? [...NAV_ITEMS, ...STABLE_LEAD_ITEMS]
+      : NAV_ITEMS;
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">

@@ -46,6 +46,30 @@ interface HealthRecord {
   fileName?: string | null;
 }
 
+
+function PriorityPanel({ horseId }: { horseId: string }) {
+  const [priorities, setPriorities] = useState<{ id: string; user: { id: string; name: string | null; email: string; role: string } }[]>([]);
+
+  useEffect(() => {
+    api<typeof priorities>(`/horses/${horseId}/priority`).then(setPriorities).catch(() => {});
+  }, [horseId]);
+
+  if (priorities.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl border p-4 sm:p-5">
+      <h3 className="font-semibold text-sm sm:text-base mb-3">Priority care staff</h3>
+      <div className="flex flex-wrap gap-2">
+        {priorities.map((p) => (
+          <span key={p.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            ★ {p.user.name || p.user.email}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function HorseProfile() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -734,6 +758,11 @@ export default function HorseProfile() {
                 <p className="text-sm text-gray-500">No users assigned</p>
               )}
             </div>
+          )}
+
+          {/* Priority care panel — visible to stable lead and admin */}
+          {(isAdmin || user?.role === 'STABLE_LEAD') && horse?.stableId && (
+            <PriorityPanel horseId={id!} />
           )}
 
         </div>
