@@ -56,7 +56,9 @@ const horseSchema = z.object({
 // GET /api/horses - list horses visible to user
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user!.role === 'ADMIN') {
+    const { role, userId } = req.user!;
+
+    if (role === 'ADMIN') {
       const horses = await prisma.horse.findMany({
         orderBy: { name: 'asc' },
         include: { stable: { select: { id: true, name: true } } },
@@ -65,9 +67,33 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Non-admin: only horses they're assigned to
+    // Stable staff (STABLE_LEAD, RIDER, GROOM): see all horses in assigned stables
+    if (role === 'STABLE_LEAD' || role === 'RIDER' || role === 'GROOM') {
+      const stableAssignments = await prisma.stableAssignment.findMany({
+        where: { userId },
+        select: { stableId: true },
+      });
+      const stableIds = stableAssignments.map((a) => a.stableId);
+
+      const [horses, priorities] = await Promise.all([
+        prisma.horse.findMany({
+          where: { stableId: { in: stableIds } },
+          orderBy: { name: 'asc' },
+          include: { stable: { select: { id: true, name: true } } },
+        }),
+        prisma.horsePriority.findMany({
+          where: { userId },
+          select: { horseId: true },
+        }),
+      ]);
+      const prioritySet = new Set(priorities.map((p) => p.horseId));
+      res.json(horses.map((h) => ({ ...h, _permission: 'VIEW', _isPriority: prioritySet.has(h.id) })));
+      return;
+    }
+
+    // OWNER / TRAINER: only horses explicitly assigned via HorseAssignment
     const assignments = await prisma.horseAssignment.findMany({
-      where: { userId: req.user!.userId },
+      where: { userId },
       include: { horse: { include: { stable: { select: { id: true, name: true } } } } },
     });
     res.json(assignments.map((a) => ({ ...a.horse, _permission: a.permission })));
@@ -109,7 +135,18 @@ router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePe
       res.status(404).json({ error: 'Horse not found' });
       return;
     }
-    res.json({ ...horse, _permission: req.horsePermission });
+
+    // Check if this is a priority horse for the current user (stable staff only)
+    let isPriority = false;
+    const accessType = req.horseAccessType;
+    if (accessType === 'LEAD_VIEW' || accessType === 'STAFF_VIEW') {
+      const priority = await prisma.horsePriority.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: req.params.id } },
+      });
+      isPriority = !!priority;
+    }
+
+    res.json({ ...horse, _permission: req.horsePermission, _accessType: accessType, _isPriority: isPriority });
   } catch (err) {
     console.error('Get horse error:', err);
     res.status(500).json({ error: 'Internal server error' });

@@ -144,7 +144,7 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
 // POST /api/auth/invite (admin only)
 const inviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['TRAINER', 'RIDER', 'OWNER']).default('RIDER'),
+  role: z.enum(['STABLE_LEAD', 'RIDER', 'GROOM', 'OWNER', 'TRAINER']).default('RIDER'),
 });
 
 router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => {

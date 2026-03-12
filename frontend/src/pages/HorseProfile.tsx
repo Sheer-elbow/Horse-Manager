@@ -119,6 +119,10 @@ export default function HorseProfile() {
 
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = isAdmin || horse?._permission === 'EDIT';
+  const isOwner = isAdmin || horse?._accessType === 'OWNER_EDIT';
+  const isStableStaff = horse?._accessType === 'LEAD_VIEW' || horse?._accessType === 'STAFF_VIEW';
+  const canViewExpenses = isOwner;
+  const canViewHealthFull = !isStableStaff || horse?._isPriority;
 
   const loadHorse = async () => {
     try {
@@ -503,14 +507,15 @@ export default function HorseProfile() {
   );
   if (!horse) return null;
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'programmes', label: 'Programmes' },
-    { key: 'vet', label: 'Vet' },
-    { key: 'farrier', label: 'Farrier' },
-    { key: 'vaccinations', label: 'Vaccines' },
-    { key: 'expenses', label: 'Expenses' },
+  const allTabs: { key: Tab; label: string; visible: boolean }[] = [
+    { key: 'overview', label: 'Overview', visible: true },
+    { key: 'programmes', label: 'Programmes', visible: true },
+    { key: 'vet', label: 'Vet', visible: true },
+    { key: 'farrier', label: 'Farrier', visible: true },
+    { key: 'vaccinations', label: 'Vaccines', visible: true },
+    { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
   ];
+  const tabs = allTabs.filter((t) => t.visible);
 
   return (
     <div className="overflow-hidden">
@@ -520,6 +525,11 @@ export default function HorseProfile() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate min-w-0">{horse.name}</h2>
+        {horse._isPriority && (
+          <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            Priority
+          </span>
+        )}
         <Button asChild size="sm" className="ml-auto shrink-0">
           <Link to={`/horses/${id}/planner`}>
             <Calendar className="w-4 h-4 sm:mr-2" />

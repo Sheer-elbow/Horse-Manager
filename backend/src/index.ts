@@ -21,6 +21,8 @@ import dashboardRoutes from './routes/dashboard';
 import notificationRoutes from './routes/notifications';
 import searchRoutes from './routes/search';
 import stableRoutes from './routes/stables';
+import stableAssignmentRoutes from './routes/stableAssignments';
+import horsePriorityRoutes from './routes/horsePriority';
 import { startNotificationScheduler } from './services/notification-scheduler';
 
 const app = express();
@@ -89,6 +91,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/stables', stableRoutes);
+app.use('/api/stables/:stableId/assignments', stableAssignmentRoutes);
+app.use('/api/horses/:horseId/priority', horsePriorityRoutes);
 
 // Health check
 app.get('/api/ping', (_req, res) => {

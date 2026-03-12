@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  role: 'ADMIN' | 'TRAINER' | 'RIDER' | 'OWNER';
+  role: 'ADMIN' | 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER';
   mustChangePassword: boolean;
   createdAt?: string;
   assignments?: HorseAssignment[];
@@ -40,7 +40,33 @@ export interface Horse {
   updatedAt: string;
   stable?: { id: string; name: string } | null;
   _permission?: 'VIEW' | 'EDIT';
+  _accessType?: 'ADMIN' | 'OWNER_EDIT' | 'TRAINER_VIEW' | 'LEAD_VIEW' | 'STAFF_VIEW';
+  _isPriority?: boolean;
   assignments?: HorseAssignment[];
+}
+
+export interface StableAssignment {
+  id: string;
+  userId: string;
+  stableId: string;
+  createdAt: string;
+  user?: { id: string; email: string; name: string | null; role: string };
+}
+
+export interface HorsePriority {
+  id: string;
+  userId: string;
+  horseId: string;
+  createdAt: string;
+  user?: { id: string; email: string; name: string | null; role: string };
+}
+
+export interface StableMembership {
+  id: string;
+  userId: string;
+  stableId: string;
+  type: 'AUTO' | 'REQUESTED' | 'APPROVED';
+  createdAt: string;
 }
 
 export interface Programme {
@@ -159,7 +185,7 @@ export interface AuditEntry {
 export interface InviteToken {
   id: string;
   email: string;
-  role: 'TRAINER' | 'RIDER' | 'OWNER';
+  role: 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER';
   createdAt: string;
   expiresAt: string;
   usedAt: string | null;
