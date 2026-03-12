@@ -200,6 +200,51 @@ router.delete('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAc
   } catch { res.status(404).json({ error: 'Not found' }); }
 });
 
+// ─── Dentist Visits ──────────────────────────────────────────
+
+router.get('/:horseId/dentist-visits', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
+  try {
+    if (!await checkStaffHealthAccess(req, res)) return;
+    const visits = await prisma.dentistVisit.findMany({
+      where: { horseId: req.params.horseId },
+      orderBy: { date: 'desc' },
+    });
+    res.json(req.horseAccessType === 'LEAD_VIEW' ? toHealthSummary(visits) : visits);
+  } catch (err) {
+    console.error('List dentist visits error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/:horseId/dentist-visits', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
+  try {
+    await handleFileUpload(req, res);
+    const { date, notes } = req.body;
+    if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const { fileUrl, fileName } = getFileInfo(req);
+    const visit = await prisma.dentistVisit.create({
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), notes: notes || null, fileUrl, fileName },
+    });
+    res.status(201).json(visit);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Upload error')) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    console.error('Create dentist visit error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/:horseId/dentist-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
+  try {
+    const record = await prisma.dentistVisit.findUnique({ where: { id: req.params.recordId } });
+    if (record?.fileUrl) deleteFile(record.fileUrl);
+    await prisma.dentistVisit.delete({ where: { id: req.params.recordId } });
+    res.json({ message: 'Deleted' });
+  } catch { res.status(404).json({ error: 'Not found' }); }
+});
+
 // ─── Vaccinations / Deworming ────────────────────────────────
 
 router.get('/:horseId/vaccinations', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
