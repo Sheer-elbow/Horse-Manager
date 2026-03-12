@@ -141,6 +141,7 @@ model Horse {
   workouts        Workout[]
   vetVisits       VetVisit[]
   farrierVisits   FarrierVisit[]
+  dentistVisits   DentistVisit[]
   vaccinations    VaccinationRecord[]
   expenses        ExpenseNote[]
 
@@ -412,6 +413,21 @@ model FarrierVisit {
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
   @@map("farrier_visits")
+}
+
+model DentistVisit {
+  id        String   @id @default(uuid())
+  horseId   String   @map("horse_id")
+  date      DateTime @db.Date
+  notes     String?
+  fileUrl   String?  @map("file_url")
+  fileName  String?  @map("file_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@map("dentist_visits")
 }
 
 model VaccinationRecord {

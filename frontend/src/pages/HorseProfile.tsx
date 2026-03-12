@@ -33,7 +33,7 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type Tab = 'overview' | 'vet' | 'farrier' | 'vaccinations' | 'expenses' | 'programmes';
+type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes';
 
 interface HealthRecord {
   id: string;
@@ -171,7 +171,7 @@ export default function HorseProfile() {
 
   const loadRecords = async (t: Tab) => {
     if (t === 'overview') return;
-    const endpoint = t === 'vet' ? 'vet-visits' : t === 'farrier' ? 'farrier-visits' : t;
+    const endpoint = t === 'vet' ? 'vet-visits' : t === 'farrier' ? 'farrier-visits' : t === 'dentist' ? 'dentist-visits' : t;
     const data = await api<HealthRecord[]>(`/health/${id}/${endpoint}`);
     setRecords(data);
   };
@@ -300,7 +300,7 @@ export default function HorseProfile() {
   const handleAddRecord = async (e: FormEvent) => {
     e.preventDefault();
     setRecError('');
-    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
+    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab === 'dentist' ? 'dentist-visits' : tab;
     try {
       const formData = new FormData();
       formData.append('date', recForm.date);
@@ -333,7 +333,7 @@ export default function HorseProfile() {
 
   const confirmDeleteRecord = async () => {
     if (!deleteRecordTarget) return;
-    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
+    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab === 'dentist' ? 'dentist-visits' : tab;
     await api(`/health/${id}/${endpoint}/${deleteRecordTarget.id}`, { method: 'DELETE' });
     toast.success('Record deleted');
     setDeleteRecordTarget(null);
@@ -538,6 +538,7 @@ export default function HorseProfile() {
     { key: 'programmes', label: 'Programmes', visible: true },
     { key: 'vet', label: 'Vet', visible: canViewHealth },
     { key: 'farrier', label: 'Farrier', visible: canViewHealth },
+    { key: 'dentist', label: 'Dentist', visible: canViewHealth },
     { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
     { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
   ];
@@ -864,7 +865,7 @@ export default function HorseProfile() {
       {!['overview', 'programmes'].includes(tab) && (
         <div className="bg-white rounded-xl border p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab}</h3>
+            <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab === 'dentist' ? 'Dentist visits' : tab}</h3>
             {canEdit && (
               <Button size="sm" onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '' }); setShowAddRecord(true); }}>
                 Add record
