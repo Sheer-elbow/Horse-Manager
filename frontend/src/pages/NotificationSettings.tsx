@@ -12,6 +12,7 @@ interface NotificationPrefs {
   farrierReminderDays: number | null;
   unloggedSessionAlert: boolean;
   weeklyDigest: boolean;
+  appointmentReminderDays: number | null;
 }
 
 const VACCINATION_REMINDER_OPTIONS: { label: string; value: number | null }[] = [
@@ -34,6 +35,14 @@ const FARRIER_REMINDER_OPTIONS: { label: string; value: number | null }[] = [
   { label: 'If no visit in 6 weeks', value: 42 },
   { label: 'If no visit in 8 weeks', value: 56 },
   { label: 'If no visit in 10 weeks', value: 70 },
+];
+
+const APPOINTMENT_REMINDER_OPTIONS: { label: string; value: number | null }[] = [
+  { label: 'Off', value: null },
+  { label: '1 day before', value: 1 },
+  { label: '2 days before', value: 2 },
+  { label: '3 days before', value: 3 },
+  { label: '7 days before', value: 7 },
 ];
 
 function Toggle({ enabled, onChange, disabled }: { enabled: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -121,6 +130,7 @@ export default function NotificationSettings() {
     farrierReminderDays: null,
     unloggedSessionAlert: false,
     weeklyDigest: false,
+    appointmentReminderDays: null,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -251,6 +261,29 @@ export default function NotificationSettings() {
               value={prefs.farrierReminderDays}
               options={FARRIER_REMINDER_OPTIONS}
               onChange={(v) => update({ farrierReminderDays: v })}
+              disabled={disabled}
+            />
+          </SettingRow>
+        </div>
+      </div>
+
+      {/* Appointments section */}
+      <div className="bg-white rounded-xl border mb-4">
+        <div className="px-5 pt-4 pb-2 border-b">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Appointment reminders</h3>
+        </div>
+        <div className="px-5">
+          <SettingRow
+            icon={<Calendar className="w-4 h-4" />}
+            title="Upcoming appointment reminder"
+            description="Daily email at 8am listing appointments scheduled within your chosen window."
+            disabled={disabled}
+          >
+            <SelectField
+              label="Appointment reminder"
+              value={prefs.appointmentReminderDays}
+              options={APPOINTMENT_REMINDER_OPTIONS}
+              onChange={(v) => update({ appointmentReminderDays: v })}
               disabled={disabled}
             />
           </SettingRow>

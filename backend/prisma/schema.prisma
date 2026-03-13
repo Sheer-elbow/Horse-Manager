@@ -394,6 +394,9 @@ model NotificationPreference {
   // Training: Monday morning weekly digest of the week ahead
   weeklyDigest Boolean @default(false) @map("weekly_digest")
 
+  // Appointments: reminder X days before (null = off)
+  appointmentReminderDays Int? @map("appointment_reminder_days")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

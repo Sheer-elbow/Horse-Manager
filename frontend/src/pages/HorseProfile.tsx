@@ -181,6 +181,7 @@ export default function HorseProfile() {
 
   // Health summary (for overview tab status card)
   const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
+  const [nextAppointment, setNextAppointment] = useState<Appointment | null | undefined>(undefined); // undefined = loading
 
   // Appointments
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -310,9 +311,19 @@ export default function HorseProfile() {
     } catch { /* ignore */ }
   };
 
+  const loadNextAppointment = async () => {
+    try {
+      const data = await api<Appointment[]>(`/appointments/horse/${id}?status=UPCOMING`);
+      setNextAppointment(data.length > 0 ? data[0] : null);
+    } catch {
+      setNextAppointment(null);
+    }
+  };
+
   useEffect(() => { loadHorse(); }, [id]);
   useEffect(() => { loadRecords(tab); }, [tab, id]);
   useEffect(() => { if (id) loadHealthSummary(); }, [id]);
+  useEffect(() => { if (id) loadNextAppointment(); }, [id]);
   useEffect(() => { if (tab === 'appointments') loadAppointments(); }, [tab, id]);
 
   const handleEditHorse = async (e: FormEvent) => {
@@ -908,6 +919,48 @@ export default function HorseProfile() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Next appointment panel */}
+          {nextAppointment !== undefined && (
+            <div className="bg-white rounded-xl border p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">Next appointment</h3>
+                <button
+                  onClick={() => setTab('appointments')}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  View all
+                </button>
+              </div>
+              {nextAppointment === null ? (
+                <p className="text-sm text-gray-400">No upcoming appointments.</p>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-900">{formatApptDate(nextAppointment.scheduledAt)}</span>
+                      <ApptTypeBadge
+                        type={nextAppointment.type}
+                        label={nextAppointment.type === 'OTHER' ? (nextAppointment.typeOther ?? 'Other') : undefined}
+                      />
+                    </div>
+                    {nextAppointment.practitionerName && (
+                      <p className="text-xs text-gray-500 mt-0.5">{nextAppointment.practitionerName}</p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {nextAppointment.locationAtStable ? 'At stable' : (nextAppointment.locationOther ?? 'Other location')}
+                      {nextAppointment.contactNumber && ` · ${nextAppointment.contactNumber}`}
+                    </p>
+                  </div>
+                  {daysUntil(nextAppointment.scheduledAt) <= 7 && (
+                    <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded shrink-0">
+                      {daysUntil(nextAppointment.scheduledAt) === 0 ? 'Today' : `${daysUntil(nextAppointment.scheduledAt)}d away`}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
