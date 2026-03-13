@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/badge';
 import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissors, Syringe, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import TrainingLoadChart from '../components/TrainingLoadChart';
+import DocumentVault from '../components/DocumentVault';
 import { toast } from 'sonner';
 
 interface HealthSummary {
@@ -33,7 +34,7 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes' | 'appointments';
+type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes' | 'appointments' | 'documents';
 
 interface Appointment {
   id: string;
@@ -806,6 +807,7 @@ export default function HorseProfile() {
     { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
     { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
     { key: 'appointments', label: 'Appointments', visible: canEdit },
+    { key: 'documents', label: 'Documents', visible: true },
   ];
   const tabs = allTabs.filter((t) => t.visible);
 
@@ -1318,6 +1320,11 @@ export default function HorseProfile() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Documents tab */}
+      {tab === 'documents' && id && (
+        <DocumentVault horseId={id} canEdit={canEdit} />
       )}
 
       {/* Quick-log FAB — visible when user has edit access */}

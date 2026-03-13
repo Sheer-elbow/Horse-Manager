@@ -366,3 +366,27 @@ export interface CostDashboardData {
   grandByMonth: CostMonthData[];
   horses: HorseCostSummary[];
 }
+
+// ─── Horse Documents ──────────────────────────────────────────
+
+export type DocumentCategory =
+  | 'Insurance'
+  | 'Passport & Registration'
+  | 'Competition Licences'
+  | 'Vet Records'
+  | 'Other';
+
+export interface HorseDocument {
+  id: string;
+  horseId: string;
+  name: string;
+  category: string;
+  fileUrl: string;
+  fileName: string;
+  expiresAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  uploadedBy: { id: string; name: string | null; email: string };
+  horse?: { id: string; name: string };
+}
