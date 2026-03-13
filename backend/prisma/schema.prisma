@@ -68,6 +68,7 @@ model User {
   assignedPlans            AppliedPlan[]
   sharedPlans              PlanShare[]
   notificationPreference   NotificationPreference?
+  securityEvents           SecurityEvent[]
 
   @@map("users")
 }
@@ -512,4 +513,40 @@ model StableMembership {
 
   @@unique([userId, stableId])
   @@map("stable_memberships")
+}
+
+// ─── Security Events ──────────────────────────────────────────
+
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  ROLE_CHANGED
+  USER_DELETED
+  INVITE_SENT
+  INVITE_ACCEPTED
+  TOKEN_REFRESHED
+  PASSWORD_RESET_USED
+  SUSPICIOUS_ACTIVITY
+}
+
+model SecurityEvent {
+  id         String            @id @default(uuid())
+  eventType  SecurityEventType @map("event_type")
+  userId     String?           @map("user_id")
+  email      String?
+  ipAddress  String?           @map("ip_address")
+  userAgent  String?           @map("user_agent")
+  outcome    String
+  metadata   Json?
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("security_events")
 }
