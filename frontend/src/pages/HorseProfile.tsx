@@ -33,7 +33,50 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes';
+type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes' | 'appointments';
+
+interface Appointment {
+  id: string;
+  type: 'VET' | 'FARRIER' | 'DENTIST' | 'VACCINATION' | 'OTHER';
+  typeOther: string | null;
+  scheduledAt: string;
+  practitionerName: string | null;
+  contactNumber: string | null;
+  locationAtStable: boolean;
+  locationOther: string | null;
+  notes: string | null;
+  status: 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+  reminderSent: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  horse: { id: string; name: string };
+  createdBy: { id: string; name: string | null };
+}
+
+function formatApptDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const APPT_TYPE_LABELS: Record<string, string> = {
+  VET: 'Vet', FARRIER: 'Farrier', DENTIST: 'Dentist', VACCINATION: 'Vaccination', OTHER: 'Other',
+};
+
+function ApptTypeBadge({ type, label }: { type: string; label?: string }) {
+  const classes: Record<string, string> = {
+    VET: 'bg-blue-100 text-blue-700',
+    FARRIER: 'bg-green-100 text-green-700',
+    DENTIST: 'bg-purple-100 text-purple-700',
+    VACCINATION: 'bg-amber-100 text-amber-700',
+    OTHER: 'bg-gray-100 text-gray-600',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${classes[type] ?? 'bg-gray-100 text-gray-600'}`}>
+      {label ?? APPT_TYPE_LABELS[type] ?? type}
+    </span>
+  );
+}
 
 interface HealthRecord {
   id: string;
@@ -139,6 +182,39 @@ export default function HorseProfile() {
   // Health summary (for overview tab status card)
   const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
 
+  // Appointments
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [showApptForm, setShowApptForm] = useState(false);
+  const [editingApptId, setEditingApptId] = useState<string | null>(null);
+  const [apptForm, setApptForm] = useState({
+    type: 'VET',
+    typeOther: '',
+    scheduledDate: '',
+    scheduledTime: '09:00',
+    practitionerName: '',
+    contactNumber: '',
+    locationAtStable: true,
+    locationOther: '',
+    notes: '',
+  });
+  const [apptError, setApptError] = useState('');
+  const [showCompleteAppt, setShowCompleteAppt] = useState(false);
+  const [completingAppt, setCompletingAppt] = useState<Appointment | null>(null);
+  const [completeForm, setCompleteForm] = useState({
+    notes: '',
+    vetName: '',
+    visitReason: '',
+    visitReasonOther: '',
+    farrierName: '',
+    dentistName: '',
+    name: '',
+    dueDate: '',
+    amount: '',
+    category: '',
+  });
+  const [showPastAppts, setShowPastAppts] = useState(false);
+  const [cancelApptTarget, setCancelApptTarget] = useState<Appointment | null>(null);
+
   // Quick-log FAB modal
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [quickLogForm, setQuickLogForm] = useState({
@@ -227,9 +303,17 @@ export default function HorseProfile() {
     }
   };
 
+  const loadAppointments = async () => {
+    try {
+      const data = await api<Appointment[]>(`/appointments/horse/${id}`);
+      setAppointments(data);
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => { loadHorse(); }, [id]);
   useEffect(() => { loadRecords(tab); }, [tab, id]);
   useEffect(() => { if (id) loadHealthSummary(); }, [id]);
+  useEffect(() => { if (tab === 'appointments') loadAppointments(); }, [tab, id]);
 
   const handleEditHorse = async (e: FormEvent) => {
     e.preventDefault();
@@ -537,6 +621,123 @@ export default function HorseProfile() {
     }
   };
 
+  const handleApptSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setApptError('');
+    try {
+      const scheduledAt = new Date(`${apptForm.scheduledDate}T${apptForm.scheduledTime}`).toISOString();
+      const body: Record<string, unknown> = {
+        type: apptForm.type,
+        scheduledAt,
+        practitionerName: apptForm.practitionerName || null,
+        contactNumber: apptForm.contactNumber || null,
+        locationAtStable: apptForm.locationAtStable,
+        locationOther: apptForm.locationAtStable ? null : (apptForm.locationOther || null),
+        notes: apptForm.notes || null,
+      };
+      if (apptForm.type === 'OTHER') body.typeOther = apptForm.typeOther || null;
+      if (editingApptId) {
+        await api(`/appointments/${editingApptId}`, { method: 'PUT', body: JSON.stringify(body) });
+        toast.success('Appointment updated');
+      } else {
+        await api(`/appointments/horse/${id}`, { method: 'POST', body: JSON.stringify(body) });
+        toast.success('Appointment added');
+      }
+      setShowApptForm(false);
+      setEditingApptId(null);
+      loadAppointments();
+    } catch (err: unknown) {
+      setApptError(err instanceof Error ? err.message : 'Failed to save appointment');
+    }
+  };
+
+  const openEditAppt = (appt: Appointment) => {
+    const d = new Date(appt.scheduledAt);
+    setEditingApptId(appt.id);
+    setApptForm({
+      type: appt.type,
+      typeOther: appt.typeOther || '',
+      scheduledDate: d.toISOString().split('T')[0],
+      scheduledTime: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      practitionerName: appt.practitionerName || '',
+      contactNumber: appt.contactNumber || '',
+      locationAtStable: appt.locationAtStable,
+      locationOther: appt.locationOther || '',
+      notes: appt.notes || '',
+    });
+    setApptError('');
+    setShowApptForm(true);
+  };
+
+  const openCompleteAppt = (appt: Appointment) => {
+    setCompletingAppt(appt);
+    setCompleteForm({
+      notes: appt.notes || '',
+      vetName: appt.practitionerName || '',
+      visitReason: '',
+      visitReasonOther: '',
+      farrierName: appt.practitionerName || '',
+      dentistName: appt.practitionerName || '',
+      name: appt.typeOther || '',
+      dueDate: '',
+      amount: '',
+      category: appt.typeOther || '',
+    });
+    setShowCompleteAppt(true);
+  };
+
+  const handleCompleteAppt = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!completingAppt) return;
+    try {
+      const body: Record<string, unknown> = { notes: completeForm.notes || null };
+      if (completingAppt.type === 'VET') {
+        body.vetName = completeForm.vetName || null;
+        const reason = completeForm.visitReason === 'Other' ? completeForm.visitReasonOther : completeForm.visitReason;
+        body.visitReason = reason || null;
+      }
+      if (completingAppt.type === 'FARRIER') body.farrierName = completeForm.farrierName || null;
+      if (completingAppt.type === 'DENTIST') body.dentistName = completeForm.dentistName || null;
+      if (completingAppt.type === 'VACCINATION') {
+        body.name = completeForm.name || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
+      if (completingAppt.type === 'OTHER') {
+        body.category = completeForm.category || null;
+        body.amount = completeForm.amount ? parseFloat(completeForm.amount) : null;
+      }
+      await api(`/appointments/${completingAppt.id}/complete`, { method: 'POST', body: JSON.stringify(body) });
+      toast.success('Appointment completed and record saved');
+      setShowCompleteAppt(false);
+      setCompletingAppt(null);
+      loadAppointments();
+      // Reload the matching health record tab if currently viewing it
+      const typeToTab: Record<string, Tab> = {
+        VET: 'vet', FARRIER: 'farrier', DENTIST: 'dentist', VACCINATION: 'vaccinations', OTHER: 'expenses',
+      };
+      const matchTab = typeToTab[completingAppt.type];
+      if (matchTab && tab === matchTab) loadRecords(tab);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to complete appointment');
+    }
+  };
+
+  const handleCancelAppt = async (appt: Appointment) => {
+    setCancelApptTarget(appt);
+  };
+
+  const confirmCancelAppt = async () => {
+    if (!cancelApptTarget) return;
+    try {
+      await api(`/appointments/${cancelApptTarget.id}/cancel`, { method: 'POST' });
+      toast.success('Appointment cancelled');
+      setCancelApptTarget(null);
+      loadAppointments();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel appointment');
+    }
+  };
+
   const formatDateRange = (plan: AppliedPlan): string => {
     const start = new Date(plan.startDate);
     const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -593,6 +794,7 @@ export default function HorseProfile() {
     { key: 'dentist', label: 'Dentist', visible: canViewHealth },
     { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
     { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
+    { key: 'appointments', label: 'Appointments', visible: canEdit },
   ];
   const tabs = allTabs.filter((t) => t.visible);
 
@@ -913,8 +1115,101 @@ export default function HorseProfile() {
         </div>
       )}
 
+      {/* Appointments tab */}
+      {tab === 'appointments' && (() => {
+        const upcoming = appointments
+          .filter((a) => a.status === 'UPCOMING')
+          .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+        const past = appointments
+          .filter((a) => a.status !== 'UPCOMING')
+          .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+
+        const ApptRow = ({ appt }: { appt: Appointment }) => (
+          <div className="flex items-start justify-between gap-2 py-3 border-b last:border-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-gray-900">{formatApptDate(appt.scheduledAt)}</span>
+                <ApptTypeBadge type={appt.type} label={appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : undefined} />
+                {appt.status !== 'UPCOMING' && (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${appt.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {appt.status === 'COMPLETED' ? 'Done' : 'Cancelled'}
+                  </span>
+                )}
+              </div>
+              {appt.practitionerName && (
+                <div className="text-sm text-gray-600 mt-0.5">{appt.practitionerName}</div>
+              )}
+              <div className="text-xs text-gray-400 mt-0.5">
+                {appt.locationAtStable ? (horse?.stable?.name ?? 'At stable') : (appt.locationOther ?? 'Other location')}
+              </div>
+              {appt.notes && (
+                <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{appt.notes}</div>
+              )}
+            </div>
+            {canEdit && (
+              <div className="flex items-center gap-1 shrink-0">
+                {appt.status === 'UPCOMING' && (
+                  <Button variant="link" size="sm" className="text-green-600 hover:text-green-700 text-xs" onClick={() => openCompleteAppt(appt)}>
+                    Mark done
+                  </Button>
+                )}
+                <Button variant="link" size="sm" className="text-gray-500 hover:text-gray-700 text-xs" onClick={() => openEditAppt(appt)}>
+                  Edit
+                </Button>
+                {appt.status === 'UPCOMING' && (
+                  <Button variant="link" size="sm" className="text-red-500 hover:text-red-600 text-xs" onClick={() => handleCancelAppt(appt)}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+        return (
+          <div className="bg-white rounded-xl border p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Appointments</h3>
+              {canEdit && (
+                <Button size="sm" onClick={() => {
+                  setEditingApptId(null);
+                  setApptForm({ type: 'VET', typeOther: '', scheduledDate: '', scheduledTime: '09:00', practitionerName: '', contactNumber: '', locationAtStable: true, locationOther: '', notes: '' });
+                  setApptError('');
+                  setShowApptForm(true);
+                }}>
+                  Add appointment
+                </Button>
+              )}
+            </div>
+
+            {/* Upcoming */}
+            <div className="mb-4">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Upcoming</h4>
+              {upcoming.length === 0 ? (
+                <p className="text-sm text-gray-500">No upcoming appointments.</p>
+              ) : (
+                <div>{upcoming.map((a) => <ApptRow key={a.id} appt={a} />)}</div>
+              )}
+            </div>
+
+            {/* Past */}
+            <div>
+              <button
+                className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 hover:text-gray-700"
+                onClick={() => setShowPastAppts((v) => !v)}
+              >
+                {showPastAppts ? '▾' : '▸'} Past ({past.length})
+              </button>
+              {showPastAppts && past.length > 0 && (
+                <div>{past.map((a) => <ApptRow key={a.id} appt={a} />)}</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Health / expense records tab */}
-      {!['overview', 'programmes'].includes(tab) && (
+      {!['overview', 'programmes', 'appointments'].includes(tab) && (
         <div className="bg-white rounded-xl border p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab === 'dentist' ? 'Dentist visits' : tab}</h3>

@@ -44,6 +44,20 @@ enum AppliedPlanStatus {
   CANCELLED
 }
 
+enum AppointmentType {
+  VET
+  FARRIER
+  DENTIST
+  VACCINATION
+  OTHER
+}
+
+enum AppointmentStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
 // ─── Users & Auth ────────────────────────────────────────────
 
 model User {
@@ -69,6 +83,7 @@ model User {
   sharedPlans              PlanShare[]
   notificationPreference   NotificationPreference?
   securityEvents           SecurityEvent[]
+  appointments             Appointment[]
 
   @@map("users")
 }
@@ -145,6 +160,7 @@ model Horse {
   dentistVisits   DentistVisit[]
   vaccinations    VaccinationRecord[]
   expenses        ExpenseNote[]
+  appointments    Appointment[]
 
   @@map("horses")
 }
@@ -549,4 +565,32 @@ model SecurityEvent {
   @@index([eventType, createdAt])
   @@index([ipAddress, createdAt])
   @@map("security_events")
+}
+
+// ─── Appointments ─────────────────────────────────────────────
+
+model Appointment {
+  id               String            @id @default(uuid())
+  horseId          String            @map("horse_id")
+  createdById      String            @map("created_by_id")
+  type             AppointmentType
+  typeOther        String?           @map("type_other")
+  scheduledAt      DateTime          @map("scheduled_at")
+  practitionerName String?           @map("practitioner_name")
+  contactNumber    String?           @map("contact_number")
+  locationAtStable Boolean           @default(true) @map("location_at_stable")
+  locationOther    String?           @map("location_other")
+  notes            String?
+  status           AppointmentStatus @default(UPCOMING)
+  reminderSent     Boolean           @default(false) @map("reminder_sent")
+  completedAt      DateTime?         @map("completed_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  horse     Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id])
+
+  @@index([horseId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@map("appointments")
 }
