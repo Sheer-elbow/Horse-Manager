@@ -7,6 +7,42 @@ import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity 
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
 
+interface Appointment {
+  id: string;
+  type: 'VET' | 'FARRIER' | 'DENTIST' | 'VACCINATION' | 'OTHER';
+  typeOther: string | null;
+  scheduledAt: string;
+  practitionerName: string | null;
+  contactNumber: string | null;
+  locationAtStable: boolean;
+  locationOther: string | null;
+  notes: string | null;
+  status: 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+  reminderSent: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  horse: { id: string; name: string };
+  createdBy: { id: string; name: string | null };
+}
+
+function formatApptDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const APPT_TYPE_BADGE: Record<string, string> = {
+  VET: 'bg-blue-100 text-blue-700',
+  FARRIER: 'bg-green-100 text-green-700',
+  DENTIST: 'bg-purple-100 text-purple-700',
+  VACCINATION: 'bg-amber-100 text-amber-700',
+  OTHER: 'bg-gray-100 text-gray-600',
+};
+
+const APPT_TYPE_LABELS: Record<string, string> = {
+  VET: 'Vet', FARRIER: 'Farrier', DENTIST: 'Dentist', VACCINATION: 'Vaccination', OTHER: 'Other',
+};
+
 interface TodayWorkout {
   id: string;
   horseId: string;
@@ -71,6 +107,7 @@ export default function Dashboard() {
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [myStableStaffCount, setMyStableStaffCount] = useState<number | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -83,6 +120,10 @@ export default function Dashboard() {
         ]);
         setHorses(h);
         setDashData(dash);
+        try {
+          const apptsData = await api<Appointment[]>('/appointments/upcoming');
+          setAppointments(apptsData);
+        } catch { /* non-critical */ }
         if (user?.role === 'ADMIN') {
           const u = await api<User[]>('/users');
           setUsers(u);
@@ -344,6 +385,43 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Upcoming appointments */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-brand-600" />
+            <h3 className="text-base font-semibold text-gray-900">Upcoming appointments</h3>
+          </div>
+          <Link to="/appointments" className="text-sm text-brand-600 hover:underline">View all</Link>
+        </div>
+        <div className="bg-white rounded-xl border divide-y">
+          {appointments.length === 0 ? (
+            <div className="p-4 text-center text-sm text-gray-500">No upcoming appointments.</div>
+          ) : (
+            appointments.slice(0, 5).map((appt) => (
+              <Link
+                key={appt.id}
+                to={`/horses/${appt.horse.id}`}
+                className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900">{formatApptDate(appt.scheduledAt)}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${APPT_TYPE_BADGE[appt.type] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : APPT_TYPE_LABELS[appt.type]}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 truncate mt-0.5">
+                    <span className="font-medium">{appt.horse.name}</span>
+                    {appt.practitionerName && <span className="text-gray-400"> · {appt.practitionerName}</span>}
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Two-column bottom section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
