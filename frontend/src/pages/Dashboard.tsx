@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Horse, User, Stable } from '../types';
-import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
+import { listExpiringDocuments } from '../api/documents';
+import type { HorseDocument } from '../types';
 
 interface Appointment {
   id: string;
@@ -108,6 +110,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [myStableStaffCount, setMyStableStaffCount] = useState<number | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [expiringDocs, setExpiringDocs] = useState<HorseDocument[]>([]);
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -123,6 +126,10 @@ export default function Dashboard() {
         try {
           const apptsData = await api<Appointment[]>('/appointments/upcoming');
           setAppointments(apptsData);
+        } catch { /* non-critical */ }
+        try {
+          const docs = await listExpiringDocuments();
+          setExpiringDocs(docs);
         } catch { /* non-critical */ }
         if (user?.role === 'ADMIN') {
           const u = await api<User[]>('/users');
@@ -356,6 +363,44 @@ export default function Dashboard() {
                 </span>
               </Link>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Expiring documents */}
+      {expiringDocs.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="w-4 h-4 text-amber-500" />
+            <h3 className="text-base font-semibold text-gray-900">Documents expiring soon</h3>
+          </div>
+          <div className="space-y-2">
+            {expiringDocs.map((doc) => {
+              const days = Math.ceil(
+                (new Date(doc.expiresAt!).getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)
+              );
+              const overdue = days < 0;
+              const date = new Date(doc.expiresAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+              return (
+                <Link
+                  key={doc.id}
+                  to={`/horses/${doc.horse?.id}`}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-colors hover:shadow-sm ${
+                    overdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                  }`}
+                >
+                  <AlertTriangle className={`w-4 h-4 shrink-0 ${overdue ? 'text-red-500' : 'text-amber-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-gray-900 text-sm">{doc.horse?.name}</span>
+                    <span className="text-gray-500 text-sm"> — {doc.name}</span>
+                    <div className="text-xs text-gray-400 mt-0.5">{doc.category}</div>
+                  </div>
+                  <span className={`text-xs font-medium shrink-0 ${overdue ? 'text-red-600' : 'text-amber-600'}`}>
+                    {overdue ? `Expired ${date}` : days === 0 ? 'Expires today' : `Expires ${date}`}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}

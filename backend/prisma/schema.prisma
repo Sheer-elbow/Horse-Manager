@@ -99,6 +99,7 @@ model User {
   ownedInvoiceSplits           InvoiceSplit[]            @relation("InvoiceSplitOwner")
   createdRecurringInvoices     RecurringInvoice[]        @relation("RecurringInvoiceCreator")
   ownedRecurringInvoiceSplits  RecurringInvoiceSplit[]   @relation("RecurringInvoiceSplitOwner")
+  uploadedDocuments            HorseDocument[]           @relation("DocumentUploader")
 
   @@map("users")
 }
@@ -180,6 +181,7 @@ model Horse {
   appointments              Appointment[]
   invoiceSplits             InvoiceSplit[]
   recurringInvoiceSplits    RecurringInvoiceSplit[]
+  documents                 HorseDocument[]
 
   @@map("horses")
 }
@@ -702,4 +704,27 @@ model RecurringInvoiceSplit {
   owner            User?            @relation("RecurringInvoiceSplitOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@map("recurring_invoice_splits")
+}
+
+// ─── Horse Documents ──────────────────────────────────────────
+
+model HorseDocument {
+  id           String    @id @default(uuid())
+  horseId      String    @map("horse_id")
+  uploadedById String    @map("uploaded_by_id")
+  name         String
+  category     String    @default("Other")
+  fileUrl      String    @map("file_url")
+  fileName     String    @map("file_name")
+  expiresAt    DateTime? @db.Date @map("expires_at")
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  horse      Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([horseId, category])
+  @@index([expiresAt])
+  @@map("horse_documents")
 }
