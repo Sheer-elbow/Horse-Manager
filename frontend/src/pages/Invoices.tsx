@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listInvoices, deleteInvoice, updateInvoiceStatus } from '../api/invoices';
-import type { Invoice, InvoiceStatus } from '../types';
+import {
+  listInvoices, deleteInvoice, updateInvoiceStatus,
+  listRecurringInvoices, toggleRecurringInvoice, deleteRecurringInvoice,
+} from '../api/invoices';
+import type { Invoice, InvoiceStatus, RecurringInvoice } from '../types';
 import { Button } from '../components/ui/button';
 import Modal from '../components/Modal';
 import InvoiceForm from '../components/InvoiceForm';
 import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
-import { Plus, Receipt, Trash2, Pencil, FileText, ExternalLink, Filter, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { Plus, Receipt, Trash2, Pencil, FileText, Filter, CheckCircle2, Circle, Clock, RefreshCw, Pause, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAccessToken } from '../api/client';
 
@@ -50,16 +53,25 @@ export default function Invoices() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
 
+  // Recurring
+  const [recurring, setRecurring] = useState<RecurringInvoice[]>([]);
+  const [showRecurring, setShowRecurring] = useState(false);
+  const [confirmDeleteRecurringId, setConfirmDeleteRecurringId] = useState<string | null>(null);
+
   const canManage = user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'STABLE_LEAD';
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await listInvoices({
-        status: filterStatus === 'ALL' ? undefined : filterStatus,
-        category: filterCategory || undefined,
-      });
+      const [data, recData] = await Promise.all([
+        listInvoices({
+          status: filterStatus === 'ALL' ? undefined : filterStatus,
+          category: filterCategory || undefined,
+        }),
+        listRecurringInvoices(),
+      ]);
       setInvoices(data);
+      setRecurring(recData);
     } catch {
       toast.error('Failed to load invoices');
     } finally {
@@ -69,10 +81,31 @@ export default function Invoices() {
 
   useEffect(() => { load(); }, [filterStatus, filterCategory]);
 
-  const handleSaved = (invoice: Invoice) => {
+  const handleSaved = () => {
     setShowForm(false);
     setEditingInvoice(null);
     load();
+  };
+
+  const handleToggleRecurring = async (id: string) => {
+    try {
+      const updated = await toggleRecurringInvoice(id);
+      setRecurring((prev) => prev.map((r) => r.id === id ? updated : r));
+      toast.success(updated.active ? 'Recurring invoice resumed' : 'Recurring invoice paused');
+    } catch {
+      toast.error('Failed to update recurring invoice');
+    }
+  };
+
+  const handleDeleteRecurring = async (id: string) => {
+    try {
+      await deleteRecurringInvoice(id);
+      setRecurring((prev) => prev.filter((r) => r.id !== id));
+      setConfirmDeleteRecurringId(null);
+      toast.success('Recurring invoice deleted');
+    } catch {
+      toast.error('Failed to delete recurring invoice');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -309,11 +342,12 @@ export default function Invoices() {
         <InvoiceForm
           initialInvoice={editingInvoice}
           onSaved={handleSaved}
+          onRecurringSaved={load}
           onCancel={() => { setShowForm(false); setEditingInvoice(null); }}
         />
       </Modal>
 
-      {/* Delete confirm */}
+      {/* Delete invoice confirm */}
       <Modal
         open={!!confirmDeleteId}
         onClose={() => setConfirmDeleteId(null)}
@@ -323,6 +357,73 @@ export default function Invoices() {
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
           <Button variant="destructive" onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}>Delete</Button>
+        </div>
+      </Modal>
+
+      {/* Recurring invoices panel */}
+      {canManage && recurring.length > 0 && (
+        <div className="border-t border-gray-200 pt-6">
+          <button
+            onClick={() => setShowRecurring((p) => !p)}
+            className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-gray-900 mb-3"
+          >
+            <RefreshCw className="w-4 h-4 text-gray-500" />
+            Recurring Schedules ({recurring.length})
+            <span className="text-xs text-gray-400 font-normal ml-1">{showRecurring ? '▲ hide' : '▼ show'}</span>
+          </button>
+
+          {showRecurring && (
+            <div className="space-y-2">
+              {recurring.map((rec) => (
+                <div key={rec.id} className={`bg-white rounded-xl border px-4 py-3 flex items-center gap-3 ${rec.active ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
+                  <RefreshCw className={`w-4 h-4 shrink-0 ${rec.active ? 'text-brand-500' : 'text-gray-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-gray-900 text-sm">{rec.category}</span>
+                      {rec.supplier && <span className="text-xs text-gray-500">· {rec.supplier}</span>}
+                      <span className="text-xs font-semibold text-gray-900">£{parseFloat(rec.totalAmount).toFixed(2)}/mo</span>
+                      {!rec.active && <span className="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-500">Paused</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Day {rec.dayOfMonth} each month
+                      {rec.endDate ? ` · ends ${new Date(rec.endDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : ' · no end date'}
+                      {' · '}
+                      {rec.splits.map((s) => s.horse.name).join(', ')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleToggleRecurring(rec.id)}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                      title={rec.active ? 'Pause' : 'Resume'}
+                    >
+                      {rec.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteRecurringId(rec.id)}
+                      className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors text-gray-500"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Delete recurring confirm */}
+      <Modal
+        open={!!confirmDeleteRecurringId}
+        onClose={() => setConfirmDeleteRecurringId(null)}
+        title="Delete Recurring Schedule"
+      >
+        <p className="text-sm text-gray-600 mb-2">Are you sure you want to delete this recurring schedule?</p>
+        <p className="text-sm text-gray-500 mb-4">Past invoices already generated will be kept. Only the schedule will be removed.</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setConfirmDeleteRecurringId(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={() => confirmDeleteRecurringId && handleDeleteRecurring(confirmDeleteRecurringId)}>Delete Schedule</Button>
         </div>
       </Modal>
     </div>

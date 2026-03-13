@@ -95,8 +95,10 @@ model User {
   notificationPreference   NotificationPreference?
   securityEvents           SecurityEvent[]
   appointments             Appointment[]
-  createdInvoices          Invoice[]            @relation("InvoiceCreator")
-  ownedInvoiceSplits       InvoiceSplit[]       @relation("InvoiceSplitOwner")
+  createdInvoices              Invoice[]                @relation("InvoiceCreator")
+  ownedInvoiceSplits           InvoiceSplit[]            @relation("InvoiceSplitOwner")
+  createdRecurringInvoices     RecurringInvoice[]        @relation("RecurringInvoiceCreator")
+  ownedRecurringInvoiceSplits  RecurringInvoiceSplit[]   @relation("RecurringInvoiceSplitOwner")
 
   @@map("users")
 }
@@ -138,10 +140,11 @@ model Stable {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  horses            Horse[]
-  stableAssignments StableAssignment[]
-  stableMemberships StableMembership[]
-  invoices          Invoice[]
+  horses              Horse[]
+  stableAssignments   StableAssignment[]
+  stableMemberships   StableMembership[]
+  invoices            Invoice[]
+  recurringInvoices   RecurringInvoice[]
 
   @@map("stables")
 }
@@ -173,9 +176,10 @@ model Horse {
   farrierVisits   FarrierVisit[]
   dentistVisits   DentistVisit[]
   vaccinations    VaccinationRecord[]
-  expenses        ExpenseNote[]
-  appointments    Appointment[]
-  invoiceSplits   InvoiceSplit[]
+  expenses                  ExpenseNote[]
+  appointments              Appointment[]
+  invoiceSplits             InvoiceSplit[]
+  recurringInvoiceSplits    RecurringInvoiceSplit[]
 
   @@map("horses")
 }
@@ -616,24 +620,26 @@ model Appointment {
 // ─── Invoices & Cost Splitting ────────────────────────────────
 
 model Invoice {
-  id          String        @id @default(uuid())
-  type        InvoiceType   @default(OWNER)
-  createdById String        @map("created_by_id")
-  stableId    String?       @map("stable_id")
-  supplier    String?
-  category    String
-  date        DateTime      @db.Date
-  totalAmount Decimal       @db.Decimal(10, 2) @map("total_amount")
-  notes       String?
-  fileUrl     String?       @map("file_url")
-  fileName    String?       @map("file_name")
-  status      InvoiceStatus @default(DRAFT)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id                 String        @id @default(uuid())
+  type               InvoiceType   @default(OWNER)
+  createdById        String        @map("created_by_id")
+  stableId           String?       @map("stable_id")
+  recurringInvoiceId String?       @map("recurring_invoice_id")
+  supplier           String?
+  category           String
+  date               DateTime      @db.Date
+  totalAmount        Decimal       @db.Decimal(10, 2) @map("total_amount")
+  notes              String?
+  fileUrl            String?       @map("file_url")
+  fileName           String?       @map("file_name")
+  status             InvoiceStatus @default(DRAFT)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  createdBy User          @relation("InvoiceCreator", fields: [createdById], references: [id])
-  stable    Stable?       @relation(fields: [stableId], references: [id], onDelete: SetNull)
-  splits    InvoiceSplit[]
+  createdBy        User              @relation("InvoiceCreator", fields: [createdById], references: [id])
+  stable           Stable?           @relation(fields: [stableId], references: [id], onDelete: SetNull)
+  recurringInvoice RecurringInvoice? @relation(fields: [recurringInvoiceId], references: [id], onDelete: SetNull)
+  splits           InvoiceSplit[]
 
   @@index([createdById, date])
   @@index([stableId, date])
@@ -653,4 +659,47 @@ model InvoiceSplit {
   owner   User?   @relation("InvoiceSplitOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@map("invoice_splits")
+}
+
+// ─── Recurring Invoices ───────────────────────────────────────
+
+model RecurringInvoice {
+  id                String      @id @default(uuid())
+  type              InvoiceType @default(OWNER)
+  createdById       String      @map("created_by_id")
+  stableId          String?     @map("stable_id")
+  supplier          String?
+  category          String
+  totalAmount       Decimal     @db.Decimal(10, 2) @map("total_amount")
+  notes             String?
+  active            Boolean     @default(true)
+  dayOfMonth        Int         @default(1) @map("day_of_month")
+  startDate         DateTime    @db.Date @map("start_date")
+  endDate           DateTime?   @db.Date @map("end_date")
+  lastGeneratedDate DateTime?   @db.Date @map("last_generated_date")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  createdBy User                   @relation("RecurringInvoiceCreator", fields: [createdById], references: [id])
+  stable    Stable?                @relation(fields: [stableId], references: [id], onDelete: SetNull)
+  splits    RecurringInvoiceSplit[]
+  invoices  Invoice[]
+
+  @@index([createdById, active])
+  @@map("recurring_invoices")
+}
+
+model RecurringInvoiceSplit {
+  id                 String   @id @default(uuid())
+  recurringInvoiceId String   @map("recurring_invoice_id")
+  horseId            String   @map("horse_id")
+  ownerId            String?  @map("owner_id")
+  amount             Decimal  @db.Decimal(10, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  recurringInvoice RecurringInvoice @relation(fields: [recurringInvoiceId], references: [id], onDelete: Cascade)
+  horse            Horse            @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  owner            User?            @relation("RecurringInvoiceSplitOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@map("recurring_invoice_splits")
 }

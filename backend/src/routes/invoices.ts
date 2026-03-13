@@ -83,6 +83,35 @@ function getFileInfo(req: Request): { fileUrl: string | null; fileName: string |
 
 // ─── Selects ──────────────────────────────────────────────────
 
+const RECURRING_SELECT = {
+  id: true,
+  type: true,
+  supplier: true,
+  category: true,
+  totalAmount: true,
+  notes: true,
+  active: true,
+  dayOfMonth: true,
+  startDate: true,
+  endDate: true,
+  lastGeneratedDate: true,
+  stableId: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: { select: { id: true, name: true, email: true } },
+  stable: { select: { id: true, name: true } },
+  splits: {
+    select: {
+      id: true,
+      horseId: true,
+      ownerId: true,
+      amount: true,
+      horse: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true, email: true } },
+    },
+  },
+} as const;
+
 const INVOICE_SELECT = {
   id: true,
   type: true,
@@ -95,6 +124,7 @@ const INVOICE_SELECT = {
   fileName: true,
   status: true,
   stableId: true,
+  recurringInvoiceId: true,
   createdAt: true,
   updatedAt: true,
   createdBy: { select: { id: true, name: true, email: true } },
@@ -189,6 +219,11 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
         ...(from ? { gte: new Date(from as string) } : {}),
         ...(to ? { lte: new Date(to as string) } : {}),
       };
+    }
+
+    // Auto-generate any overdue recurring invoices before returning the list
+    try { await generateDueRecurringInvoices(userId, user.role); } catch (e) {
+      console.error('Recurring invoice generation error:', e);
     }
 
     const invoices = await db.invoice.findMany({
@@ -375,6 +410,224 @@ router.get('/costs/summary', authenticate, async (req: AuthRequest, res: Respons
   } catch (err) {
     console.error('Cost summary error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Recurring invoice generation ────────────────────────────
+
+function nextDueDate(dayOfMonth: number, afterDate: Date): Date {
+  const next = new Date(afterDate.getFullYear(), afterDate.getMonth() + 1, 1);
+  const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(dayOfMonth, maxDay));
+  return next;
+}
+
+function firstDueDate(dayOfMonth: number, startDate: Date): Date {
+  const d = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(dayOfMonth, maxDay));
+  // If the computed day is before startDate, use the following month
+  if (d < startDate) {
+    return nextDueDate(dayOfMonth, startDate);
+  }
+  return d;
+}
+
+async function generateDueRecurringInvoices(userId: string, role: string): Promise<void> {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+
+  const whereCondition: Record<string, unknown> = { active: true };
+  if (role !== 'ADMIN') {
+    // Only process recurring invoices the user created (or their stable's)
+    whereCondition.createdById = userId;
+  }
+
+  const recurring = await db.recurringInvoice.findMany({
+    where: whereCondition,
+    include: { splits: true },
+  });
+
+  for (const rec of recurring) {
+    const endDate = rec.endDate ? new Date(rec.endDate) : null;
+
+    let nextDue: Date = rec.lastGeneratedDate
+      ? nextDueDate(rec.dayOfMonth, new Date(rec.lastGeneratedDate))
+      : firstDueDate(rec.dayOfMonth, new Date(rec.startDate));
+
+    // Catch-up loop: generate all overdue invoices
+    while (nextDue <= today && (!endDate || nextDue <= endDate)) {
+      await db.invoice.create({
+        data: {
+          type: rec.type,
+          createdById: rec.createdById,
+          stableId: rec.stableId || null,
+          recurringInvoiceId: rec.id,
+          supplier: rec.supplier || null,
+          category: rec.category,
+          date: nextDue,
+          totalAmount: rec.totalAmount,
+          notes: rec.notes || null,
+          status: 'CONFIRMED',
+          splits: {
+            create: rec.splits.map((s: { horseId: string; ownerId: string | null; amount: unknown }) => ({
+              horseId: s.horseId,
+              ownerId: s.ownerId || null,
+              amount: s.amount,
+            })),
+          },
+        },
+      });
+
+      await db.recurringInvoice.update({
+        where: { id: rec.id },
+        data: { lastGeneratedDate: nextDue },
+      });
+
+      // Advance to next due date
+      nextDue = nextDueDate(rec.dayOfMonth, nextDue);
+    }
+  }
+}
+
+// ─── Recurring invoice CRUD ───────────────────────────────────
+
+// GET /api/invoices/recurring
+router.get('/recurring', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) { res.status(401).json({ error: 'User not found' }); return; }
+
+    const where: Record<string, unknown> = user.role === 'ADMIN' ? {} : { createdById: userId };
+
+    const recurring = await db.recurringInvoice.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: RECURRING_SELECT,
+    });
+    res.json(recurring);
+  } catch (err) {
+    console.error('List recurring invoices error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/invoices/recurring
+router.post('/recurring', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { type, supplier, category, totalAmount, notes, dayOfMonth, startDate, endDate, stableId, splits } = req.body;
+
+    if (!category || !totalAmount || !startDate) {
+      res.status(400).json({ error: 'category, totalAmount, and startDate are required' });
+      return;
+    }
+
+    const parsedSplits: { horseId: string; ownerId?: string; amount: number }[] =
+      typeof splits === 'string' ? JSON.parse(splits) : splits;
+
+    if (!parsedSplits || parsedSplits.length === 0) {
+      res.status(400).json({ error: 'At least one split is required' });
+      return;
+    }
+
+    const recurring = await db.recurringInvoice.create({
+      data: {
+        type: (type as InvoiceType) || 'OWNER',
+        createdById: userId,
+        stableId: stableId || null,
+        supplier: supplier || null,
+        category,
+        totalAmount: parseFloat(totalAmount),
+        notes: notes || null,
+        dayOfMonth: parseInt(dayOfMonth) || 1,
+        startDate: new Date(startDate + 'T00:00:00Z'),
+        endDate: endDate ? new Date(endDate + 'T00:00:00Z') : null,
+        splits: {
+          create: parsedSplits.map((s) => ({
+            horseId: s.horseId,
+            ownerId: s.ownerId || null,
+            amount: s.amount,
+          })),
+        },
+      },
+      select: RECURRING_SELECT,
+    });
+
+    res.status(201).json(recurring);
+  } catch (err) {
+    console.error('Create recurring invoice error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/invoices/recurring/:id
+router.put('/recurring/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await db.recurringInvoice.findUnique({ where: { id: req.params.id } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    const { supplier, category, totalAmount, notes, dayOfMonth, endDate, splits } = req.body;
+
+    const parsedSplits: { horseId: string; ownerId?: string; amount: number }[] | undefined =
+      splits ? (typeof splits === 'string' ? JSON.parse(splits) : splits) : undefined;
+
+    const splitsUpdate = parsedSplits
+      ? {
+          deleteMany: {},
+          create: parsedSplits.map((s) => ({
+            horseId: s.horseId,
+            ownerId: s.ownerId || null,
+            amount: s.amount,
+          })),
+        }
+      : undefined;
+
+    const recurring = await db.recurringInvoice.update({
+      where: { id: req.params.id },
+      data: {
+        supplier: supplier !== undefined ? supplier || null : undefined,
+        category: category || undefined,
+        totalAmount: totalAmount ? parseFloat(totalAmount) : undefined,
+        notes: notes !== undefined ? notes || null : undefined,
+        dayOfMonth: dayOfMonth ? parseInt(dayOfMonth) : undefined,
+        endDate: endDate !== undefined ? (endDate ? new Date(endDate + 'T00:00:00Z') : null) : undefined,
+        ...(splitsUpdate ? { splits: splitsUpdate } : {}),
+      },
+      select: RECURRING_SELECT,
+    });
+
+    res.json(recurring);
+  } catch (err) {
+    console.error('Update recurring invoice error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/invoices/recurring/:id/toggle — pause / resume
+router.patch('/recurring/:id/toggle', authenticate, async (_req, res: Response) => {
+  try {
+    const existing = await db.recurringInvoice.findUnique({ where: { id: _req.params.id } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    const recurring = await db.recurringInvoice.update({
+      where: { id: _req.params.id },
+      data: { active: !existing.active },
+      select: RECURRING_SELECT,
+    });
+    res.json(recurring);
+  } catch {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
+
+// DELETE /api/invoices/recurring/:id
+router.delete('/recurring/:id', authenticate, async (_req, res: Response) => {
+  try {
+    await db.recurringInvoice.delete({ where: { id: _req.params.id } });
+    res.json({ message: 'Deleted' });
+  } catch {
+    res.status(404).json({ error: 'Not found' });
   }
 });
 

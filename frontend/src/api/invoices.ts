@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { Invoice, CostDashboardData, InvoiceStatus } from '../types';
+import type { Invoice, CostDashboardData, InvoiceStatus, RecurringInvoice } from '../types';
 
 export interface CreateInvoicePayload {
   type?: 'OWNER' | 'STABLE';
@@ -82,6 +82,49 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
 export async function deleteInvoice(id: string): Promise<void> {
   await api(`/invoices/${id}`, { method: 'DELETE' });
 }
+
+// ─── Recurring invoices ───────────────────────────────────────
+
+export interface CreateRecurringPayload {
+  type?: 'OWNER' | 'STABLE';
+  supplier?: string;
+  category: string;
+  totalAmount: number;
+  notes?: string;
+  dayOfMonth: number;
+  startDate: string;
+  endDate?: string;
+  stableId?: string;
+  splits: { horseId: string; ownerId?: string; amount: number }[];
+}
+
+export async function listRecurringInvoices(): Promise<RecurringInvoice[]> {
+  return api<RecurringInvoice[]>('/invoices/recurring');
+}
+
+export async function createRecurringInvoice(payload: CreateRecurringPayload): Promise<RecurringInvoice> {
+  return api<RecurringInvoice>('/invoices/recurring', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateRecurringInvoice(id: string, payload: Partial<CreateRecurringPayload>): Promise<RecurringInvoice> {
+  return api<RecurringInvoice>(`/invoices/recurring/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function toggleRecurringInvoice(id: string): Promise<RecurringInvoice> {
+  return api<RecurringInvoice>(`/invoices/recurring/${id}/toggle`, { method: 'PATCH' });
+}
+
+export async function deleteRecurringInvoice(id: string): Promise<void> {
+  await api(`/invoices/recurring/${id}`, { method: 'DELETE' });
+}
+
+// ─── Cost summary ─────────────────────────────────────────────
 
 export async function getCostSummary(params?: {
   year?: number;
