@@ -58,6 +58,17 @@ enum AppointmentStatus {
   CANCELLED
 }
 
+enum InvoiceStatus {
+  DRAFT
+  CONFIRMED
+  PAID
+}
+
+enum InvoiceType {
+  OWNER
+  STABLE
+}
+
 // ─── Users & Auth ────────────────────────────────────────────
 
 model User {
@@ -84,6 +95,8 @@ model User {
   notificationPreference   NotificationPreference?
   securityEvents           SecurityEvent[]
   appointments             Appointment[]
+  createdInvoices          Invoice[]            @relation("InvoiceCreator")
+  ownedInvoiceSplits       InvoiceSplit[]       @relation("InvoiceSplitOwner")
 
   @@map("users")
 }
@@ -128,6 +141,7 @@ model Stable {
   horses            Horse[]
   stableAssignments StableAssignment[]
   stableMemberships StableMembership[]
+  invoices          Invoice[]
 
   @@map("stables")
 }
@@ -161,6 +175,7 @@ model Horse {
   vaccinations    VaccinationRecord[]
   expenses        ExpenseNote[]
   appointments    Appointment[]
+  invoiceSplits   InvoiceSplit[]
 
   @@map("horses")
 }
@@ -596,4 +611,46 @@ model Appointment {
   @@index([horseId, scheduledAt])
   @@index([status, scheduledAt])
   @@map("appointments")
+}
+
+// ─── Invoices & Cost Splitting ────────────────────────────────
+
+model Invoice {
+  id          String        @id @default(uuid())
+  type        InvoiceType   @default(OWNER)
+  createdById String        @map("created_by_id")
+  stableId    String?       @map("stable_id")
+  supplier    String?
+  category    String
+  date        DateTime      @db.Date
+  totalAmount Decimal       @db.Decimal(10, 2) @map("total_amount")
+  notes       String?
+  fileUrl     String?       @map("file_url")
+  fileName    String?       @map("file_name")
+  status      InvoiceStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  createdBy User          @relation("InvoiceCreator", fields: [createdById], references: [id])
+  stable    Stable?       @relation(fields: [stableId], references: [id], onDelete: SetNull)
+  splits    InvoiceSplit[]
+
+  @@index([createdById, date])
+  @@index([stableId, date])
+  @@map("invoices")
+}
+
+model InvoiceSplit {
+  id        String   @id @default(uuid())
+  invoiceId String   @map("invoice_id")
+  horseId   String   @map("horse_id")
+  ownerId   String?  @map("owner_id")
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  horse   Horse   @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  owner   User?   @relation("InvoiceSplitOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@map("invoice_splits")
 }
