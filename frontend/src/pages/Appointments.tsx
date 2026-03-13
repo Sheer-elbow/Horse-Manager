@@ -65,12 +65,12 @@ export default function Appointments() {
   // Horse selector for Add
   const [horses, setHorses] = useState<Horse[]>([]);
   const [showHorseSelector, setShowHorseSelector] = useState(false);
-  const [selectedHorseId, setSelectedHorseId] = useState('');
+  const [selectedHorseIds, setSelectedHorseIds] = useState<string[]>([]);
 
   // Add / Edit appointment form
   const [showApptForm, setShowApptForm] = useState(false);
   const [editingApptId, setEditingApptId] = useState<string | null>(null);
-  const [formHorseId, setFormHorseId] = useState('');
+  const [formHorseIds, setFormHorseIds] = useState<string[]>([]);
   const [apptForm, setApptForm] = useState({
     type: 'VET',
     typeOther: '',
@@ -129,13 +129,19 @@ export default function Appointments() {
 
   const handleAddClick = async () => {
     await loadHorses();
-    setSelectedHorseId('');
+    setSelectedHorseIds([]);
     setShowHorseSelector(true);
   };
 
+  const toggleHorseSelection = (id: string) => {
+    setSelectedHorseIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   const handleHorseSelected = () => {
-    if (!selectedHorseId) return;
-    setFormHorseId(selectedHorseId);
+    if (selectedHorseIds.length === 0) return;
+    setFormHorseIds(selectedHorseIds);
     setShowHorseSelector(false);
     setEditingApptId(null);
     setApptForm({
@@ -172,8 +178,12 @@ export default function Appointments() {
         await api(`/appointments/${editingApptId}`, { method: 'PUT', body: JSON.stringify(body) });
         toast.success('Appointment updated');
       } else {
-        await api(`/appointments/horse/${formHorseId}`, { method: 'POST', body: JSON.stringify(body) });
-        toast.success('Appointment added');
+        await Promise.all(
+          formHorseIds.map((hId) =>
+            api(`/appointments/horse/${hId}`, { method: 'POST', body: JSON.stringify(body) })
+          )
+        );
+        toast.success(formHorseIds.length > 1 ? `${formHorseIds.length} appointments added` : 'Appointment added');
       }
       setShowApptForm(false);
       setEditingApptId(null);
@@ -185,7 +195,7 @@ export default function Appointments() {
 
   const openEditAppt = (appt: Appointment) => {
     const d = new Date(appt.scheduledAt);
-    setFormHorseId(appt.horse.id);
+    setFormHorseIds([appt.horse.id]);
     setEditingApptId(appt.id);
     setApptForm({
       type: appt.type,
@@ -379,23 +389,27 @@ export default function Appointments() {
       <Modal
         open={showHorseSelector}
         onClose={() => setShowHorseSelector(false)}
-        title="Select a horse"
+        title="Select horses"
       >
         <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Horse</label>
-            <select
-              value={selectedHorseId}
-              onChange={(e) => setSelectedHorseId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2"
-            >
-              <option value="">Select a horse…</option>
-              {horses.map((h) => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-            </select>
+          <p className="text-sm text-gray-500">Select one or more horses for this appointment.</p>
+          <div className="max-h-60 overflow-y-auto border rounded-lg divide-y">
+            {horses.map((h) => (
+              <label key={h.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={selectedHorseIds.includes(h.id)}
+                  onChange={() => toggleHorseSelection(h.id)}
+                  className="rounded"
+                />
+                <span className="text-sm font-medium text-gray-800">{h.name}</span>
+              </label>
+            ))}
           </div>
-          <Button className="w-full" onClick={handleHorseSelected} disabled={!selectedHorseId}>
+          {selectedHorseIds.length > 0 && (
+            <p className="text-xs text-gray-500">{selectedHorseIds.length} horse{selectedHorseIds.length > 1 ? 's' : ''} selected</p>
+          )}
+          <Button className="w-full" onClick={handleHorseSelected} disabled={selectedHorseIds.length === 0}>
             Continue
           </Button>
         </div>
@@ -405,7 +419,7 @@ export default function Appointments() {
       <Modal
         open={showApptForm}
         onClose={() => { setShowApptForm(false); setEditingApptId(null); setApptError(''); }}
-        title={editingApptId ? 'Edit appointment' : 'Add appointment'}
+        title={editingApptId ? 'Edit appointment' : formHorseIds.length > 1 ? `Add appointment for ${formHorseIds.length} horses` : 'Add appointment'}
       >
         {apptError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{apptError}</div>}
         <form onSubmit={handleApptSubmit} className="space-y-3">
