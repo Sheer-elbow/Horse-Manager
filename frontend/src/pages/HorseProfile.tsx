@@ -108,6 +108,7 @@ export default function HorseProfile() {
   const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' });
   const recFileRef = useRef<HTMLInputElement>(null);
   const [recError, setRecError] = useState('');
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
 
   // Applied plans (programmes tab)
   const [appliedPlans, setAppliedPlans] = useState<AppliedPlan[]>([]);
@@ -340,15 +341,40 @@ export default function HorseProfile() {
       }
       const file = recFileRef.current?.files?.[0];
       if (file) formData.append('file', file);
-      await api(`/health/${id}/${endpoint}`, { method: 'POST', body: formData });
+      const url = editingRecordId
+        ? `/health/${id}/${endpoint}/${editingRecordId}`
+        : `/health/${id}/${endpoint}`;
+      await api(url, { method: editingRecordId ? 'PUT' : 'POST', body: formData });
       setShowAddRecord(false);
+      setEditingRecordId(null);
       setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' });
       if (recFileRef.current) recFileRef.current.value = '';
-      toast.success('Record added');
+      toast.success(editingRecordId ? 'Record updated' : 'Record added');
       loadRecords(tab);
     } catch (err: unknown) {
       setRecError(err instanceof Error ? err.message : 'Failed to add record');
     }
+  };
+
+  const handleEditRecord = (r: HealthRecord) => {
+    const VET_REASONS = ['Routine check-up', 'Lameness investigation', 'Colic', 'Injury / wound', 'Respiratory issue', 'Eye issue', 'Pre-purchase examination', 'Emergency'];
+    const isPreset = r.visitReason && VET_REASONS.includes(r.visitReason);
+    setEditingRecordId(r.id);
+    setRecForm({
+      date: r.date ? r.date.split('T')[0] : '',
+      notes: r.notes || '',
+      name: r.name || '',
+      dueDate: r.dueDate ? r.dueDate.split('T')[0] : '',
+      amount: r.amount != null ? String(r.amount) : '',
+      vetName: r.vetName || '',
+      visitReason: isPreset ? (r.visitReason || '') : (r.visitReason ? 'Other' : ''),
+      visitReasonOther: isPreset ? '' : (r.visitReason || ''),
+      farrierName: r.farrierName || '',
+      dentistName: r.dentistName || '',
+      category: r.category || '',
+    });
+    setRecError('');
+    setShowAddRecord(true);
   };
 
   const handleDeleteRecord = (recordId: string) => {
@@ -934,7 +960,10 @@ export default function HorseProfile() {
                     )}
                   </div>
                   {canEdit && (
-                    <Button variant="link" size="sm" className="text-red-500 hover:text-red-600 shrink-0 ml-3" onClick={() => handleDeleteRecord(r.id)}>Delete</Button>
+                    <div className="flex items-center gap-1 shrink-0 ml-3">
+                      <Button variant="link" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => handleEditRecord(r)}>Edit</Button>
+                      <Button variant="link" size="sm" className="text-red-500 hover:text-red-600" onClick={() => handleDeleteRecord(r.id)}>Delete</Button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1117,7 +1146,7 @@ export default function HorseProfile() {
       </Modal>
 
       {/* Add record modal */}
-      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setRecError(''); }} title={`Add ${tab === 'vet' ? 'vet visit' : tab === 'farrier' ? 'farrier visit' : tab === 'dentist' ? 'dentist visit' : tab + ' record'}`}>
+      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setEditingRecordId(null); setRecError(''); }} title={`${editingRecordId ? 'Edit' : 'Add'} ${tab === 'vet' ? 'vet visit' : tab === 'farrier' ? 'farrier visit' : tab === 'dentist' ? 'dentist visit' : tab + ' record'}`}>
         {recError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{recError}</div>}
         <form onSubmit={handleAddRecord} className="space-y-3">
           <div>
