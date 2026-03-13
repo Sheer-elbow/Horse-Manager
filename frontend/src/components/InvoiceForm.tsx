@@ -1,9 +1,9 @@
 import { useState, useEffect, FormEvent, useRef } from 'react';
 import { Button } from './ui/button';
 import { api } from '../api/client';
-import { createInvoice, updateInvoice } from '../api/invoices';
+import { createInvoice, updateInvoice, createRecurringInvoice } from '../api/invoices';
 import type { Horse, Invoice, InvoiceStatus, InvoiceType } from '../types';
-import { Upload, X, FileText, Image as ImageIcon, SplitSquareVertical, Equal } from 'lucide-react';
+import { Upload, X, FileText, Image as ImageIcon, SplitSquareVertical, Equal, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -22,9 +22,10 @@ interface Props {
   onSaved: (invoice: Invoice) => void;
   onCancel: () => void;
   initialInvoice?: Invoice | null;
+  onRecurringSaved?: () => void;
 }
 
-export default function InvoiceForm({ onSaved, onCancel, initialInvoice }: Props) {
+export default function InvoiceForm({ onSaved, onCancel, initialInvoice, onRecurringSaved }: Props) {
   const { user } = useAuth();
   const isStable = user?.role === 'STABLE_LEAD' || user?.role === 'ADMIN';
 
@@ -40,6 +41,11 @@ export default function InvoiceForm({ onSaved, onCancel, initialInvoice }: Props
   const [totalAmount, setTotalAmount] = useState(initialInvoice?.totalAmount ?? '');
   const [notes, setNotes] = useState(initialInvoice?.notes ?? '');
   const [status, setStatus] = useState<InvoiceStatus>(initialInvoice?.status ?? 'CONFIRMED');
+
+  // Recurring (only for new invoices, not edits)
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringDay, setRecurringDay] = useState(1);
+  const [recurringEndDate, setRecurringEndDate] = useState('');
 
   // Splits
   const [selectedHorseIds, setSelectedHorseIds] = useState<string[]>(
@@ -173,7 +179,25 @@ export default function InvoiceForm({ onSaved, onCancel, initialInvoice }: Props
         ? await updateInvoice(initialInvoice.id, payload)
         : await createInvoice(payload);
 
-      toast.success(initialInvoice ? 'Invoice updated' : 'Invoice added');
+      // If recurring is enabled, also create the template (for future months)
+      if (!initialInvoice && isRecurring) {
+        await createRecurringInvoice({
+          type,
+          supplier: supplier.trim() || undefined,
+          category: finalCategory,
+          totalAmount: total,
+          notes: notes.trim() || undefined,
+          dayOfMonth: recurringDay,
+          startDate: date,
+          endDate: recurringEndDate || undefined,
+          splits,
+        });
+        toast.success('Invoice added and recurring schedule created');
+        onRecurringSaved?.();
+      } else {
+        toast.success(initialInvoice ? 'Invoice updated' : 'Invoice added');
+      }
+
       onSaved(saved);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save invoice';
@@ -387,6 +411,59 @@ export default function InvoiceForm({ onSaved, onCancel, initialInvoice }: Props
       {selectedHorseIds.length === 1 && (
         <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-700">
           Full amount assigned to {selectedHorseNames[0]?.name}
+        </div>
+      )}
+
+      {/* Recurring toggle — only for new invoices */}
+      {!initialInvoice && (
+        <div className="rounded-lg border border-gray-200 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setIsRecurring((p) => !p)}
+            className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors ${
+              isRecurring ? 'bg-brand-50 text-brand-700' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Make this a monthly recurring cost
+            </span>
+            <div className={`w-9 h-5 rounded-full transition-colors ${isRecurring ? 'bg-brand-600' : 'bg-gray-200'}`}>
+              <div className={`w-4 h-4 bg-white rounded-full shadow m-0.5 transition-transform ${isRecurring ? 'translate-x-4' : ''}`} />
+            </div>
+          </button>
+
+          {isRecurring && (
+            <div className="px-4 pb-4 pt-1 bg-brand-50 border-t border-brand-100 space-y-3">
+              <p className="text-xs text-brand-600">
+                Today's invoice will be added, and then a new invoice will auto-generate each month.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Bill on day of month</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={28}
+                    value={recurringDay}
+                    onChange={(e) => setRecurringDay(Math.min(28, Math.max(1, parseInt(e.target.value) || 1)))}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5">Max 28 (avoids month-end issues)</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">End date (optional)</label>
+                  <input
+                    type="date"
+                    value={recurringEndDate}
+                    onChange={(e) => setRecurringEndDate(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5">Leave blank for indefinite</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

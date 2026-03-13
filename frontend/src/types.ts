@@ -305,11 +305,41 @@ export interface Invoice {
   fileName: string | null;
   status: InvoiceStatus;
   stableId: string | null;
+  recurringInvoiceId: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: { id: string; name: string | null; email: string };
   stable: { id: string; name: string } | null;
   splits: InvoiceSplit[];
+}
+
+export interface RecurringInvoiceSplit {
+  id: string;
+  horseId: string;
+  ownerId: string | null;
+  amount: string;
+  horse: { id: string; name: string };
+  owner: { id: string; name: string | null; email: string } | null;
+}
+
+export interface RecurringInvoice {
+  id: string;
+  type: InvoiceType;
+  supplier: string | null;
+  category: string;
+  totalAmount: string;
+  notes: string | null;
+  active: boolean;
+  dayOfMonth: number;
+  startDate: string;
+  endDate: string | null;
+  lastGeneratedDate: string | null;
+  stableId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; name: string | null; email: string };
+  stable: { id: string; name: string } | null;
+  splits: RecurringInvoiceSplit[];
 }
 
 export interface CostMonthData {
