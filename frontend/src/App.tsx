@@ -13,6 +13,7 @@ import Stables from './pages/Stables';
 import StableManage from './pages/StableManage';
 import SecurityDashboard from './pages/SecurityDashboard';
 import NotificationSettings from './pages/NotificationSettings';
+import Appointments from './pages/Appointments';
 import { ReactNode } from 'react';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) {
@@ -56,6 +57,7 @@ function AppRoutes() {
       <Route path="/admin/security" element={<ProtectedRoute adminOnly><SecurityDashboard /></ProtectedRoute>} />
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
       <Route path="/stable" element={<ProtectedRoute><StableManage /></ProtectedRoute>} />
+      <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

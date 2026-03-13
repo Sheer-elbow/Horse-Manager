@@ -1580,6 +1580,293 @@ export default function HorseProfile() {
         </form>
       </Modal>
 
+      {/* Add / Edit appointment modal */}
+      <Modal
+        open={showApptForm}
+        onClose={() => { setShowApptForm(false); setEditingApptId(null); setApptError(''); }}
+        title={editingApptId ? 'Edit appointment' : 'Add appointment'}
+      >
+        {apptError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{apptError}</div>}
+        <form onSubmit={handleApptSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select
+              value={apptForm.type}
+              onChange={(e) => setApptForm({ ...apptForm, type: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              required
+            >
+              <option value="VET">Vet</option>
+              <option value="FARRIER">Farrier</option>
+              <option value="DENTIST">Dentist</option>
+              <option value="VACCINATION">Vaccination</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          {apptForm.type === 'OTHER' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Appointment description</label>
+              <input
+                value={apptForm.typeOther}
+                onChange={(e) => setApptForm({ ...apptForm, typeOther: e.target.value })}
+                placeholder="Describe the appointment"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={apptForm.scheduledDate}
+                onChange={(e) => setApptForm({ ...apptForm, scheduledDate: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+              <input
+                type="time"
+                value={apptForm.scheduledTime}
+                onChange={(e) => setApptForm({ ...apptForm, scheduledTime: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Practitioner name</label>
+            <input
+              value={apptForm.practitionerName}
+              onChange={(e) => setApptForm({ ...apptForm, practitionerName: e.target.value })}
+              placeholder="e.g. Dr. Smith"
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contact number</label>
+            <input
+              value={apptForm.contactNumber}
+              onChange={(e) => setApptForm({ ...apptForm, contactNumber: e.target.value })}
+              placeholder="e.g. 07700 900000"
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="apptLocation"
+                  checked={apptForm.locationAtStable}
+                  onChange={() => setApptForm({ ...apptForm, locationAtStable: true, locationOther: '' })}
+                />
+                At stable
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="apptLocation"
+                  checked={!apptForm.locationAtStable}
+                  onChange={() => setApptForm({ ...apptForm, locationAtStable: false })}
+                />
+                Other location
+              </label>
+            </div>
+          </div>
+          {!apptForm.locationAtStable && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location details</label>
+              <input
+                value={apptForm.locationOther}
+                onChange={(e) => setApptForm({ ...apptForm, locationOther: e.target.value })}
+                placeholder="e.g. Equine clinic, 10 High Street"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea
+              value={apptForm.notes}
+              onChange={(e) => setApptForm({ ...apptForm, notes: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              rows={3}
+            />
+          </div>
+          <Button type="submit" className="w-full">
+            {editingApptId ? 'Save changes' : 'Add appointment'}
+          </Button>
+        </form>
+      </Modal>
+
+      {/* Complete appointment modal */}
+      <Modal
+        open={showCompleteAppt}
+        onClose={() => { setShowCompleteAppt(false); setCompletingAppt(null); }}
+        title="Mark appointment as done"
+      >
+        {completingAppt && (
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-900">{formatApptDate(completingAppt.scheduledAt)}</span>
+                <ApptTypeBadge type={completingAppt.type} label={completingAppt.type === 'OTHER' ? (completingAppt.typeOther ?? 'Other') : undefined} />
+              </div>
+              {completingAppt.practitionerName && (
+                <div className="text-gray-600">{completingAppt.practitionerName}</div>
+              )}
+            </div>
+
+            {/* Health record fields */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Health record details</h4>
+              <form onSubmit={handleCompleteAppt} className="space-y-3">
+                {completingAppt.type === 'VET' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Vet / Practice</label>
+                      <input
+                        value={completeForm.vetName}
+                        onChange={(e) => setCompleteForm({ ...completeForm, vetName: e.target.value })}
+                        placeholder="e.g. Dr. Smith – ABC Veterinary"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reason for visit</label>
+                      <select
+                        value={completeForm.visitReason}
+                        onChange={(e) => setCompleteForm({ ...completeForm, visitReason: e.target.value, visitReasonOther: '' })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      >
+                        <option value="">— Select —</option>
+                        <option>Routine check-up</option>
+                        <option>Lameness investigation</option>
+                        <option>Colic</option>
+                        <option>Injury / wound</option>
+                        <option>Respiratory issue</option>
+                        <option>Eye issue</option>
+                        <option>Pre-purchase examination</option>
+                        <option>Emergency</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                    {completeForm.visitReason === 'Other' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Describe reason</label>
+                        <input
+                          value={completeForm.visitReasonOther}
+                          onChange={(e) => setCompleteForm({ ...completeForm, visitReasonOther: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                {completingAppt.type === 'FARRIER' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
+                    <input
+                      value={completeForm.farrierName}
+                      onChange={(e) => setCompleteForm({ ...completeForm, farrierName: e.target.value })}
+                      placeholder="e.g. John Smith"
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+                {completingAppt.type === 'DENTIST' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
+                    <input
+                      value={completeForm.dentistName}
+                      onChange={(e) => setCompleteForm({ ...completeForm, dentistName: e.target.value })}
+                      placeholder="e.g. Jane Doe"
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+                {completingAppt.type === 'VACCINATION' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Vaccine name</label>
+                      <input
+                        value={completeForm.name}
+                        onChange={(e) => setCompleteForm({ ...completeForm, name: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                {completingAppt.type === 'OTHER' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <input
+                        value={completeForm.category}
+                        onChange={(e) => setCompleteForm({ ...completeForm, category: e.target.value })}
+                        placeholder="e.g. Physiotherapy"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={completeForm.amount}
+                        onChange={(e) => setCompleteForm({ ...completeForm, amount: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    value={completeForm.notes}
+                    onChange={(e) => setCompleteForm({ ...completeForm, notes: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    rows={3}
+                  />
+                </div>
+                <Button type="submit" className="w-full">Mark as done &amp; save record</Button>
+              </form>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Cancel appointment confirmation modal */}
+      <Modal
+        open={!!cancelApptTarget}
+        onClose={() => setCancelApptTarget(null)}
+        title="Cancel appointment"
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Cancel the <strong>{cancelApptTarget ? APPT_TYPE_LABELS[cancelApptTarget.type] : ''}</strong> appointment on{' '}
+          <strong>{cancelApptTarget ? formatApptDate(cancelApptTarget.scheduledAt) : ''}</strong>?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setCancelApptTarget(null)}>Keep</Button>
+          <Button variant="destructive" onClick={confirmCancelAppt}>Cancel appointment</Button>
+        </div>
+      </Modal>
+
       {/* Share plan modal */}
       <Modal open={showShare} onClose={() => setShowShare(false)} title="Share Plan" wide>
         <div className="space-y-4">

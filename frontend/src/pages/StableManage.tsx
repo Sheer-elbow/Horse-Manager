@@ -1,4 +1,5 @@
 import { useEffect, useState, FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Stable, StableAssignment, HorsePriority, Horse, User } from '../types';
@@ -6,7 +7,43 @@ import { Button } from '../components/ui/button';
 import Modal from '../components/Modal';
 import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
-import { Building2, Users, Star, StarOff } from 'lucide-react';
+import { Building2, Users, Star, StarOff, Calendar } from 'lucide-react';
+
+interface Appointment {
+  id: string;
+  type: 'VET' | 'FARRIER' | 'DENTIST' | 'VACCINATION' | 'OTHER';
+  typeOther: string | null;
+  scheduledAt: string;
+  practitionerName: string | null;
+  contactNumber: string | null;
+  locationAtStable: boolean;
+  locationOther: string | null;
+  notes: string | null;
+  status: 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+  reminderSent: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  horse: { id: string; name: string };
+  createdBy: { id: string; name: string | null };
+}
+
+function formatApptDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const APPT_TYPE_BADGE: Record<string, string> = {
+  VET: 'bg-blue-100 text-blue-700',
+  FARRIER: 'bg-green-100 text-green-700',
+  DENTIST: 'bg-purple-100 text-purple-700',
+  VACCINATION: 'bg-amber-100 text-amber-700',
+  OTHER: 'bg-gray-100 text-gray-600',
+};
+
+const APPT_TYPE_LABELS: Record<string, string> = {
+  VET: 'Vet', FARRIER: 'Farrier', DENTIST: 'Dentist', VACCINATION: 'Vaccination', OTHER: 'Other',
+};
 
 type Tab = 'staff' | 'horses';
 
@@ -27,6 +64,7 @@ export default function StableManage() {
   const [addError, setAddError] = useState('');
 
   const isAdmin = user?.role === 'ADMIN';
+  const [stableAppointments, setStableAppointments] = useState<Appointment[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -43,6 +81,13 @@ export default function StableManage() {
     };
     load();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!selectedStableId) return;
+    api<Appointment[]>(`/appointments/stable/${selectedStableId}`)
+      .then(setStableAppointments)
+      .catch(() => setStableAppointments([]));
+  }, [selectedStableId]);
 
   useEffect(() => {
     if (!selectedStableId) return;
@@ -178,6 +223,43 @@ export default function StableManage() {
           )}
         </div>
       )}
+
+      {/* Upcoming appointments */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-brand-600" />
+            <h3 className="text-base font-semibold text-gray-900">Upcoming appointments</h3>
+          </div>
+          <Link to="/appointments" className="text-sm text-brand-600 hover:underline">View all</Link>
+        </div>
+        <div className="bg-white rounded-xl border divide-y">
+          {stableAppointments.length === 0 ? (
+            <div className="p-4 text-center text-sm text-gray-500">No upcoming appointments.</div>
+          ) : (
+            stableAppointments.slice(0, 5).map((appt) => (
+              <Link
+                key={appt.id}
+                to={`/horses/${appt.horse.id}`}
+                className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900">{formatApptDate(appt.scheduledAt)}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${APPT_TYPE_BADGE[appt.type] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : APPT_TYPE_LABELS[appt.type]}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 truncate mt-0.5">
+                    <span className="font-medium">{appt.horse.name}</span>
+                    {appt.practitionerName && <span className="text-gray-400"> · {appt.practitionerName}</span>}
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-0.5 border-b">
