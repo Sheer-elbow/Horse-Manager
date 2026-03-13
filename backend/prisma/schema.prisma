@@ -386,14 +386,16 @@ model NotificationPreference {
 // ─── Stable Manager (health / expenses) ─────────────────────
 
 model VetVisit {
-  id        String   @id @default(uuid())
-  horseId   String   @map("horse_id")
-  date      DateTime @db.Date
-  notes     String?
-  fileUrl   String?  @map("file_url")
-  fileName  String?  @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  horseId      String   @map("horse_id")
+  date         DateTime @db.Date
+  vetName      String?  @map("vet_name")
+  visitReason  String?  @map("visit_reason")
+  notes        String?
+  fileUrl      String?  @map("file_url")
+  fileName     String?  @map("file_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
@@ -401,14 +403,15 @@ model VetVisit {
 }
 
 model FarrierVisit {
-  id        String   @id @default(uuid())
-  horseId   String   @map("horse_id")
-  date      DateTime @db.Date
-  notes     String?
-  fileUrl   String?  @map("file_url")
-  fileName  String?  @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  horseId     String   @map("horse_id")
+  date        DateTime @db.Date
+  farrierName String?  @map("farrier_name")
+  notes       String?
+  fileUrl     String?  @map("file_url")
+  fileName    String?  @map("file_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
@@ -416,14 +419,15 @@ model FarrierVisit {
 }
 
 model DentistVisit {
-  id        String   @id @default(uuid())
-  horseId   String   @map("horse_id")
-  date      DateTime @db.Date
-  notes     String?
-  fileUrl   String?  @map("file_url")
-  fileName  String?  @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  horseId     String   @map("horse_id")
+  date        DateTime @db.Date
+  dentistName String?  @map("dentist_name")
+  notes       String?
+  fileUrl     String?  @map("file_url")
+  fileName    String?  @map("file_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
@@ -451,6 +455,7 @@ model ExpenseNote {
   id        String   @id @default(uuid())
   horseId   String   @map("horse_id")
   date      DateTime @db.Date
+  category  String?
   amount    Decimal? @db.Decimal(10, 2)
   notes     String?
   fileUrl   String?  @map("file_url")

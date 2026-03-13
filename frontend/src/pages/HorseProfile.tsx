@@ -39,8 +39,18 @@ interface HealthRecord {
   id: string;
   date: string;
   notes: string | null;
+  // vet
+  vetName?: string | null;
+  visitReason?: string | null;
+  // farrier
+  farrierName?: string | null;
+  // dentist
+  dentistName?: string | null;
+  // vaccination
   name?: string | null;
   dueDate?: string | null;
+  // expense
+  category?: string | null;
   amount?: number | null;
   fileUrl?: string | null;
   fileName?: string | null;
@@ -95,7 +105,7 @@ export default function HorseProfile() {
 
   // Add record modal
   const [showAddRecord, setShowAddRecord] = useState(false);
-  const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '' });
+  const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' });
   const recFileRef = useRef<HTMLInputElement>(null);
   const [recError, setRecError] = useState('');
 
@@ -305,18 +315,26 @@ export default function HorseProfile() {
       const formData = new FormData();
       formData.append('date', recForm.date);
       if (recForm.notes) formData.append('notes', recForm.notes);
+      if (tab === 'vet') {
+        if (recForm.vetName) formData.append('vetName', recForm.vetName);
+        const reason = recForm.visitReason === 'Other' ? recForm.visitReasonOther : recForm.visitReason;
+        if (reason) formData.append('visitReason', reason);
+      }
+      if (tab === 'farrier' && recForm.farrierName) formData.append('farrierName', recForm.farrierName);
+      if (tab === 'dentist' && recForm.dentistName) formData.append('dentistName', recForm.dentistName);
       if (tab === 'vaccinations') {
         if (recForm.name) formData.append('name', recForm.name);
         if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
       }
-      if (tab === 'expenses' && recForm.amount) {
-        formData.append('amount', recForm.amount);
+      if (tab === 'expenses') {
+        if (recForm.category) formData.append('category', recForm.category);
+        if (recForm.amount) formData.append('amount', recForm.amount);
       }
       const file = recFileRef.current?.files?.[0];
       if (file) formData.append('file', file);
       await api(`/health/${id}/${endpoint}`, { method: 'POST', body: formData });
       setShowAddRecord(false);
-      setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '' });
+      setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' });
       if (recFileRef.current) recFileRef.current.value = '';
       toast.success('Record added');
       loadRecords(tab);
@@ -867,7 +885,7 @@ export default function HorseProfile() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab === 'dentist' ? 'Dentist visits' : tab}</h3>
             {canEdit && (
-              <Button size="sm" onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '' }); setShowAddRecord(true); }}>
+              <Button size="sm" onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' }); setShowAddRecord(true); }}>
                 Add record
               </Button>
             )}
@@ -884,10 +902,15 @@ export default function HorseProfile() {
                 <div key={r.id} className="flex items-start justify-between py-3 border-b last:border-0">
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{new Date(r.date).toLocaleDateString('en-GB')}</div>
+                    {r.visitReason && <div className="text-sm text-gray-700">{r.visitReason}</div>}
+                    {r.vetName && <div className="text-xs text-gray-500">{r.vetName}</div>}
+                    {r.farrierName && <div className="text-xs text-gray-500">{r.farrierName}</div>}
+                    {r.dentistName && <div className="text-xs text-gray-500">{r.dentistName}</div>}
                     {r.name && <div className="text-sm text-gray-700">{r.name}</div>}
+                    {r.category && <div className="text-xs font-medium text-brand-600 mt-0.5">{r.category}</div>}
+                    {r.amount != null && <div className="text-sm text-gray-700 mt-0.5">£{Number(r.amount).toFixed(2)}</div>}
                     {r.notes && <div className="text-sm text-gray-500 mt-1">{r.notes}</div>}
-                    {r.dueDate && <div className="text-xs text-amber-600 mt-1">Due: {new Date(r.dueDate).toLocaleDateString('en-GB')}</div>}
-                    {r.amount != null && <div className="text-sm text-gray-600 mt-1">Amount: {r.amount}</div>}
+                    {r.dueDate && <div className="text-xs text-amber-600 mt-1">Next due: {new Date(r.dueDate).toLocaleDateString('en-GB')}</div>}
                     {r.fileUrl && (
                       <div className="mt-2">
                         {r.fileName?.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
@@ -1086,13 +1109,54 @@ export default function HorseProfile() {
       </Modal>
 
       {/* Add record modal */}
-      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setRecError(''); }} title={`Add ${tab} record`}>
+      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setRecError(''); }} title={`Add ${tab === 'vet' ? 'vet visit' : tab === 'farrier' ? 'farrier visit' : tab === 'dentist' ? 'dentist visit' : tab + ' record'}`}>
         {recError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{recError}</div>}
         <form onSubmit={handleAddRecord} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input type="date" value={recForm.date} onChange={(e) => setRecForm({ ...recForm, date: e.target.value })} className="w-full border rounded-lg px-3 py-2" required />
           </div>
+          {tab === 'vet' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vet / Practice</label>
+                <input value={recForm.vetName} onChange={(e) => setRecForm({ ...recForm, vetName: e.target.value })} placeholder="e.g. Dr. Smith – ABC Veterinary" className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for visit</label>
+                <select value={recForm.visitReason} onChange={(e) => setRecForm({ ...recForm, visitReason: e.target.value, visitReasonOther: '' })} className="w-full border rounded-lg px-3 py-2">
+                  <option value="">— Select —</option>
+                  <option>Routine check-up</option>
+                  <option>Lameness investigation</option>
+                  <option>Colic</option>
+                  <option>Injury / wound</option>
+                  <option>Respiratory issue</option>
+                  <option>Eye issue</option>
+                  <option>Pre-purchase examination</option>
+                  <option>Emergency</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              {recForm.visitReason === 'Other' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Describe reason</label>
+                  <input value={recForm.visitReasonOther} onChange={(e) => setRecForm({ ...recForm, visitReasonOther: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                </div>
+              )}
+            </>
+          )}
+          {tab === 'farrier' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
+              <input value={recForm.farrierName} onChange={(e) => setRecForm({ ...recForm, farrierName: e.target.value })} placeholder="e.g. John Smith" className="w-full border rounded-lg px-3 py-2" />
+            </div>
+          )}
+          {tab === 'dentist' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
+              <input value={recForm.dentistName} onChange={(e) => setRecForm({ ...recForm, dentistName: e.target.value })} placeholder="e.g. Jane Doe" className="w-full border rounded-lg px-3 py-2" />
+            </div>
+          )}
           {tab === 'vaccinations' && (
             <>
               <div>
@@ -1100,16 +1164,41 @@ export default function HorseProfile() {
                 <input value={recForm.name} onChange={(e) => setRecForm({ ...recForm, name: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due date (reminder)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
                 <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
               </div>
             </>
           )}
           {tab === 'expenses' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" value={recForm.amount} onChange={(e) => setRecForm({ ...recForm, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <input
+                  list="expense-categories"
+                  value={recForm.category}
+                  onChange={(e) => setRecForm({ ...recForm, category: e.target.value })}
+                  placeholder="e.g. Vet, Feed, Equipment…"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+                <datalist id="expense-categories">
+                  <option value="Vet" />
+                  <option value="Farrier" />
+                  <option value="Dentist" />
+                  <option value="Vaccinations" />
+                  <option value="Feed" />
+                  <option value="Bedding" />
+                  <option value="Equipment" />
+                  <option value="Competition" />
+                  <option value="Insurance" />
+                  <option value="Transport" />
+                  <option value="Other" />
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                <input type="number" step="0.01" min="0" value={recForm.amount} onChange={(e) => setRecForm({ ...recForm, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>

@@ -129,11 +129,11 @@ router.get('/:horseId/vet-visits', authenticate, requireHorseAccess('VIEW'), asy
 router.post('/:horseId/vet-visits', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes } = req.body;
+    const { date, notes, vetName, visitReason } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const visit = await prisma.vetVisit.create({
-      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), notes: notes || null, fileUrl, fileName },
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), vetName: vetName || null, visitReason: visitReason || null, notes: notes || null, fileUrl, fileName },
     });
     res.status(201).json(visit);
   } catch (err) {
@@ -174,11 +174,11 @@ router.get('/:horseId/farrier-visits', authenticate, requireHorseAccess('VIEW'),
 router.post('/:horseId/farrier-visits', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes } = req.body;
+    const { date, notes, farrierName } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const visit = await prisma.farrierVisit.create({
-      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), notes: notes || null, fileUrl, fileName },
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), farrierName: farrierName || null, notes: notes || null, fileUrl, fileName },
     });
     res.status(201).json(visit);
   } catch (err) {
@@ -219,11 +219,11 @@ router.get('/:horseId/dentist-visits', authenticate, requireHorseAccess('VIEW'),
 router.post('/:horseId/dentist-visits', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes } = req.body;
+    const { date, notes, dentistName } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const visit = await prisma.dentistVisit.create({
-      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), notes: notes || null, fileUrl, fileName },
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), dentistName: dentistName || null, notes: notes || null, fileUrl, fileName },
     });
     res.status(201).json(visit);
   } catch (err) {
@@ -321,13 +321,14 @@ router.get('/:horseId/expenses', authenticate, requireHorseAccess('VIEW'), async
 router.post('/:horseId/expenses', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, amount } = req.body;
+    const { date, notes, amount, category } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const expense = await prisma.expenseNote.create({
       data: {
         horseId: req.params.horseId,
         date: new Date(date + 'T00:00:00Z'),
+        category: category || null,
         amount: amount ? parseFloat(amount) : null,
         notes: notes || null,
         fileUrl,
