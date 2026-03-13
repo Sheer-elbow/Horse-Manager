@@ -94,6 +94,7 @@ export interface CreateRecurringPayload {
   dayOfMonth: number;
   startDate: string;
   endDate?: string;
+  lastGeneratedDate?: string;
   stableId?: string;
   splits: { horseId: string; ownerId?: string; amount: number }[];
 }

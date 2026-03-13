@@ -517,7 +517,7 @@ router.get('/recurring', authenticate, async (req: AuthRequest, res: Response) =
 router.post('/recurring', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { type, supplier, category, totalAmount, notes, dayOfMonth, startDate, endDate, stableId, splits } = req.body;
+    const { type, supplier, category, totalAmount, notes, dayOfMonth, startDate, endDate, lastGeneratedDate, stableId, splits } = req.body;
 
     if (!category || !totalAmount || !startDate) {
       res.status(400).json({ error: 'category, totalAmount, and startDate are required' });
@@ -544,6 +544,7 @@ router.post('/recurring', authenticate, async (req: AuthRequest, res: Response) 
         dayOfMonth: parseInt(dayOfMonth) || 1,
         startDate: new Date(startDate + 'T00:00:00Z'),
         endDate: endDate ? new Date(endDate + 'T00:00:00Z') : null,
+        lastGeneratedDate: lastGeneratedDate ? new Date(lastGeneratedDate + 'T00:00:00Z') : null,
         splits: {
           create: parsedSplits.map((s) => ({
             horseId: s.horseId,

@@ -190,6 +190,7 @@ export default function InvoiceForm({ onSaved, onCancel, initialInvoice, onRecur
           dayOfMonth: recurringDay,
           startDate: date,
           endDate: recurringEndDate || undefined,
+          lastGeneratedDate: date, // first invoice already created manually — skip this month
           splits,
         });
         toast.success('Invoice added and recurring schedule created');
