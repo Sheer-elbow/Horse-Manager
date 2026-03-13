@@ -179,11 +179,19 @@ export default function HorseProfile() {
     finally { setLoading(false); }
   };
 
+  const activeRecordTab = useRef<Tab>('overview');
+
   const loadRecords = async (t: Tab) => {
     if (t === 'overview') return;
+    activeRecordTab.current = t;
+    setRecords([]);
     const endpoint = t === 'vet' ? 'vet-visits' : t === 'farrier' ? 'farrier-visits' : t === 'dentist' ? 'dentist-visits' : t;
-    const data = await api<HealthRecord[]>(`/health/${id}/${endpoint}`);
-    setRecords(data);
+    try {
+      const data = await api<HealthRecord[]>(`/health/${id}/${endpoint}`);
+      if (activeRecordTab.current === t) setRecords(data);
+    } catch {
+      // records already cleared
+    }
   };
 
   const loadHealthSummary = async () => {
