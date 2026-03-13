@@ -91,7 +91,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   const { user } = req as AuthRequest;
   const { horseId } = req.params;
 
-  if (!(await canAccessHorse(user.id, user.role, horseId))) {
+  if (!(await canAccessHorse(user!.userId, user!.role, horseId))) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -111,7 +111,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   const { user } = req as AuthRequest;
   const { horseId } = req.params;
 
-  if (!(await canEditHorse(user.id, user.role, horseId))) {
+  if (!(await canEditHorse(user!.userId, user!.role, horseId))) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
@@ -143,7 +143,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   const doc = await db.horseDocument.create({
     data: {
       horseId,
-      uploadedById: user.id,
+      uploadedById: user!.userId,
       name: name.trim(),
       category: category?.trim() || 'Other',
       fileUrl: `/api/uploads/records/${req.file.filename}`,
@@ -163,7 +163,7 @@ router.delete('/:docId', authenticate, async (req: Request, res: Response) => {
   const { user } = req as AuthRequest;
   const { horseId, docId } = req.params;
 
-  if (!(await canEditHorse(user.id, user.role, horseId))) {
+  if (!(await canEditHorse(user!.userId, user!.role, horseId))) {
     res.status(403).json({ error: 'Forbidden' });
     return;
   }
