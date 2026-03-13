@@ -146,6 +146,31 @@ router.post('/:horseId/vet-visits', authenticate, requireHorseAccess('EDIT'), as
   }
 });
 
+router.put('/:horseId/vet-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
+  try {
+    await handleFileUpload(req, res);
+    const { date, notes, vetName, visitReason } = req.body;
+    if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const existing = await prisma.vetVisit.findUnique({ where: { id: req.params.recordId } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    let fileUrl = existing.fileUrl;
+    let fileName = existing.fileName;
+    if (req.file) {
+      deleteFile(existing.fileUrl);
+      ({ fileUrl, fileName } = getFileInfo(req));
+    }
+    const visit = await prisma.vetVisit.update({
+      where: { id: req.params.recordId },
+      data: { date: new Date(date + 'T00:00:00Z'), vetName: vetName || null, visitReason: visitReason || null, notes: notes || null, fileUrl, fileName },
+    });
+    res.json(visit);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Upload error')) { res.status(400).json({ error: err.message }); return; }
+    console.error('Update vet visit error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.delete('/:horseId/vet-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     const record = await prisma.vetVisit.findUnique({ where: { id: req.params.recordId } });
@@ -191,6 +216,28 @@ router.post('/:horseId/farrier-visits', authenticate, requireHorseAccess('EDIT')
   }
 });
 
+router.put('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
+  try {
+    await handleFileUpload(req, res);
+    const { date, notes, farrierName } = req.body;
+    if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const existing = await prisma.farrierVisit.findUnique({ where: { id: req.params.recordId } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    let fileUrl = existing.fileUrl;
+    let fileName = existing.fileName;
+    if (req.file) { deleteFile(existing.fileUrl); ({ fileUrl, fileName } = getFileInfo(req)); }
+    const visit = await prisma.farrierVisit.update({
+      where: { id: req.params.recordId },
+      data: { date: new Date(date + 'T00:00:00Z'), farrierName: farrierName || null, notes: notes || null, fileUrl, fileName },
+    });
+    res.json(visit);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Upload error')) { res.status(400).json({ error: err.message }); return; }
+    console.error('Update farrier visit error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.delete('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     const record = await prisma.farrierVisit.findUnique({ where: { id: req.params.recordId } });
@@ -232,6 +279,28 @@ router.post('/:horseId/dentist-visits', authenticate, requireHorseAccess('EDIT')
       return;
     }
     console.error('Create dentist visit error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/:horseId/dentist-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
+  try {
+    await handleFileUpload(req, res);
+    const { date, notes, dentistName } = req.body;
+    if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const existing = await prisma.dentistVisit.findUnique({ where: { id: req.params.recordId } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    let fileUrl = existing.fileUrl;
+    let fileName = existing.fileName;
+    if (req.file) { deleteFile(existing.fileUrl); ({ fileUrl, fileName } = getFileInfo(req)); }
+    const visit = await prisma.dentistVisit.update({
+      where: { id: req.params.recordId },
+      data: { date: new Date(date + 'T00:00:00Z'), dentistName: dentistName || null, notes: notes || null, fileUrl, fileName },
+    });
+    res.json(visit);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Upload error')) { res.status(400).json({ error: err.message }); return; }
+    console.error('Update dentist visit error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -289,6 +358,28 @@ router.post('/:horseId/vaccinations', authenticate, requireHorseAccess('EDIT'), 
   }
 });
 
+router.put('/:horseId/vaccinations/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
+  try {
+    await handleFileUpload(req, res);
+    const { date, notes, name, dueDate } = req.body;
+    if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const existing = await prisma.vaccinationRecord.findUnique({ where: { id: req.params.recordId } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    let fileUrl = existing.fileUrl;
+    let fileName = existing.fileName;
+    if (req.file) { deleteFile(existing.fileUrl); ({ fileUrl, fileName } = getFileInfo(req)); }
+    const record = await prisma.vaccinationRecord.update({
+      where: { id: req.params.recordId },
+      data: { date: new Date(date + 'T00:00:00Z'), name: name || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
+    });
+    res.json(record);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Upload error')) { res.status(400).json({ error: err.message }); return; }
+    console.error('Update vaccination record error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.delete('/:horseId/vaccinations/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     const record = await prisma.vaccinationRecord.findUnique({ where: { id: req.params.recordId } });
@@ -342,6 +433,28 @@ router.post('/:horseId/expenses', authenticate, requireHorseAccess('EDIT'), asyn
       return;
     }
     console.error('Create expense error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/:horseId/expenses/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
+  try {
+    await handleFileUpload(req, res);
+    const { date, notes, amount, category } = req.body;
+    if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const existing = await prisma.expenseNote.findUnique({ where: { id: req.params.recordId } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    let fileUrl = existing.fileUrl;
+    let fileName = existing.fileName;
+    if (req.file) { deleteFile(existing.fileUrl); ({ fileUrl, fileName } = getFileInfo(req)); }
+    const expense = await prisma.expenseNote.update({
+      where: { id: req.params.recordId },
+      data: { date: new Date(date + 'T00:00:00Z'), category: category || null, amount: amount ? parseFloat(amount) : null, notes: notes || null, fileUrl, fileName },
+    });
+    res.json(expense);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Upload error')) { res.status(400).json({ error: err.message }); return; }
+    console.error('Update expense error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
