@@ -110,8 +110,8 @@ app.get('/api/documents/expiring', async (req, res) => {
   if (!token) { res.status(401).json({ error: 'Authentication required' }); return; }
   try {
     const jwt = await import('jsonwebtoken');
-    const payload = jwt.default.verify(token, config.jwt.secret) as { id: string; role: string };
-    const docs = await getExpiringDocuments(payload.id, payload.role);
+    const payload = jwt.default.verify(token, config.jwt.secret) as { userId: string; role: string };
+    const docs = await getExpiringDocuments(payload.userId, payload.role);
     res.json(docs);
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
