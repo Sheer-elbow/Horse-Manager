@@ -11,6 +11,7 @@ import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissor
 import { Skeleton } from '../components/Skeleton';
 import TrainingLoadChart from '../components/TrainingLoadChart';
 import DocumentVault from '../components/DocumentVault';
+import HealthTimeline from '../components/HealthTimeline';
 import { toast } from 'sonner';
 
 interface HealthSummary {
@@ -34,7 +35,7 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes' | 'appointments' | 'documents';
+type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes' | 'appointments' | 'documents' | 'timeline';
 
 interface Appointment {
   id: string;
@@ -808,6 +809,7 @@ export default function HorseProfile() {
     { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
     { key: 'appointments', label: 'Appointments', visible: canEdit },
     { key: 'documents', label: 'Documents', visible: true },
+    { key: 'timeline', label: 'Timeline', visible: canViewHealth },
   ];
   const tabs = allTabs.filter((t) => t.visible);
 
@@ -1325,6 +1327,11 @@ export default function HorseProfile() {
       {/* Documents tab */}
       {tab === 'documents' && id && (
         <DocumentVault horseId={id} canEdit={canEdit} />
+      )}
+
+      {/* Timeline tab */}
+      {tab === 'timeline' && id && (
+        <HealthTimeline horseId={id} />
       )}
 
       {/* Quick-log FAB — visible when user has edit access */}
