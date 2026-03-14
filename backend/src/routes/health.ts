@@ -468,4 +468,99 @@ router.delete('/:horseId/expenses/:recordId', authenticate, requireHorseAccess('
   } catch { res.status(404).json({ error: 'Not found' }); }
 });
 
+// ─── Health Timeline ──────────────────────────────────────────
+// Returns all health events for a horse merged into one chronological array.
+
+router.get('/:horseId/timeline', authenticate, requireHorseAccess('VIEW'), async (req: HorsePermissionRequest, res: Response) => {
+  try {
+    if (!await checkStaffHealthAccess(req, res)) return;
+    const horseId = req.params.horseId;
+    const isLead = req.horseAccessType === 'LEAD_VIEW';
+
+    const [vets, farriers, dentists, vaccines, expenses] = await Promise.all([
+      prisma.vetVisit.findMany({ where: { horseId }, orderBy: { date: 'desc' } }),
+      prisma.farrierVisit.findMany({ where: { horseId }, orderBy: { date: 'desc' } }),
+      prisma.dentistVisit.findMany({ where: { horseId }, orderBy: { date: 'desc' } }),
+      prisma.vaccinationRecord.findMany({ where: { horseId }, orderBy: { date: 'desc' } }),
+      prisma.expenseNote.findMany({ where: { horseId }, orderBy: { date: 'desc' } }),
+    ]);
+
+    type TimelineEvent = {
+      id: string;
+      type: 'vet' | 'farrier' | 'dentist' | 'vaccination' | 'expense';
+      date: string;
+      title: string;
+      subtitle: string | null;
+      notes: string | null;
+      fileUrl: string | null;
+      fileName: string | null;
+      extra: Record<string, string | null>;
+    };
+
+    const strip = (e: TimelineEvent): TimelineEvent =>
+      isLead ? { ...e, notes: null, fileUrl: null, fileName: null } : e;
+
+    const events: TimelineEvent[] = [
+      ...vets.map((r) => strip({
+        id: r.id, type: 'vet',
+        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
+        title: r.visitReason || 'Vet visit',
+        subtitle: r.vetName,
+        notes: r.notes ?? null,
+        fileUrl: r.fileUrl ?? null,
+        fileName: r.fileName ?? null,
+        extra: {},
+      })),
+      ...farriers.map((r) => strip({
+        id: r.id, type: 'farrier',
+        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
+        title: 'Farrier visit',
+        subtitle: r.farrierName,
+        notes: r.notes ?? null,
+        fileUrl: r.fileUrl ?? null,
+        fileName: r.fileName ?? null,
+        extra: {},
+      })),
+      ...dentists.map((r) => strip({
+        id: r.id, type: 'dentist',
+        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
+        title: 'Dentist visit',
+        subtitle: r.dentistName,
+        notes: r.notes ?? null,
+        fileUrl: r.fileUrl ?? null,
+        fileName: r.fileName ?? null,
+        extra: {},
+      })),
+      ...vaccines.map((r) => strip({
+        id: r.id, type: 'vaccination',
+        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
+        title: r.name || 'Vaccination',
+        subtitle: r.dueDate ? `Next due: ${r.dueDate instanceof Date ? r.dueDate.toISOString().split('T')[0] : String(r.dueDate)}` : null,
+        notes: r.notes ?? null,
+        fileUrl: r.fileUrl ?? null,
+        fileName: r.fileName ?? null,
+        extra: { dueDate: r.dueDate ? (r.dueDate instanceof Date ? r.dueDate.toISOString().split('T')[0] : String(r.dueDate)) : null },
+      })),
+      ...expenses.map((r) => strip({
+        id: r.id, type: 'expense',
+        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
+        title: r.category || 'Expense',
+        subtitle: r.amount != null ? `£${Number(r.amount).toFixed(2)}` : null,
+        notes: r.notes ?? null,
+        fileUrl: r.fileUrl ?? null,
+        fileName: r.fileName ?? null,
+        extra: { amount: r.amount != null ? String(r.amount) : null, category: r.category ?? null },
+      })),
+    ];
+
+    // Sort newest first
+    events.sort((a, b) => b.date.localeCompare(a.date));
+
+    res.json(events);
+  } catch (err) {
+    console.error('Timeline error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
