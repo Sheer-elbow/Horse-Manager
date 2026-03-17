@@ -6,6 +6,8 @@ import { api } from '../api/client';
 import { Horse } from '../types';
 import { AuthenticatedImage } from './AuthenticatedImage';
 
+const SESSION_PRESETS = ['Flat work', 'Jumping', 'Lunging', 'Hack', 'Polo practice', 'Stick & ball', 'Swimming', 'Rest day', 'Walk only'];
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -143,10 +145,26 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
         {/* Session type */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Session type</label>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {SESSION_PRESETS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => field('sessionType', form.sessionType === p ? '' : p)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  form.sessionType === p
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
           <input
             value={form.sessionType}
             onChange={(e) => field('sessionType', e.target.value)}
-            placeholder="e.g. Canter work, Polo chukka, Rest"
+            placeholder="Or type custom..."
             className="w-full border rounded-lg px-3 py-2 text-sm"
           />
         </div>
