@@ -129,11 +129,11 @@ router.get('/:horseId/vet-visits', authenticate, requireHorseAccess('VIEW'), asy
 router.post('/:horseId/vet-visits', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, vetName, visitReason } = req.body;
+    const { date, notes, vetName, visitReason, dueDate } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const visit = await prisma.vetVisit.create({
-      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), vetName: vetName || null, visitReason: visitReason || null, notes: notes || null, fileUrl, fileName },
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), vetName: vetName || null, visitReason: visitReason || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
     });
     res.status(201).json(visit);
   } catch (err) {
@@ -149,7 +149,7 @@ router.post('/:horseId/vet-visits', authenticate, requireHorseAccess('EDIT'), as
 router.put('/:horseId/vet-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, vetName, visitReason } = req.body;
+    const { date, notes, vetName, visitReason, dueDate } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const existing = await prisma.vetVisit.findUnique({ where: { id: req.params.recordId } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
@@ -161,7 +161,7 @@ router.put('/:horseId/vet-visits/:recordId', authenticate, requireHorseAccess('E
     }
     const visit = await prisma.vetVisit.update({
       where: { id: req.params.recordId },
-      data: { date: new Date(date + 'T00:00:00Z'), vetName: vetName || null, visitReason: visitReason || null, notes: notes || null, fileUrl, fileName },
+      data: { date: new Date(date + 'T00:00:00Z'), vetName: vetName || null, visitReason: visitReason || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
     });
     res.json(visit);
   } catch (err) {
@@ -199,11 +199,11 @@ router.get('/:horseId/farrier-visits', authenticate, requireHorseAccess('VIEW'),
 router.post('/:horseId/farrier-visits', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, farrierName } = req.body;
+    const { date, notes, farrierName, dueDate } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const visit = await prisma.farrierVisit.create({
-      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), farrierName: farrierName || null, notes: notes || null, fileUrl, fileName },
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), farrierName: farrierName || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
     });
     res.status(201).json(visit);
   } catch (err) {
@@ -219,7 +219,7 @@ router.post('/:horseId/farrier-visits', authenticate, requireHorseAccess('EDIT')
 router.put('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, farrierName } = req.body;
+    const { date, notes, farrierName, dueDate } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const existing = await prisma.farrierVisit.findUnique({ where: { id: req.params.recordId } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
@@ -228,7 +228,7 @@ router.put('/:horseId/farrier-visits/:recordId', authenticate, requireHorseAcces
     if (req.file) { deleteFile(existing.fileUrl); ({ fileUrl, fileName } = getFileInfo(req)); }
     const visit = await prisma.farrierVisit.update({
       where: { id: req.params.recordId },
-      data: { date: new Date(date + 'T00:00:00Z'), farrierName: farrierName || null, notes: notes || null, fileUrl, fileName },
+      data: { date: new Date(date + 'T00:00:00Z'), farrierName: farrierName || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
     });
     res.json(visit);
   } catch (err) {
@@ -266,11 +266,11 @@ router.get('/:horseId/dentist-visits', authenticate, requireHorseAccess('VIEW'),
 router.post('/:horseId/dentist-visits', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, dentistName } = req.body;
+    const { date, notes, dentistName, dueDate } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const { fileUrl, fileName } = getFileInfo(req);
     const visit = await prisma.dentistVisit.create({
-      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), dentistName: dentistName || null, notes: notes || null, fileUrl, fileName },
+      data: { horseId: req.params.horseId, date: new Date(date + 'T00:00:00Z'), dentistName: dentistName || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
     });
     res.status(201).json(visit);
   } catch (err) {
@@ -286,7 +286,7 @@ router.post('/:horseId/dentist-visits', authenticate, requireHorseAccess('EDIT')
 router.put('/:horseId/dentist-visits/:recordId', authenticate, requireHorseAccess('EDIT'), async (req, res: Response) => {
   try {
     await handleFileUpload(req, res);
-    const { date, notes, dentistName } = req.body;
+    const { date, notes, dentistName, dueDate } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
     const existing = await prisma.dentistVisit.findUnique({ where: { id: req.params.recordId } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
@@ -295,7 +295,7 @@ router.put('/:horseId/dentist-visits/:recordId', authenticate, requireHorseAcces
     if (req.file) { deleteFile(existing.fileUrl); ({ fileUrl, fileName } = getFileInfo(req)); }
     const visit = await prisma.dentistVisit.update({
       where: { id: req.params.recordId },
-      data: { date: new Date(date + 'T00:00:00Z'), dentistName: dentistName || null, notes: notes || null, fileUrl, fileName },
+      data: { date: new Date(date + 'T00:00:00Z'), dentistName: dentistName || null, notes: notes || null, dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null, fileUrl, fileName },
     });
     res.json(visit);
   } catch (err) {
@@ -501,36 +501,18 @@ router.get('/:horseId/timeline', authenticate, requireHorseAccess('VIEW'), async
       isLead ? { ...e, notes: null, fileUrl: null, fileName: null } : e;
 
     const events: TimelineEvent[] = [
-      ...vets.map((r) => strip({
-        id: r.id, type: 'vet',
-        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
-        title: r.visitReason || 'Vet visit',
-        subtitle: r.vetName,
-        notes: r.notes ?? null,
-        fileUrl: r.fileUrl ?? null,
-        fileName: r.fileName ?? null,
-        extra: {},
-      })),
-      ...farriers.map((r) => strip({
-        id: r.id, type: 'farrier',
-        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
-        title: 'Farrier visit',
-        subtitle: r.farrierName,
-        notes: r.notes ?? null,
-        fileUrl: r.fileUrl ?? null,
-        fileName: r.fileName ?? null,
-        extra: {},
-      })),
-      ...dentists.map((r) => strip({
-        id: r.id, type: 'dentist',
-        date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),
-        title: 'Dentist visit',
-        subtitle: r.dentistName,
-        notes: r.notes ?? null,
-        fileUrl: r.fileUrl ?? null,
-        fileName: r.fileName ?? null,
-        extra: {},
-      })),
+      ...vets.map((r) => {
+        const dd = r.dueDate ? (r.dueDate instanceof Date ? r.dueDate.toISOString().split('T')[0] : String(r.dueDate)) : null;
+        return strip({ id: r.id, type: 'vet', date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date), title: r.visitReason || 'Vet visit', subtitle: r.vetName, notes: r.notes ?? null, fileUrl: r.fileUrl ?? null, fileName: r.fileName ?? null, extra: { dueDate: dd } });
+      }),
+      ...farriers.map((r) => {
+        const dd = r.dueDate ? (r.dueDate instanceof Date ? r.dueDate.toISOString().split('T')[0] : String(r.dueDate)) : null;
+        return strip({ id: r.id, type: 'farrier', date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date), title: 'Farrier visit', subtitle: r.farrierName, notes: r.notes ?? null, fileUrl: r.fileUrl ?? null, fileName: r.fileName ?? null, extra: { dueDate: dd } });
+      }),
+      ...dentists.map((r) => {
+        const dd = r.dueDate ? (r.dueDate instanceof Date ? r.dueDate.toISOString().split('T')[0] : String(r.dueDate)) : null;
+        return strip({ id: r.id, type: 'dentist', date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date), title: 'Dentist visit', subtitle: r.dentistName, notes: r.notes ?? null, fileUrl: r.fileUrl ?? null, fileName: r.fileName ?? null, extra: { dueDate: dd } });
+      }),
       ...vaccines.map((r) => strip({
         id: r.id, type: 'vaccination',
         date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date),

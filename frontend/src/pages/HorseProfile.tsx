@@ -19,6 +19,12 @@ interface HealthSummary {
   lastFarrierDate: string | null;
   overdueVaccinations: { id: string; name: string | null; dueDate: string }[];
   dueSoonVaccinations: { id: string; name: string | null; dueDate: string }[];
+  overdueVet: { id: string; dueDate: string }[];
+  dueSoonVet: { id: string; dueDate: string }[];
+  overdueFarrier: { id: string; dueDate: string }[];
+  dueSoonFarrier: { id: string; dueDate: string }[];
+  overdueDentist: { id: string; dueDate: string }[];
+  dueSoonDentist: { id: string; dueDate: string }[];
 }
 
 function daysSince(dateStr: string): number {
@@ -281,11 +287,16 @@ export default function HorseProfile() {
       const thirtyDaysOut = new Date(today);
       thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
 
-      const [vets, farriers, vaccinations] = await Promise.all([
-        api<{ id: string; date: string }[]>(`/health/${id}/vet-visits`),
-        api<{ id: string; date: string }[]>(`/health/${id}/farrier-visits`),
+      type VisitRecord = { id: string; date: string; dueDate: string | null };
+      const [vets, farriers, dentists, vaccinations] = await Promise.all([
+        api<VisitRecord[]>(`/health/${id}/vet-visits`),
+        api<VisitRecord[]>(`/health/${id}/farrier-visits`),
+        api<VisitRecord[]>(`/health/${id}/dentist-visits`),
         api<{ id: string; name: string | null; dueDate: string | null }[]>(`/health/${id}/vaccinations`),
       ]);
+
+      const overdue = (list: VisitRecord[]) => list.filter((r) => r.dueDate && new Date(r.dueDate) < today).map((r) => ({ id: r.id, dueDate: r.dueDate! }));
+      const dueSoon = (list: VisitRecord[]) => list.filter((r) => r.dueDate && new Date(r.dueDate) >= today && new Date(r.dueDate) <= thirtyDaysOut).map((r) => ({ id: r.id, dueDate: r.dueDate! }));
 
       const overdueVaccinations = vaccinations
         .filter((v) => v.dueDate && new Date(v.dueDate) < today)
@@ -300,6 +311,12 @@ export default function HorseProfile() {
         lastFarrierDate: farriers.length > 0 ? farriers[0].date : null,
         overdueVaccinations,
         dueSoonVaccinations,
+        overdueVet: overdue(vets),
+        dueSoonVet: dueSoon(vets),
+        overdueFarrier: overdue(farriers),
+        dueSoonFarrier: dueSoon(farriers),
+        overdueDentist: overdue(dentists),
+        dueSoonDentist: dueSoon(dentists),
       });
     } catch {
       // non-critical, ignore
@@ -425,9 +442,16 @@ export default function HorseProfile() {
         if (recForm.vetName) formData.append('vetName', recForm.vetName);
         const reason = recForm.visitReason === 'Other' ? recForm.visitReasonOther : recForm.visitReason;
         if (reason) formData.append('visitReason', reason);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
       }
-      if (tab === 'farrier' && recForm.farrierName) formData.append('farrierName', recForm.farrierName);
-      if (tab === 'dentist' && recForm.dentistName) formData.append('dentistName', recForm.dentistName);
+      if (tab === 'farrier') {
+        if (recForm.farrierName) formData.append('farrierName', recForm.farrierName);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
+      }
+      if (tab === 'dentist') {
+        if (recForm.dentistName) formData.append('dentistName', recForm.dentistName);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
+      }
       if (tab === 'vaccinations') {
         if (recForm.name) formData.append('name', recForm.name);
         if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
@@ -708,9 +732,16 @@ export default function HorseProfile() {
         body.vetName = completeForm.vetName || null;
         const reason = completeForm.visitReason === 'Other' ? completeForm.visitReasonOther : completeForm.visitReason;
         body.visitReason = reason || null;
+        body.dueDate = completeForm.dueDate || null;
       }
-      if (completingAppt.type === 'FARRIER') body.farrierName = completeForm.farrierName || null;
-      if (completingAppt.type === 'DENTIST') body.dentistName = completeForm.dentistName || null;
+      if (completingAppt.type === 'FARRIER') {
+        body.farrierName = completeForm.farrierName || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
+      if (completingAppt.type === 'DENTIST') {
+        body.dentistName = completeForm.dentistName || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
       if (completingAppt.type === 'VACCINATION') {
         body.name = completeForm.name || null;
         body.dueDate = completeForm.dueDate || null;
@@ -893,6 +924,45 @@ export default function HorseProfile() {
                     ? `Farrier: ${daysSince(healthSummary.lastFarrierDate)}d ago`
                     : 'No farrier visits'}
                 </div>
+                {/* Overdue / due-soon vet */}
+                {healthSummary.overdueVet.map((v) => (
+                  <button key={v.id} onClick={() => setTab('vet')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Vet overdue
+                  </button>
+                ))}
+                {healthSummary.dueSoonVet.map((v) => (
+                  <button key={v.id} onClick={() => setTab('vet')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors">
+                    <Stethoscope className="w-3.5 h-3.5" />
+                    Vet due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
+                {/* Overdue / due-soon farrier */}
+                {healthSummary.overdueFarrier.map((v) => (
+                  <button key={v.id} onClick={() => setTab('farrier')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Farrier overdue
+                  </button>
+                ))}
+                {healthSummary.dueSoonFarrier.map((v) => (
+                  <button key={v.id} onClick={() => setTab('farrier')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors">
+                    <Scissors className="w-3.5 h-3.5" />
+                    Farrier due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
+                {/* Overdue / due-soon dentist */}
+                {healthSummary.overdueDentist.map((v) => (
+                  <button key={v.id} onClick={() => setTab('dentist')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Dentist overdue
+                  </button>
+                ))}
+                {healthSummary.dueSoonDentist.map((v) => (
+                  <button key={v.id} onClick={() => setTab('dentist')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Dentist due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
                 {/* Overdue vaccinations */}
                 {healthSummary.overdueVaccinations.map((v) => (
                   <button
@@ -1542,19 +1612,35 @@ export default function HorseProfile() {
                   <input value={recForm.visitReasonOther} onChange={(e) => setRecForm({ ...recForm, visitReasonOther: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
                 </div>
               )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
             </>
           )}
           {tab === 'farrier' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
-              <input value={recForm.farrierName} onChange={(e) => setRecForm({ ...recForm, farrierName: e.target.value })} placeholder="e.g. John Smith" className="w-full border rounded-lg px-3 py-2" />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
+                <input value={recForm.farrierName} onChange={(e) => setRecForm({ ...recForm, farrierName: e.target.value })} placeholder="e.g. John Smith" className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
           )}
           {tab === 'dentist' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
-              <input value={recForm.dentistName} onChange={(e) => setRecForm({ ...recForm, dentistName: e.target.value })} placeholder="e.g. Jane Doe" className="w-full border rounded-lg px-3 py-2" />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
+                <input value={recForm.dentistName} onChange={(e) => setRecForm({ ...recForm, dentistName: e.target.value })} placeholder="e.g. Jane Doe" className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
           )}
           {tab === 'vaccinations' && (
             <>
@@ -1833,29 +1919,60 @@ export default function HorseProfile() {
                         />
                       </div>
                     )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
                   </>
                 )}
                 {completingAppt.type === 'FARRIER' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
-                    <input
-                      value={completeForm.farrierName}
-                      onChange={(e) => setCompleteForm({ ...completeForm, farrierName: e.target.value })}
-                      placeholder="e.g. John Smith"
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
+                      <input
+                        value={completeForm.farrierName}
+                        onChange={(e) => setCompleteForm({ ...completeForm, farrierName: e.target.value })}
+                        placeholder="e.g. John Smith"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
                 )}
                 {completingAppt.type === 'DENTIST' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
-                    <input
-                      value={completeForm.dentistName}
-                      onChange={(e) => setCompleteForm({ ...completeForm, dentistName: e.target.value })}
-                      placeholder="e.g. Jane Doe"
-                      className="w-full border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
+                      <input
+                        value={completeForm.dentistName}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dentistName: e.target.value })}
+                        placeholder="e.g. Jane Doe"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
                 )}
                 {completingAppt.type === 'VACCINATION' && (
                   <>

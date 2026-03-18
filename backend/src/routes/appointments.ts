@@ -132,6 +132,7 @@ router.post('/:id/complete', authenticate, async (req: HorsePermissionRequest, r
           vetName: vetName || existing.practitionerName || null,
           visitReason: visitReason || null,
           notes: notes || null,
+          dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null,
         },
       });
     } else if (existing.type === 'FARRIER') {
@@ -141,6 +142,7 @@ router.post('/:id/complete', authenticate, async (req: HorsePermissionRequest, r
           date: recordDate,
           farrierName: farrierName || existing.practitionerName || null,
           notes: notes || null,
+          dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null,
         },
       });
     } else if (existing.type === 'DENTIST') {
@@ -150,6 +152,7 @@ router.post('/:id/complete', authenticate, async (req: HorsePermissionRequest, r
           date: recordDate,
           dentistName: dentistName || existing.practitionerName || null,
           notes: notes || null,
+          dueDate: dueDate ? new Date(dueDate + 'T00:00:00Z') : null,
         },
       });
     } else if (existing.type === 'VACCINATION') {
