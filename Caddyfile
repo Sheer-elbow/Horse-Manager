@@ -1,5 +1,5 @@
 :80 {
-    reverse_proxy frontend:80
+    redir https://{host}{uri} permanent
 }
 
 www.holidayskitak.uk {
@@ -7,5 +7,5 @@ www.holidayskitak.uk {
 }
 
 holidayskitak.uk {
-    redir https://www.holidayskitak.uk{uri}
+    redir https://www.holidayskitak.uk{uri} permanent
 }

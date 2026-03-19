@@ -22,6 +22,7 @@ import dashboardRoutes from './routes/dashboard';
 import notificationRoutes from './routes/notifications';
 import searchRoutes from './routes/search';
 import { startNotificationScheduler } from './services/notification-scheduler';
+import { apiLimiter } from './middleware/rateLimiter';
 
 const app = express();
 
@@ -45,7 +46,9 @@ app.use((_req, res, next) => {
 
 // Middleware
 app.use(cors({
-  origin: config.nodeEnv === 'production' ? config.appUrl : true,
+  origin: config.nodeEnv === 'production'
+    ? config.appUrl
+    : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:80', 'http://localhost'],
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
@@ -75,6 +78,9 @@ app.use('/api/uploads', (req, res, next) => {
   }
 }, express.static(path.join(process.cwd(), 'uploads')));
 
+// General rate limiter applied to all API routes before individual routers
+app.use('/api', apiLimiter);
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -103,7 +109,8 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
       res.status(413).json({ error: 'File too large. Check upload size limits.' });
       return;
     }
-    res.status(400).json({ error: `Upload error: ${err.message}` });
+    console.error('Multer error:', err.code, err.message);
+    res.status(400).json({ error: 'File upload failed' });
     return;
   }
 
@@ -140,11 +147,12 @@ function validateEnv() {
     process.exit(1);
   }
 
-  if (
-    config.jwt.secret === 'dev-secret-change-me' ||
-    config.jwt.refreshSecret === 'dev-refresh-secret-change-me'
-  ) {
-    console.error('[FATAL] JWT_SECRET and JWT_REFRESH_SECRET must be changed from their default values.');
+  if (!config.jwt.secret || config.jwt.secret.length < 32) {
+    console.error('[FATAL] JWT_SECRET must be set to a random value of at least 32 characters.');
+    process.exit(1);
+  }
+  if (!config.jwt.refreshSecret || config.jwt.refreshSecret.length < 32) {
+    console.error('[FATAL] JWT_REFRESH_SECRET must be set to a random value of at least 32 characters.');
     process.exit(1);
   }
 }

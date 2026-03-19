@@ -1,24 +1,10 @@
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me';
-
-// Refuse to start in production with well-known fallback secrets — a missing
-// env var would make every JWT trivially forgeable by anyone who has read
-// this source code or a Docker image layer.
-if (isProduction) {
-  if (JWT_SECRET === 'dev-secret-change-me') {
-    throw new Error('JWT_SECRET must be set to a strong random value in production');
-  }
-  if (JWT_REFRESH_SECRET === 'dev-refresh-secret-change-me') {
-    throw new Error('JWT_REFRESH_SECRET must be set to a strong random value in production');
-  }
-} else {
-  if (JWT_SECRET === 'dev-secret-change-me' || JWT_REFRESH_SECRET === 'dev-refresh-secret-change-me') {
-    console.warn('[security] WARNING: Using default JWT secrets. Set JWT_SECRET and JWT_REFRESH_SECRET before deploying to production.');
-  }
-}
+// No fallback defaults — a missing or empty secret would silently allow
+// JWTs to be forged with an empty key, which is worse than a startup crash.
+const JWT_SECRET = process.env.JWT_SECRET ?? '';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? '';
 
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
