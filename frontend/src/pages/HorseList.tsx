@@ -7,6 +7,8 @@ import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
+import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function HorseList() {
   const { user } = useAuth();
@@ -20,6 +22,8 @@ export default function HorseList() {
   const [priorityOnly, setPriorityOnly] = useState(false);
 
   const isStableStaff = user?.role === 'RIDER' || user?.role === 'GROOM';
+  const isAdmin = user?.role === 'ADMIN';
+  const [deleteTarget, setDeleteTarget] = useState<Horse | null>(null);
 
   const load = async () => {
     try {
@@ -58,6 +62,18 @@ export default function HorseList() {
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add horse');
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api(`/horses/${deleteTarget.id}`, { method: 'DELETE' });
+      toast.success(`${deleteTarget.name} deleted`);
+      setDeleteTarget(null);
+      load();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete horse');
     }
   };
 
@@ -132,32 +148,53 @@ export default function HorseList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredHorses.map((h) => (
-            <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border p-5 hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-4 mb-3">
-                {h.photoUrl ? (
-                  <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-16 h-16 rounded-lg object-cover border shrink-0" fallback={<div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>} />
-                ) : (
-                  <div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>
-                )}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
-                  {h._isPriority && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                      Priority
-                    </span>
+            <div key={h.id} className="relative bg-white rounded-xl border hover:shadow-md transition-shadow group">
+              <Link to={`/horses/${h.id}`} className="block p-5">
+                <div className="flex items-center gap-4 mb-3">
+                  {h.photoUrl ? (
+                    <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-16 h-16 rounded-lg object-cover border shrink-0" fallback={<div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>} />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-2xl shrink-0">&#x1f40e;</div>
                   )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
+                    {h._isPriority && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        Priority
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-1">
-                {h.breed && <div className="text-sm text-gray-500">Breed: {h.breed}</div>}
-                {h.age && <div className="text-sm text-gray-500">Age: {h.age}</div>}
-                {h.stable && <div className="text-sm text-gray-400">Stable: {h.stable.name}</div>}
-                {!h.stable && h.stableLocation && <div className="text-sm text-gray-400">Location: {h.stableLocation}</div>}
-              </div>
-            </Link>
+                <div className="space-y-1">
+                  {h.breed && <div className="text-sm text-gray-500">Breed: {h.breed}</div>}
+                  {h.age && <div className="text-sm text-gray-500">Age: {h.age}</div>}
+                  {h.stable && <div className="text-sm text-gray-400">Stable: {h.stable.name}</div>}
+                  {!h.stable && h.stableLocation && <div className="text-sm text-gray-400">Location: {h.stableLocation}</div>}
+                </div>
+              </Link>
+              {isAdmin && (
+                <button
+                  onClick={() => setDeleteTarget(h)}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                  title={`Delete ${h.name}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete horse">
+        <p className="text-sm text-gray-600 mb-4">
+          Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? All records, sessions, and health data for this horse will be permanently removed. This cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+        </div>
+      </Modal>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add horse">
         {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
