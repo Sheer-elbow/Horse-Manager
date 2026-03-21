@@ -29,7 +29,8 @@ docker compose build --no-cache
 
 echo "3/4  Starting services..."
 docker compose down --remove-orphans --timeout 30
-docker rm -f stable-manager-db-1 2>/dev/null || true
+# Force-remove any ghost containers Docker hasn't fully cleaned up yet
+docker ps -aq --filter "name=stable-manager-" | xargs -r docker rm -f 2>/dev/null || true
 docker compose up -d
 
 echo "4/4  Running database migrations and seed..."

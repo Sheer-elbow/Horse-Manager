@@ -9,8 +9,13 @@ import HorseProfile from './pages/HorseProfile';
 import Planner from './pages/Planner';
 import Users from './pages/Users';
 import Programmes from './pages/Programmes';
+import Stables from './pages/Stables';
+import StableManage from './pages/StableManage';
 import SecurityDashboard from './pages/SecurityDashboard';
 import NotificationSettings from './pages/NotificationSettings';
+import Appointments from './pages/Appointments';
+import Invoices from './pages/Invoices';
+import CostDashboard from './pages/CostDashboard';
 import { ReactNode } from 'react';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) {
@@ -48,10 +53,15 @@ function AppRoutes() {
       <Route path="/horses" element={<ProtectedRoute><HorseList /></ProtectedRoute>} />
       <Route path="/horses/:id" element={<ProtectedRoute><HorseProfile /></ProtectedRoute>} />
       <Route path="/horses/:id/planner" element={<ProtectedRoute><Planner /></ProtectedRoute>} />
+      <Route path="/stables" element={<ProtectedRoute><Stables /></ProtectedRoute>} />
       <Route path="/programmes" element={<ProtectedRoute><Programmes /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
       <Route path="/admin/security" element={<ProtectedRoute adminOnly><SecurityDashboard /></ProtectedRoute>} />
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+      <Route path="/stable" element={<ProtectedRoute><StableManage /></ProtectedRoute>} />
+      <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
+      <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
+      <Route path="/costs" element={<ProtectedRoute><CostDashboard /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

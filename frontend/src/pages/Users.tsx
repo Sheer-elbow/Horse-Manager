@@ -18,7 +18,7 @@ export default function Users() {
   const [success, setSuccess] = useState('');
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({ name: '', role: '' as User['role'] });
-  const [inviteRole, setInviteRole] = useState<'TRAINER' | 'RIDER' | 'OWNER'>('RIDER');
+  const [inviteRole, setInviteRole] = useState<'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER'>('RIDER');
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -101,12 +101,24 @@ export default function Users() {
     }
   };
 
+  const ROLE_LABELS: Record<string, string> = {
+    ADMIN: 'Admin',
+    STABLE_LEAD: 'Stable Lead',
+    RIDER: 'Rider',
+    GROOM: 'Groom',
+    OWNER: 'Owner',
+    TRAINER: 'Trainer',
+  };
+
   const roleBadge = (role: string) => {
+    const label = ROLE_LABELS[role] ?? role;
     switch (role) {
-      case 'ADMIN': return <Badge variant="brand">{role}</Badge>;
-      case 'TRAINER': return <Badge variant="info">{role}</Badge>;
-      case 'RIDER': return <Badge variant="success">{role}</Badge>;
-      default: return <Badge variant="warning">{role}</Badge>;
+      case 'ADMIN': return <Badge variant="brand">{label}</Badge>;
+      case 'STABLE_LEAD': return <Badge variant="info">{label}</Badge>;
+      case 'TRAINER': return <Badge variant="info">{label}</Badge>;
+      case 'RIDER': return <Badge variant="success">{label}</Badge>;
+      case 'GROOM': return <Badge variant="success">{label}</Badge>;
+      default: return <Badge variant="warning">{label}</Badge>;
     }
   };
 
@@ -226,10 +238,12 @@ export default function Users() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'TRAINER' | 'RIDER' | 'OWNER')} className="w-full border rounded-lg px-3 py-2">
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER')} className="w-full border rounded-lg px-3 py-2">
+              <option value="STABLE_LEAD">Stable Lead</option>
               <option value="RIDER">Rider</option>
-              <option value="TRAINER">Trainer</option>
+              <option value="GROOM">Groom</option>
               <option value="OWNER">Owner</option>
+              <option value="TRAINER">Trainer</option>
             </select>
           </div>
           <p className="text-xs text-gray-500">An invite link will be sent to this email. The invite expires in 72 hours.</p>
@@ -253,9 +267,11 @@ export default function Users() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
             <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as User['role'] })} className="w-full border rounded-lg px-3 py-2" disabled={editUser?.id === currentUser?.id}>
               <option value="ADMIN">Admin</option>
-              <option value="TRAINER">Trainer</option>
+              <option value="STABLE_LEAD">Stable Lead</option>
               <option value="RIDER">Rider</option>
+              <option value="GROOM">Groom</option>
               <option value="OWNER">Owner</option>
+              <option value="TRAINER">Trainer</option>
             </select>
             {editUser?.id === currentUser?.id && <p className="text-xs text-gray-400 mt-1">Cannot change your own role</p>}
           </div>

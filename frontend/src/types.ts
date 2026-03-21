@@ -2,7 +2,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
-  role: 'ADMIN' | 'TRAINER' | 'RIDER' | 'OWNER';
+  role: 'ADMIN' | 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER';
   mustChangePassword: boolean;
   createdAt?: string;
   assignments?: HorseAssignment[];
@@ -17,6 +17,15 @@ export interface HorseAssignment {
   user?: { id: string; email: string; name: string | null };
 }
 
+export interface Stable {
+  id: string;
+  name: string;
+  address: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { horses: number };
+}
+
 export interface Horse {
   id: string;
   name: string;
@@ -24,12 +33,40 @@ export interface Horse {
   breed: string | null;
   ownerNotes: string | null;
   stableLocation: string | null;
+  stableId: string | null;
   identifyingInfo: string | null;
   photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  stable?: { id: string; name: string } | null;
   _permission?: 'VIEW' | 'EDIT';
+  _accessType?: 'ADMIN' | 'OWNER_EDIT' | 'TRAINER_VIEW' | 'LEAD_VIEW' | 'STAFF_VIEW';
+  _isPriority?: boolean;
   assignments?: HorseAssignment[];
+}
+
+export interface StableAssignment {
+  id: string;
+  userId: string;
+  stableId: string;
+  createdAt: string;
+  user?: { id: string; email: string; name: string | null; role: string };
+}
+
+export interface HorsePriority {
+  id: string;
+  userId: string;
+  horseId: string;
+  createdAt: string;
+  user?: { id: string; email: string; name: string | null; role: string };
+}
+
+export interface StableMembership {
+  id: string;
+  userId: string;
+  stableId: string;
+  type: 'AUTO' | 'REQUESTED' | 'APPROVED';
+  createdAt: string;
 }
 
 export interface Programme {
@@ -148,7 +185,7 @@ export interface AuditEntry {
 export interface InviteToken {
   id: string;
   email: string;
-  role: 'TRAINER' | 'RIDER' | 'OWNER';
+  role: 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER';
   createdAt: string;
   expiresAt: string;
   usedAt: string | null;
@@ -239,4 +276,117 @@ export interface SecurityEventsPage {
   total: number;
   page: number;
   pageSize: number;
+}
+
+// ─── Invoices & Cost Splitting ────────────────────────────────
+
+export type InvoiceStatus = 'DRAFT' | 'CONFIRMED' | 'PAID';
+export type InvoiceType = 'OWNER' | 'STABLE';
+
+export interface InvoiceSplit {
+  id: string;
+  invoiceId?: string;
+  horseId: string;
+  ownerId: string | null;
+  amount: string; // Decimal comes as string from Prisma
+  horse: { id: string; name: string };
+  owner: { id: string; name: string | null; email: string } | null;
+}
+
+export interface Invoice {
+  id: string;
+  type: InvoiceType;
+  supplier: string | null;
+  category: string;
+  date: string;
+  totalAmount: string; // Decimal as string
+  notes: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
+  status: InvoiceStatus;
+  stableId: string | null;
+  recurringInvoiceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; name: string | null; email: string };
+  stable: { id: string; name: string } | null;
+  splits: InvoiceSplit[];
+}
+
+export interface RecurringInvoiceSplit {
+  id: string;
+  horseId: string;
+  ownerId: string | null;
+  amount: string;
+  horse: { id: string; name: string };
+  owner: { id: string; name: string | null; email: string } | null;
+}
+
+export interface RecurringInvoice {
+  id: string;
+  type: InvoiceType;
+  supplier: string | null;
+  category: string;
+  totalAmount: string;
+  notes: string | null;
+  active: boolean;
+  dayOfMonth: number;
+  startDate: string;
+  endDate: string | null;
+  lastGeneratedDate: string | null;
+  stableId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; name: string | null; email: string };
+  stable: { id: string; name: string } | null;
+  splits: RecurringInvoiceSplit[];
+}
+
+export interface CostMonthData {
+  month: number;
+  amount: number;
+}
+
+export interface CostCategoryData {
+  category: string;
+  amount: number;
+}
+
+export interface HorseCostSummary {
+  horseId: string;
+  horseName: string;
+  totalAmount: number;
+  byMonth: CostMonthData[];
+  byCategory: CostCategoryData[];
+}
+
+export interface CostDashboardData {
+  year: number;
+  grandTotal: number;
+  grandByMonth: CostMonthData[];
+  horses: HorseCostSummary[];
+}
+
+// ─── Horse Documents ──────────────────────────────────────────
+
+export type DocumentCategory =
+  | 'Insurance'
+  | 'Passport & Registration'
+  | 'Competition Licences'
+  | 'Vet Records'
+  | 'Other';
+
+export interface HorseDocument {
+  id: string;
+  horseId: string;
+  name: string;
+  category: string;
+  fileUrl: string;
+  fileName: string;
+  expiresAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  uploadedBy: { id: string; name: string | null; email: string };
+  horse?: { id: string; name: string };
 }

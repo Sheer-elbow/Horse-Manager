@@ -212,6 +212,96 @@ async function runHealthAlerts() {
   }
 }
 
+async function runAppointmentReminders() {
+  const key = todayKey('appointmentReminders');
+  if (sentToday.has(key)) return;
+  sentToday.add(key);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const users = await prisma.notificationPreference.findMany({
+    where: { emailEnabled: true, appointmentReminderDays: { not: null } },
+    include: { user: true },
+  });
+
+  for (const pref of users) {
+    const { user } = pref;
+    const reminderDays = pref.appointmentReminderDays!;
+    const windowEnd = new Date(today);
+    windowEnd.setDate(windowEnd.getDate() + reminderDays + 1);
+
+    const [assignments, stableAssignments] = await Promise.all([
+      prisma.horseAssignment.findMany({ where: { userId: user.id }, select: { horseId: true } }),
+      prisma.stableAssignment.findMany({ where: { userId: user.id }, select: { stableId: true } }),
+    ]);
+    const stableHorses = stableAssignments.length > 0
+      ? await prisma.horse.findMany({
+          where: { stableId: { in: stableAssignments.map((s) => s.stableId) } },
+          select: { id: true },
+        })
+      : [];
+    const horseIds = [...new Set([
+      ...assignments.map((a) => a.horseId),
+      ...stableHorses.map((h) => h.id),
+    ])];
+
+    if (horseIds.length === 0) continue;
+
+    const upcoming = await prisma.appointment.findMany({
+      where: {
+        horseId: { in: horseIds },
+        status: 'UPCOMING',
+        scheduledAt: { gte: today, lt: windowEnd },
+        reminderSent: false,
+      },
+      orderBy: { scheduledAt: 'asc' },
+      include: { horse: { select: { name: true } } },
+    });
+
+    if (upcoming.length === 0) continue;
+
+    const TYPE_LABELS: Record<string, string> = {
+      VET: 'Vet', FARRIER: 'Farrier', DENTIST: 'Dentist', VACCINATION: 'Vaccination', OTHER: 'Other',
+    };
+
+    const listItems = upcoming.map((appt) => {
+      const d = new Date(appt.scheduledAt);
+      const daysAway = Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const typeLabel = appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : TYPE_LABELS[appt.type];
+      const practitioner = appt.practitionerName ? ` — ${appt.practitionerName}` : '';
+      return `<li style="margin:4px 0;"><strong>${appt.horse.name}</strong> · ${typeLabel}${practitioner} · ${dateStr} at ${timeStr} (in ${daysAway} day${daysAway !== 1 ? 's' : ''})</li>`;
+    }).join('');
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+        <h2 style="color:#15803d;">Stable Manager — Upcoming Appointments</h2>
+        <p>You have ${upcoming.length} appointment${upcoming.length !== 1 ? 's' : ''} coming up in the next ${reminderDays} day${reminderDays !== 1 ? 's' : ''}:</p>
+        <ul style="padding-left:20px;">${listItems}</ul>
+        <p><a href="${process.env.APP_URL ?? 'http://localhost:5173'}/appointments" style="display:inline-block;padding:10px 20px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;">View appointments</a></p>
+        <p style="color:#9ca3af;font-size:12px;">You're receiving this because you enabled appointment reminders in Notification Settings. <a href="${process.env.APP_URL ?? 'http://localhost:5173'}/settings/notifications">Manage preferences</a></p>
+      </div>
+    `;
+
+    try {
+      await emailAdapter.sendMail({
+        to: user.email,
+        subject: `Stable Manager — ${upcoming.length} appointment${upcoming.length !== 1 ? 's' : ''} coming up`,
+        html,
+      });
+      await prisma.appointment.updateMany({
+        where: { id: { in: upcoming.map((a) => a.id) } },
+        data: { reminderSent: true },
+      });
+      console.log(`Appointment reminder sent to ${user.email} (${upcoming.length} appointments)`);
+    } catch (err) {
+      console.error(`Failed to send appointment reminder to ${user.email}:`, err);
+    }
+  }
+}
+
 async function runUnloggedSessionReminder() {
   const key = todayKey('unloggedSessions');
   if (sentToday.has(key)) return;
@@ -365,9 +455,10 @@ export function startNotificationScheduler(): void {
   setInterval(async () => {
     const hour = currentHour();
 
-    // 08:00 — health alerts
+    // 08:00 — health alerts + appointment reminders
     if (hour === 8) {
       await runHealthAlerts().catch((err) => console.error('Health alert job error:', err));
+      await runAppointmentReminders().catch((err) => console.error('Appointment reminder job error:', err));
     }
 
     // 20:00 — unlogged session reminder

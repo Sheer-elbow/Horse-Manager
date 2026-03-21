@@ -14,6 +14,7 @@ const preferencesSchema = z.object({
   farrierReminderDays: z.number().int().positive().nullable(),
   unloggedSessionAlert: z.boolean(),
   weeklyDigest: z.boolean(),
+  appointmentReminderDays: z.number().int().positive().nullable(),
 });
 
 // GET /api/notifications/preferences
@@ -36,6 +37,7 @@ router.get('/preferences', authenticate, async (req: AuthRequest, res: Response)
         farrierReminderDays: null,
         unloggedSessionAlert: false,
         weeklyDigest: false,
+        appointmentReminderDays: null,
       });
       return;
     }
@@ -48,6 +50,7 @@ router.get('/preferences', authenticate, async (req: AuthRequest, res: Response)
       farrierReminderDays: prefs.farrierReminderDays,
       unloggedSessionAlert: prefs.unloggedSessionAlert,
       weeklyDigest: prefs.weeklyDigest,
+      appointmentReminderDays: prefs.appointmentReminderDays,
     });
   } catch (err) {
     console.error('Get notification preferences error:', err);
@@ -83,6 +86,7 @@ router.put('/preferences', authenticate, async (req: AuthRequest, res: Response)
       farrierReminderDays: prefs.farrierReminderDays,
       unloggedSessionAlert: prefs.unloggedSessionAlert,
       weeklyDigest: prefs.weeklyDigest,
+      appointmentReminderDays: prefs.appointmentReminderDays,
     });
   } catch (err) {
     console.error('Update notification preferences error:', err);

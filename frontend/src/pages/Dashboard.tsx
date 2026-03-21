@@ -2,10 +2,49 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
-import { Horse, User } from '../types';
-import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity } from 'lucide-react';
+import { Horse, User, Stable } from '../types';
+import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText, Plus } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
+import { listExpiringDocuments } from '../api/documents';
+import type { HorseDocument } from '../types';
+import QuickLogModal from '../components/QuickLogModal';
+
+interface Appointment {
+  id: string;
+  type: 'VET' | 'FARRIER' | 'DENTIST' | 'VACCINATION' | 'OTHER';
+  typeOther: string | null;
+  scheduledAt: string;
+  practitionerName: string | null;
+  contactNumber: string | null;
+  locationAtStable: boolean;
+  locationOther: string | null;
+  notes: string | null;
+  status: 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+  reminderSent: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  horse: { id: string; name: string };
+  createdBy: { id: string; name: string | null };
+}
+
+function formatApptDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const APPT_TYPE_BADGE: Record<string, string> = {
+  VET: 'bg-blue-100 text-blue-700',
+  FARRIER: 'bg-green-100 text-green-700',
+  DENTIST: 'bg-purple-100 text-purple-700',
+  VACCINATION: 'bg-amber-100 text-amber-700',
+  OTHER: 'bg-gray-100 text-gray-600',
+};
+
+const APPT_TYPE_LABELS: Record<string, string> = {
+  VET: 'Vet', FARRIER: 'Farrier', DENTIST: 'Dentist', VACCINATION: 'Vaccination', OTHER: 'Other',
+};
 
 interface TodayWorkout {
   id: string;
@@ -70,6 +109,10 @@ export default function Dashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [myStableStaffCount, setMyStableStaffCount] = useState<number | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [expiringDocs, setExpiringDocs] = useState<HorseDocument[]>([]);
+  const [showQuickLog, setShowQuickLog] = useState(false);
 
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -82,9 +125,23 @@ export default function Dashboard() {
         ]);
         setHorses(h);
         setDashData(dash);
+        try {
+          const apptsData = await api<Appointment[]>('/appointments/upcoming');
+          setAppointments(apptsData);
+        } catch { /* non-critical */ }
+        try {
+          const docs = await listExpiringDocuments();
+          setExpiringDocs(docs);
+        } catch { /* non-critical */ }
         if (user?.role === 'ADMIN') {
           const u = await api<User[]>('/users');
           setUsers(u);
+        }
+        if (user?.role === 'STABLE_LEAD') {
+          try {
+            const myStables = await api<{ _count?: { stableAssignments: number } }[]>('/stables/my');
+            if (myStables.length > 0) setMyStableStaffCount(myStables[0]._count?.stableAssignments ?? 0);
+          } catch { /* non-critical */ }
         }
       } catch (err) {
         console.error('Dashboard load error:', err);
@@ -140,6 +197,9 @@ export default function Dashboard() {
     </div>
   );
 
+  const isStableStaff = user?.role === 'RIDER' || user?.role === 'GROOM';
+  const priorityHorses = isStableStaff ? horses.filter((h) => h._isPriority) : [];
+
   const isNewAdmin = user?.role === 'ADMIN' && horses.length === 0;
   const hasNoHorses = horses.length === 0;
 
@@ -166,6 +226,20 @@ export default function Dashboard() {
             <div className="text-2xl font-bold text-brand-600">{users.length}</div>
             <div className="text-xs text-gray-500 mt-0.5">Team members</div>
             <Link to="/admin/users" className="text-xs text-brand-600 hover:underline mt-1 inline-block">Manage</Link>
+          </div>
+        )}
+        {user?.role === 'STABLE_LEAD' && myStableStaffCount !== null && (
+          <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
+            <div className="text-2xl font-bold text-brand-600">{myStableStaffCount}</div>
+            <div className="text-xs text-gray-500 mt-0.5">Staff in stable</div>
+            <Link to="/stable" className="text-xs text-brand-600 hover:underline mt-1 inline-block">Manage</Link>
+          </div>
+        )}
+        {isStableStaff && (
+          <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
+            <div className="text-2xl font-bold text-amber-600">{priorityHorses.length}</div>
+            <div className="text-xs text-gray-500 mt-0.5">Priority horses</div>
+            <Link to="/horses" className="text-xs text-brand-600 hover:underline mt-1 inline-block">View all</Link>
           </div>
         )}
         <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">
@@ -295,6 +369,107 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Expiring documents */}
+      {expiringDocs.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="w-4 h-4 text-amber-500" />
+            <h3 className="text-base font-semibold text-gray-900">Documents expiring soon</h3>
+          </div>
+          <div className="space-y-2">
+            {expiringDocs.map((doc) => {
+              const days = Math.ceil(
+                (new Date(doc.expiresAt!).getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)
+              );
+              const overdue = days < 0;
+              const date = new Date(doc.expiresAt!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+              return (
+                <Link
+                  key={doc.id}
+                  to={`/horses/${doc.horse?.id}`}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-colors hover:shadow-sm ${
+                    overdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                  }`}
+                >
+                  <AlertTriangle className={`w-4 h-4 shrink-0 ${overdue ? 'text-red-500' : 'text-amber-500'}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-gray-900 text-sm">{doc.horse?.name}</span>
+                    <span className="text-gray-500 text-sm"> — {doc.name}</span>
+                    <div className="text-xs text-gray-400 mt-0.5">{doc.category}</div>
+                  </div>
+                  <span className={`text-xs font-medium shrink-0 ${overdue ? 'text-red-600' : 'text-amber-600'}`}>
+                    {overdue ? `Expired ${date}` : days === 0 ? 'Expires today' : `Expires ${date}`}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Priority horses section for stable staff */}
+      {isStableStaff && priorityHorses.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-amber-500 text-sm">★</span>
+            <h3 className="text-base font-semibold text-gray-900">Your priority horses</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {priorityHorses.map((h) => (
+              <Link key={h.id} to={`/horses/${h.id}`} className="bg-white rounded-xl border border-amber-200 p-4 hover:shadow-md transition-shadow flex items-center gap-3">
+                {h.photoUrl ? (
+                  <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-12 h-12 rounded-lg object-cover border shrink-0" fallback={<div className="w-12 h-12 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-300 text-xl shrink-0">&#x1f40e;</div>} />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-300 text-xl shrink-0">&#x1f40e;</div>
+                )}
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-900 truncate">{h.name}</div>
+                  {h.breed && <div className="text-xs text-gray-500 truncate">{h.breed}</div>}
+                  <div className="text-xs text-amber-600 mt-0.5 font-medium">Priority care</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming appointments */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-brand-600" />
+            <h3 className="text-base font-semibold text-gray-900">Upcoming appointments</h3>
+          </div>
+          <Link to="/appointments" className="text-sm text-brand-600 hover:underline">View all</Link>
+        </div>
+        <div className="bg-white rounded-xl border divide-y">
+          {appointments.length === 0 ? (
+            <div className="p-4 text-center text-sm text-gray-500">No upcoming appointments.</div>
+          ) : (
+            appointments.slice(0, 5).map((appt) => (
+              <Link
+                key={appt.id}
+                to={`/horses/${appt.horse.id}`}
+                className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900">{formatApptDate(appt.scheduledAt)}</span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${APPT_TYPE_BADGE[appt.type] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : APPT_TYPE_LABELS[appt.type]}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 truncate mt-0.5">
+                    <span className="font-medium">{appt.horse.name}</span>
+                    {appt.practitionerName && <span className="text-gray-400"> · {appt.practitionerName}</span>}
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* Two-column bottom section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Your horses */}
@@ -373,6 +548,28 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Quick-log FAB */}
+      {horses.length > 0 && (
+        <button
+          onClick={() => setShowQuickLog(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
+          title="Log a session"
+        >
+          <Plus className="w-5 h-5" />
+          <span className="hidden sm:inline">Log session</span>
+        </button>
+      )}
+
+      <QuickLogModal
+        open={showQuickLog}
+        onClose={() => setShowQuickLog(false)}
+        horses={horses}
+        onLogged={() => {
+          // refresh dashboard data so recent activity updates
+          api<DashboardData>('/dashboard').then(setDashData).catch(() => {});
+        }}
+      />
 
       {/* Team overview (admin only) */}
       {user?.role === 'ADMIN' && users.length > 0 && (

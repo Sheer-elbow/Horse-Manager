@@ -9,22 +9,17 @@ datasource db {
 
 enum Role {
   ADMIN
-  TRAINER
+  STABLE_LEAD
+  GROOM
   RIDER
   OWNER
+  TRAINER
 }
 
-enum SecurityEventType {
-  LOGIN_SUCCESS
-  LOGIN_FAILURE
-  PASSWORD_RESET_REQUESTED
-  PASSWORD_RESET_USED
-  PASSWORD_CHANGED
-  INVITE_SENT
-  INVITE_ACCEPTED
-  ROLE_CHANGED
-  USER_DELETED
-  ACCESS_DENIED
+enum MembershipType {
+  AUTO
+  REQUESTED
+  APPROVED
 }
 
 enum Permission {
@@ -49,6 +44,31 @@ enum AppliedPlanStatus {
   CANCELLED
 }
 
+enum AppointmentType {
+  VET
+  FARRIER
+  DENTIST
+  VACCINATION
+  OTHER
+}
+
+enum AppointmentStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  CONFIRMED
+  PAID
+}
+
+enum InvoiceType {
+  OWNER
+  STABLE
+}
+
 // ─── Users & Auth ────────────────────────────────────────────
 
 model User {
@@ -62,15 +82,24 @@ model User {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   assignments              HorseAssignment[]
+  stableAssignments        StableAssignment[]
+  horsePriorities          HorsePriority[]
+  stableMemberships        StableMembership[]
   invitesSent              InviteToken[]
   passwordResetTokens      PasswordResetToken[]
-  securityEvents           SecurityEvent[]
   createdProgrammes        Programme[]
   sessionLogs              ActualSessionLog[]
   auditEdits               SessionAuditLog[]
   assignedPlans            AppliedPlan[]
   sharedPlans              PlanShare[]
   notificationPreference   NotificationPreference?
+  securityEvents           SecurityEvent[]
+  appointments             Appointment[]
+  createdInvoices              Invoice[]                @relation("InvoiceCreator")
+  ownedInvoiceSplits           InvoiceSplit[]            @relation("InvoiceSplitOwner")
+  createdRecurringInvoices     RecurringInvoice[]        @relation("RecurringInvoiceCreator")
+  ownedRecurringInvoiceSplits  RecurringInvoiceSplit[]   @relation("RecurringInvoiceSplitOwner")
+  uploadedDocuments            HorseDocument[]           @relation("DocumentUploader")
 
   @@map("users")
 }
@@ -103,27 +132,22 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
-model SecurityEvent {
-  id        String            @id @default(uuid())
-  eventType SecurityEventType @map("event_type")
-  // userId is nullable — failed logins may not map to any real user
-  userId    String?           @map("user_id")
-  // email captured separately so failed-login probes are still searchable
-  email     String?
-  ipAddress String            @map("ip_address")
-  userAgent String?           @map("user_agent")
-  // 'success' | 'failure' | 'info'
-  outcome   String
-  // Freeform context (old/new role, invited email, etc.) — never stores secrets
-  metadata  Json?
-  createdAt DateTime          @default(now()) @map("created_at")
+// ─── Stables ─────────────────────────────────────────────────
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+model Stable {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([createdAt(sort: Desc)])
-  @@index([eventType])
-  @@index([ipAddress])
-  @@map("security_events")
+  horses              Horse[]
+  stableAssignments   StableAssignment[]
+  stableMemberships   StableMembership[]
+  invoices            Invoice[]
+  recurringInvoices   RecurringInvoice[]
+
+  @@map("stables")
 }
 
 // ─── Horses ──────────────────────────────────────────────────
@@ -135,12 +159,15 @@ model Horse {
   breed           String?
   ownerNotes      String?  @map("owner_notes")
   stableLocation  String?  @map("stable_location")
+  stableId        String?  @map("stable_id")
   identifyingInfo String?  @map("identifying_info")
   photoUrl        String?  @map("photo_url")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  stable          Stable?  @relation(fields: [stableId], references: [id], onDelete: SetNull)
   assignments     HorseAssignment[]
+  priorities      HorsePriority[]
   planBlocks      PlanBlock[]
   plannedSessions PlannedSession[]
   actualSessions  ActualSessionLog[]
@@ -148,8 +175,13 @@ model Horse {
   workouts        Workout[]
   vetVisits       VetVisit[]
   farrierVisits   FarrierVisit[]
+  dentistVisits   DentistVisit[]
   vaccinations    VaccinationRecord[]
-  expenses        ExpenseNote[]
+  expenses                  ExpenseNote[]
+  appointments              Appointment[]
+  invoiceSplits             InvoiceSplit[]
+  recurringInvoiceSplits    RecurringInvoiceSplit[]
+  documents                 HorseDocument[]
 
   @@map("horses")
 }
@@ -383,6 +415,9 @@ model NotificationPreference {
   // Training: Monday morning weekly digest of the week ahead
   weeklyDigest Boolean @default(false) @map("weekly_digest")
 
+  // Appointments: reminder X days before (null = off)
+  appointmentReminderDays Int? @map("appointment_reminder_days")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -392,14 +427,17 @@ model NotificationPreference {
 // ─── Stable Manager (health / expenses) ─────────────────────
 
 model VetVisit {
-  id        String   @id @default(uuid())
-  horseId   String   @map("horse_id")
-  date      DateTime @db.Date
-  notes     String?
-  fileUrl   String?  @map("file_url")
-  fileName  String?  @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid())
+  horseId      String    @map("horse_id")
+  date         DateTime  @db.Date
+  vetName      String?   @map("vet_name")
+  visitReason  String?   @map("visit_reason")
+  notes        String?
+  dueDate      DateTime? @map("due_date") @db.Date
+  fileUrl      String?   @map("file_url")
+  fileName     String?   @map("file_name")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
@@ -407,18 +445,37 @@ model VetVisit {
 }
 
 model FarrierVisit {
-  id        String   @id @default(uuid())
-  horseId   String   @map("horse_id")
-  date      DateTime @db.Date
-  notes     String?
-  fileUrl   String?  @map("file_url")
-  fileName  String?  @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String    @id @default(uuid())
+  horseId     String    @map("horse_id")
+  date        DateTime  @db.Date
+  farrierName String?   @map("farrier_name")
+  notes       String?
+  dueDate     DateTime? @map("due_date") @db.Date
+  fileUrl     String?   @map("file_url")
+  fileName    String?   @map("file_name")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
   @@map("farrier_visits")
+}
+
+model DentistVisit {
+  id          String    @id @default(uuid())
+  horseId     String    @map("horse_id")
+  date        DateTime  @db.Date
+  dentistName String?   @map("dentist_name")
+  notes       String?
+  dueDate     DateTime? @map("due_date") @db.Date
+  fileUrl     String?   @map("file_url")
+  fileName    String?   @map("file_name")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@map("dentist_visits")
 }
 
 model VaccinationRecord {
@@ -442,6 +499,7 @@ model ExpenseNote {
   id        String   @id @default(uuid())
   horseId   String   @map("horse_id")
   date      DateTime @db.Date
+  category  String?
   amount    Decimal? @db.Decimal(10, 2)
   notes     String?
   fileUrl   String?  @map("file_url")
@@ -452,4 +510,224 @@ model ExpenseNote {
   horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
 
   @@map("expense_notes")
+}
+
+// ─── Stable Assignments (staff linked to stables) ────────────
+
+model StableAssignment {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  stableId  String   @map("stable_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stable Stable @relation(fields: [stableId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stableId])
+  @@map("stable_assignments")
+}
+
+// ─── Horse Priorities (priority care horses for stable staff) ─
+
+model HorsePriority {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  horseId   String   @map("horse_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  horse Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, horseId])
+  @@map("horse_priorities")
+}
+
+// ─── Stable Memberships (owners linked to stables) ───────────
+
+model StableMembership {
+  id        String         @id @default(uuid())
+  userId    String         @map("user_id")
+  stableId  String         @map("stable_id")
+  type      MembershipType @default(AUTO)
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stable Stable @relation(fields: [stableId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, stableId])
+  @@map("stable_memberships")
+}
+
+// ─── Security Events ──────────────────────────────────────────
+
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILURE
+  LOGOUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  ROLE_CHANGED
+  USER_DELETED
+  INVITE_SENT
+  INVITE_ACCEPTED
+  TOKEN_REFRESHED
+  PASSWORD_RESET_USED
+  SUSPICIOUS_ACTIVITY
+}
+
+model SecurityEvent {
+  id         String            @id @default(uuid())
+  eventType  SecurityEventType @map("event_type")
+  userId     String?           @map("user_id")
+  email      String?
+  ipAddress  String?           @map("ip_address")
+  userAgent  String?           @map("user_agent")
+  outcome    String
+  metadata   Json?
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("security_events")
+}
+
+// ─── Appointments ─────────────────────────────────────────────
+
+model Appointment {
+  id               String            @id @default(uuid())
+  horseId          String            @map("horse_id")
+  createdById      String            @map("created_by_id")
+  type             AppointmentType
+  typeOther        String?           @map("type_other")
+  scheduledAt      DateTime          @map("scheduled_at")
+  practitionerName String?           @map("practitioner_name")
+  contactNumber    String?           @map("contact_number")
+  locationAtStable Boolean           @default(true) @map("location_at_stable")
+  locationOther    String?           @map("location_other")
+  notes            String?
+  status           AppointmentStatus @default(UPCOMING)
+  reminderSent     Boolean           @default(false) @map("reminder_sent")
+  completedAt      DateTime?         @map("completed_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  horse     Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  createdBy User  @relation(fields: [createdById], references: [id])
+
+  @@index([horseId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@map("appointments")
+}
+
+// ─── Invoices & Cost Splitting ────────────────────────────────
+
+model Invoice {
+  id                 String        @id @default(uuid())
+  type               InvoiceType   @default(OWNER)
+  createdById        String        @map("created_by_id")
+  stableId           String?       @map("stable_id")
+  recurringInvoiceId String?       @map("recurring_invoice_id")
+  supplier           String?
+  category           String
+  date               DateTime      @db.Date
+  totalAmount        Decimal       @db.Decimal(10, 2) @map("total_amount")
+  notes              String?
+  fileUrl            String?       @map("file_url")
+  fileName           String?       @map("file_name")
+  status             InvoiceStatus @default(DRAFT)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  createdBy        User              @relation("InvoiceCreator", fields: [createdById], references: [id])
+  stable           Stable?           @relation(fields: [stableId], references: [id], onDelete: SetNull)
+  recurringInvoice RecurringInvoice? @relation(fields: [recurringInvoiceId], references: [id], onDelete: SetNull)
+  splits           InvoiceSplit[]
+
+  @@index([createdById, date])
+  @@index([stableId, date])
+  @@map("invoices")
+}
+
+model InvoiceSplit {
+  id        String   @id @default(uuid())
+  invoiceId String   @map("invoice_id")
+  horseId   String   @map("horse_id")
+  ownerId   String?  @map("owner_id")
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  horse   Horse   @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  owner   User?   @relation("InvoiceSplitOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@map("invoice_splits")
+}
+
+// ─── Recurring Invoices ───────────────────────────────────────
+
+model RecurringInvoice {
+  id                String      @id @default(uuid())
+  type              InvoiceType @default(OWNER)
+  createdById       String      @map("created_by_id")
+  stableId          String?     @map("stable_id")
+  supplier          String?
+  category          String
+  totalAmount       Decimal     @db.Decimal(10, 2) @map("total_amount")
+  notes             String?
+  active            Boolean     @default(true)
+  dayOfMonth        Int         @default(1) @map("day_of_month")
+  startDate         DateTime    @db.Date @map("start_date")
+  endDate           DateTime?   @db.Date @map("end_date")
+  lastGeneratedDate DateTime?   @db.Date @map("last_generated_date")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  createdBy User                   @relation("RecurringInvoiceCreator", fields: [createdById], references: [id])
+  stable    Stable?                @relation(fields: [stableId], references: [id], onDelete: SetNull)
+  splits    RecurringInvoiceSplit[]
+  invoices  Invoice[]
+
+  @@index([createdById, active])
+  @@map("recurring_invoices")
+}
+
+model RecurringInvoiceSplit {
+  id                 String   @id @default(uuid())
+  recurringInvoiceId String   @map("recurring_invoice_id")
+  horseId            String   @map("horse_id")
+  ownerId            String?  @map("owner_id")
+  amount             Decimal  @db.Decimal(10, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  recurringInvoice RecurringInvoice @relation(fields: [recurringInvoiceId], references: [id], onDelete: Cascade)
+  horse            Horse            @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  owner            User?            @relation("RecurringInvoiceSplitOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@map("recurring_invoice_splits")
+}
+
+// ─── Horse Documents ──────────────────────────────────────────
+
+model HorseDocument {
+  id           String    @id @default(uuid())
+  horseId      String    @map("horse_id")
+  uploadedById String    @map("uploaded_by_id")
+  name         String
+  category     String    @default("Other")
+  fileUrl      String    @map("file_url")
+  fileName     String    @map("file_name")
+  expiresAt    DateTime? @db.Date @map("expires_at")
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  horse      Horse @relation(fields: [horseId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([horseId, category])
+  @@index([expiresAt])
+  @@map("horse_documents")
 }

@@ -1,13 +1,16 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Dog, BookOpen, Users, ShieldAlert, LogOut, Menu, X, Bell, Search } from 'lucide-react';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/horses', label: 'Horses', icon: Dog },
+  { path: '/appointments', label: 'Appointments', icon: CalendarClock },
+  { path: '/invoices', label: 'Invoices', icon: Receipt },
+  { path: '/stables', label: 'Stables', icon: Home },
   { path: '/programmes', label: 'Programmes', icon: BookOpen },
 ];
 
@@ -40,7 +43,14 @@ export default function Layout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const items = user?.role === 'ADMIN' ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
+  const STABLE_LEAD_ITEMS = [
+    { path: '/stable', label: 'My Stable', icon: ShieldAlert },
+  ];
+  const items = user?.role === 'ADMIN'
+    ? [...NAV_ITEMS, ...ADMIN_ITEMS]
+    : user?.role === 'STABLE_LEAD'
+      ? [...NAV_ITEMS, ...STABLE_LEAD_ITEMS]
+      : NAV_ITEMS;
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
@@ -92,7 +102,8 @@ export default function Layout({ children }: { children: ReactNode }) {
           <nav className="p-3 space-y-1 mt-1">
             {items.map((item) => {
               const Icon = item.icon;
-              const active = location.pathname === item.path;
+              const active = location.pathname === item.path ||
+                (item.path === '/invoices' && location.pathname === '/costs');
               return (
                 <Link
                   key={item.path}

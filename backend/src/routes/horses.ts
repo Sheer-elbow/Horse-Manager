@@ -3,6 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { prisma } from '../db';
 import { authenticate, requireAdmin, requireRole } from '../middleware/auth';
 import { requireHorseAccess } from '../middleware/rbac';
@@ -10,35 +11,29 @@ import { AuthRequest, HorsePermissionRequest } from '../types';
 
 const router = Router();
 
-// Configure multer for horse photo uploads
+// Configure multer for horse photo uploads (memory storage — Sharp processes before disk write)
 const uploadsDir = path.join(process.cwd(), 'uploads', 'horses');
 fs.mkdirSync(uploadsDir, { recursive: true });
 
-const photoStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${req.params.id}${ext}`);
-  },
-});
-
-const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
 ]);
 
 const photoUpload = multer({
-  storage: photoStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // generous raw limit; Sharp output will be far smaller
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ALLOWED_IMAGE_EXTENSIONS.has(ext) && ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+    const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif']);
+    if (allowed.has(ext) || ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files (jpg, png, webp, gif) are allowed'));
+      cb(new Error('Only image files (jpg, png, webp, gif, heic) are allowed'));
     }
   },
 });
@@ -49,22 +44,52 @@ const horseSchema = z.object({
   breed: z.string().nullable().optional(),
   ownerNotes: z.string().nullable().optional(),
   stableLocation: z.string().nullable().optional(),
+  stableId: z.string().uuid().nullable().optional(),
   identifyingInfo: z.string().nullable().optional(),
 });
 
 // GET /api/horses - list horses visible to user
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user!.role === 'ADMIN') {
-      const horses = await prisma.horse.findMany({ orderBy: { name: 'asc' } });
+    const { role, userId } = req.user!;
+
+    if (role === 'ADMIN') {
+      const horses = await prisma.horse.findMany({
+        orderBy: { name: 'asc' },
+        include: { stable: { select: { id: true, name: true } } },
+      });
       res.json(horses);
       return;
     }
 
-    // Non-admin: only horses they're assigned to
+    // Stable staff (STABLE_LEAD, RIDER, GROOM): see all horses in assigned stables
+    if (role === 'STABLE_LEAD' || role === 'RIDER' || role === 'GROOM') {
+      const stableAssignments = await prisma.stableAssignment.findMany({
+        where: { userId },
+        select: { stableId: true },
+      });
+      const stableIds = stableAssignments.map((a) => a.stableId);
+
+      const [horses, priorities] = await Promise.all([
+        prisma.horse.findMany({
+          where: { stableId: { in: stableIds } },
+          orderBy: { name: 'asc' },
+          include: { stable: { select: { id: true, name: true } } },
+        }),
+        prisma.horsePriority.findMany({
+          where: { userId },
+          select: { horseId: true },
+        }),
+      ]);
+      const prioritySet = new Set(priorities.map((p) => p.horseId));
+      res.json(horses.map((h) => ({ ...h, _permission: 'VIEW', _isPriority: prioritySet.has(h.id) })));
+      return;
+    }
+
+    // OWNER / TRAINER: only horses explicitly assigned via HorseAssignment
     const assignments = await prisma.horseAssignment.findMany({
-      where: { userId: req.user!.userId },
-      include: { horse: true },
+      where: { userId },
+      include: { horse: { include: { stable: { select: { id: true, name: true } } } } },
     });
     res.json(assignments.map((a) => ({ ...a.horse, _permission: a.permission })));
   } catch (err) {
@@ -74,10 +99,20 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/horses (admin + owner)
-router.post('/', authenticate, requireRole('ADMIN', 'OWNER'), async (req, res: Response) => {
+router.post('/', authenticate, requireRole('ADMIN', 'OWNER'), async (req: AuthRequest, res: Response) => {
   try {
     const data = horseSchema.parse(req.body);
-    const horse = await prisma.horse.create({ data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, identifyingInfo: data.identifyingInfo ?? null } });
+    const horse = await prisma.horse.create({ data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, stableId: data.stableId ?? null, identifyingInfo: data.identifyingInfo ?? null } });
+
+    // Auto-create a StableMembership for the owner when a horse is stabled
+    if (horse.stableId && req.user!.role === 'OWNER') {
+      await prisma.stableMembership.upsert({
+        where: { userId_stableId: { userId: req.user!.userId, stableId: horse.stableId } },
+        create: { userId: req.user!.userId, stableId: horse.stableId, type: 'AUTO' },
+        update: {},
+      });
+    }
+
     res.status(201).json(horse);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -95,6 +130,7 @@ router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePe
     const horse = await prisma.horse.findUnique({
       where: { id: req.params.id },
       include: {
+        stable: { select: { id: true, name: true } },
         assignments: {
           include: { user: { select: { id: true, email: true, name: true } } },
         },
@@ -104,21 +140,42 @@ router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePe
       res.status(404).json({ error: 'Horse not found' });
       return;
     }
-    res.json({ ...horse, _permission: req.horsePermission });
+
+    // Check if this is a priority horse for the current user (stable staff only)
+    let isPriority = false;
+    const accessType = req.horseAccessType;
+    if (accessType === 'LEAD_VIEW' || accessType === 'STAFF_VIEW') {
+      const priority = await prisma.horsePriority.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: req.params.id } },
+      });
+      isPriority = !!priority;
+    }
+
+    res.json({ ...horse, _permission: req.horsePermission, _accessType: accessType, _isPriority: isPriority });
   } catch (err) {
     console.error('Get horse error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// PUT /api/horses/:id (admin only)
-router.put('/:id', authenticate, requireAdmin, async (req, res: Response) => {
+// PUT /api/horses/:id (admin or owner with EDIT permission)
+router.put('/:id', authenticate, requireHorseAccess('EDIT'), async (req: HorsePermissionRequest, res: Response) => {
   try {
     const data = horseSchema.parse(req.body);
     const horse = await prisma.horse.update({
       where: { id: req.params.id },
-      data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, identifyingInfo: data.identifyingInfo ?? null },
+      data: { ...data, age: data.age ?? null, breed: data.breed ?? null, ownerNotes: data.ownerNotes ?? null, stableLocation: data.stableLocation ?? null, stableId: data.stableId ?? null, identifyingInfo: data.identifyingInfo ?? null },
     });
+
+    // Auto-create/update StableMembership when an owner moves a horse to a stable
+    if (horse.stableId && req.user!.role === 'OWNER') {
+      await prisma.stableMembership.upsert({
+        where: { userId_stableId: { userId: req.user!.userId, stableId: horse.stableId } },
+        create: { userId: req.user!.userId, stableId: horse.stableId, type: 'AUTO' },
+        update: {},
+      });
+    }
+
     res.json(horse);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -155,15 +212,19 @@ router.post('/:id/photo', authenticate, requireAdmin, (req: AuthRequest, res: Re
         res.status(400).json({ error: 'No photo uploaded' });
         return;
       }
-      // Remove old photo if extension changed
+      // Delete any existing photo for this horse (all extensions)
       const existing = await prisma.horse.findUnique({ where: { id: req.params.id } });
       if (existing?.photoUrl) {
         const oldFilename = path.basename(existing.photoUrl.split('?')[0]);
-        if (oldFilename !== req.file.filename) {
-          fs.unlink(path.join(uploadsDir, oldFilename), () => {});
-        }
+        fs.unlink(path.join(uploadsDir, oldFilename), () => {});
       }
-      const photoUrl = `/api/uploads/horses/${req.file.filename}?v=${Date.now()}`;
+      // Compress and convert to WebP (max 1200×1200, 82% quality)
+      const filename = `${req.params.id}.webp`;
+      await sharp(req.file.buffer)
+        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toFile(path.join(uploadsDir, filename));
+      const photoUrl = `/api/uploads/horses/${filename}?v=${Date.now()}`;
       const horse = await prisma.horse.update({
         where: { id: req.params.id },
         data: { photoUrl },

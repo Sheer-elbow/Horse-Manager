@@ -15,12 +15,18 @@ import programmeRoutes from './routes/programmes';
 import planRoutes from './routes/plans';
 import sessionRoutes from './routes/sessions';
 import healthRoutes from './routes/health';
+import appointmentRoutes from './routes/appointments';
+import invoiceRoutes from './routes/invoices';
 import appliedPlanRoutes from './routes/applied-plans';
 import workoutRoutes from './routes/workouts';
 import securityRoutes from './routes/security';
 import dashboardRoutes from './routes/dashboard';
 import notificationRoutes from './routes/notifications';
 import searchRoutes from './routes/search';
+import stableRoutes from './routes/stables';
+import stableAssignmentRoutes from './routes/stableAssignments';
+import horsePriorityRoutes from './routes/horsePriority';
+import documentRoutes, { getExpiringDocuments } from './routes/documents';
 import { startNotificationScheduler } from './services/notification-scheduler';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -89,12 +95,34 @@ app.use('/api/programmes', programmeRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/invoices', invoiceRoutes);
 app.use('/api/applied-plans', appliedPlanRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/stables', stableRoutes);
+app.use('/api/stables/:stableId/assignments', stableAssignmentRoutes);
+app.use('/api/stables/:stableId/priorities', stableAssignmentRoutes);
+app.use('/api/horses/:horseId/priority', horsePriorityRoutes);
+app.use('/api/horses/:horseId/documents', documentRoutes);
+
+// Expiring documents — cross-horse summary for dashboard widget
+app.get('/api/documents/expiring', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) { res.status(401).json({ error: 'Authentication required' }); return; }
+  try {
+    const jwt = await import('jsonwebtoken');
+    const payload = jwt.default.verify(token, config.jwt.secret) as { userId: string; role: string };
+    const docs = await getExpiringDocuments(payload.userId, payload.role);
+    res.json(docs);
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
 
 // Health check
 app.get('/api/ping', (_req, res) => {

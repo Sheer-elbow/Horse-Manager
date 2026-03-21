@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, FormEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../api/client';
-import { Horse, User, AppliedPlan, PlanShare } from '../types';
+import { Horse, User, AppliedPlan, PlanShare, Stable } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
@@ -10,6 +10,8 @@ import { Badge } from '../components/ui/badge';
 import { ArrowLeft, Calendar, Repeat, Share2, Trash2, Plus, Stethoscope, Scissors, Syringe, AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import TrainingLoadChart from '../components/TrainingLoadChart';
+import DocumentVault from '../components/DocumentVault';
+import HealthTimeline from '../components/HealthTimeline';
 import { toast } from 'sonner';
 
 interface HealthSummary {
@@ -17,6 +19,12 @@ interface HealthSummary {
   lastFarrierDate: string | null;
   overdueVaccinations: { id: string; name: string | null; dueDate: string }[];
   dueSoonVaccinations: { id: string; name: string | null; dueDate: string }[];
+  overdueVet: { id: string; dueDate: string }[];
+  dueSoonVet: { id: string; dueDate: string }[];
+  overdueFarrier: { id: string; dueDate: string }[];
+  dueSoonFarrier: { id: string; dueDate: string }[];
+  overdueDentist: { id: string; dueDate: string }[];
+  dueSoonDentist: { id: string; dueDate: string }[];
 }
 
 function daysSince(dateStr: string): number {
@@ -33,17 +41,94 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type Tab = 'overview' | 'vet' | 'farrier' | 'vaccinations' | 'expenses' | 'programmes';
+type Tab = 'overview' | 'vet' | 'farrier' | 'dentist' | 'vaccinations' | 'expenses' | 'programmes' | 'appointments' | 'documents' | 'timeline';
+
+interface Appointment {
+  id: string;
+  type: 'VET' | 'FARRIER' | 'DENTIST' | 'VACCINATION' | 'OTHER';
+  typeOther: string | null;
+  scheduledAt: string;
+  practitionerName: string | null;
+  contactNumber: string | null;
+  locationAtStable: boolean;
+  locationOther: string | null;
+  notes: string | null;
+  status: 'UPCOMING' | 'COMPLETED' | 'CANCELLED';
+  reminderSent: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  horse: { id: string; name: string };
+  createdBy: { id: string; name: string | null };
+}
+
+function formatApptDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+const APPT_TYPE_LABELS: Record<string, string> = {
+  VET: 'Vet', FARRIER: 'Farrier', DENTIST: 'Dentist', VACCINATION: 'Vaccination', OTHER: 'Other',
+};
+
+function ApptTypeBadge({ type, label }: { type: string; label?: string }) {
+  const classes: Record<string, string> = {
+    VET: 'bg-blue-100 text-blue-700',
+    FARRIER: 'bg-green-100 text-green-700',
+    DENTIST: 'bg-purple-100 text-purple-700',
+    VACCINATION: 'bg-amber-100 text-amber-700',
+    OTHER: 'bg-gray-100 text-gray-600',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${classes[type] ?? 'bg-gray-100 text-gray-600'}`}>
+      {label ?? APPT_TYPE_LABELS[type] ?? type}
+    </span>
+  );
+}
 
 interface HealthRecord {
   id: string;
   date: string;
   notes: string | null;
+  // vet
+  vetName?: string | null;
+  visitReason?: string | null;
+  // farrier
+  farrierName?: string | null;
+  // dentist
+  dentistName?: string | null;
+  // vaccination
   name?: string | null;
   dueDate?: string | null;
+  // expense
+  category?: string | null;
   amount?: number | null;
   fileUrl?: string | null;
   fileName?: string | null;
+}
+
+
+function PriorityPanel({ horseId }: { horseId: string }) {
+  const [priorities, setPriorities] = useState<{ id: string; user: { id: string; name: string | null; email: string; role: string } }[]>([]);
+
+  useEffect(() => {
+    api<typeof priorities>(`/horses/${horseId}/priority`).then(setPriorities).catch(() => {});
+  }, [horseId]);
+
+  if (priorities.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl border p-4 sm:p-5">
+      <h3 className="font-semibold text-sm sm:text-base mb-3">Priority care staff</h3>
+      <div className="flex flex-wrap gap-2">
+        {priorities.map((p) => (
+          <span key={p.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            ★ {p.user.name || p.user.email}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function HorseProfile() {
@@ -55,7 +140,8 @@ export default function HorseProfile() {
   const [records, setRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', age: '', breed: '', stableLocation: '', ownerNotes: '', identifyingInfo: '' });
+  const [editForm, setEditForm] = useState({ name: '', age: '', breed: '', stableId: '', ownerNotes: '', identifyingInfo: '' });
+  const [stables, setStables] = useState<Stable[]>([]);
 
   // Assignment modal
   const [showAssign, setShowAssign] = useState(false);
@@ -70,9 +156,10 @@ export default function HorseProfile() {
 
   // Add record modal
   const [showAddRecord, setShowAddRecord] = useState(false);
-  const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '' });
+  const [recForm, setRecForm] = useState({ date: '', notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' });
   const recFileRef = useRef<HTMLInputElement>(null);
   const [recError, setRecError] = useState('');
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
 
   // Applied plans (programmes tab)
   const [appliedPlans, setAppliedPlans] = useState<AppliedPlan[]>([]);
@@ -102,6 +189,40 @@ export default function HorseProfile() {
 
   // Health summary (for overview tab status card)
   const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
+  const [nextAppointment, setNextAppointment] = useState<Appointment | null | undefined>(undefined); // undefined = loading
+
+  // Appointments
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [showApptForm, setShowApptForm] = useState(false);
+  const [editingApptId, setEditingApptId] = useState<string | null>(null);
+  const [apptForm, setApptForm] = useState({
+    type: 'VET',
+    typeOther: '',
+    scheduledDate: '',
+    scheduledTime: '09:00',
+    practitionerName: '',
+    contactNumber: '',
+    locationAtStable: true,
+    locationOther: '',
+    notes: '',
+  });
+  const [apptError, setApptError] = useState('');
+  const [showCompleteAppt, setShowCompleteAppt] = useState(false);
+  const [completingAppt, setCompletingAppt] = useState<Appointment | null>(null);
+  const [completeForm, setCompleteForm] = useState({
+    notes: '',
+    vetName: '',
+    visitReason: '',
+    visitReasonOther: '',
+    farrierName: '',
+    dentistName: '',
+    name: '',
+    dueDate: '',
+    amount: '',
+    category: '',
+  });
+  const [showPastAppts, setShowPastAppts] = useState(false);
+  const [cancelApptTarget, setCancelApptTarget] = useState<Appointment | null>(null);
 
   // Quick-log FAB modal
   const [showQuickLog, setShowQuickLog] = useState(false);
@@ -119,16 +240,24 @@ export default function HorseProfile() {
 
   const isAdmin = user?.role === 'ADMIN';
   const canEdit = isAdmin || horse?._permission === 'EDIT';
+  const isOwner = isAdmin || horse?._accessType === 'OWNER_EDIT';
+  const isStableStaff = horse?._accessType === 'LEAD_VIEW' || horse?._accessType === 'STAFF_VIEW';
+  const canViewExpenses = isOwner;
+  const canViewHealthFull = !isStableStaff || horse?._isPriority;
 
   const loadHorse = async () => {
     try {
-      const h = await api<Horse>(`/horses/${id}`);
+      const [h, s] = await Promise.all([
+        api<Horse>(`/horses/${id}`),
+        api<Stable[]>('/stables'),
+      ]);
       setHorse(h);
+      setStables(s);
       setEditForm({
         name: h.name,
         age: h.age?.toString() || '',
         breed: h.breed || '',
-        stableLocation: h.stableLocation || '',
+        stableId: h.stableId || '',
         ownerNotes: h.ownerNotes || '',
         identifyingInfo: h.identifyingInfo || '',
       });
@@ -136,11 +265,19 @@ export default function HorseProfile() {
     finally { setLoading(false); }
   };
 
+  const activeRecordTab = useRef<Tab>('overview');
+
   const loadRecords = async (t: Tab) => {
     if (t === 'overview') return;
-    const endpoint = t === 'vet' ? 'vet-visits' : t === 'farrier' ? 'farrier-visits' : t;
-    const data = await api<HealthRecord[]>(`/health/${id}/${endpoint}`);
-    setRecords(data);
+    activeRecordTab.current = t;
+    setRecords([]);
+    const endpoint = t === 'vet' ? 'vet-visits' : t === 'farrier' ? 'farrier-visits' : t === 'dentist' ? 'dentist-visits' : t;
+    try {
+      const data = await api<HealthRecord[]>(`/health/${id}/${endpoint}`);
+      if (activeRecordTab.current === t) setRecords(data);
+    } catch {
+      // records already cleared
+    }
   };
 
   const loadHealthSummary = async () => {
@@ -150,11 +287,16 @@ export default function HorseProfile() {
       const thirtyDaysOut = new Date(today);
       thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
 
-      const [vets, farriers, vaccinations] = await Promise.all([
-        api<{ id: string; date: string }[]>(`/health/${id}/vet-visits`),
-        api<{ id: string; date: string }[]>(`/health/${id}/farrier-visits`),
+      type VisitRecord = { id: string; date: string; dueDate: string | null };
+      const [vets, farriers, dentists, vaccinations] = await Promise.all([
+        api<VisitRecord[]>(`/health/${id}/vet-visits`),
+        api<VisitRecord[]>(`/health/${id}/farrier-visits`),
+        api<VisitRecord[]>(`/health/${id}/dentist-visits`),
         api<{ id: string; name: string | null; dueDate: string | null }[]>(`/health/${id}/vaccinations`),
       ]);
+
+      const overdue = (list: VisitRecord[]) => list.filter((r) => r.dueDate && new Date(r.dueDate) < today).map((r) => ({ id: r.id, dueDate: r.dueDate! }));
+      const dueSoon = (list: VisitRecord[]) => list.filter((r) => r.dueDate && new Date(r.dueDate) >= today && new Date(r.dueDate) <= thirtyDaysOut).map((r) => ({ id: r.id, dueDate: r.dueDate! }));
 
       const overdueVaccinations = vaccinations
         .filter((v) => v.dueDate && new Date(v.dueDate) < today)
@@ -169,15 +311,39 @@ export default function HorseProfile() {
         lastFarrierDate: farriers.length > 0 ? farriers[0].date : null,
         overdueVaccinations,
         dueSoonVaccinations,
+        overdueVet: overdue(vets),
+        dueSoonVet: dueSoon(vets),
+        overdueFarrier: overdue(farriers),
+        dueSoonFarrier: dueSoon(farriers),
+        overdueDentist: overdue(dentists),
+        dueSoonDentist: dueSoon(dentists),
       });
     } catch {
       // non-critical, ignore
     }
   };
 
+  const loadAppointments = async () => {
+    try {
+      const data = await api<Appointment[]>(`/appointments/horse/${id}`);
+      setAppointments(data);
+    } catch { /* ignore */ }
+  };
+
+  const loadNextAppointment = async () => {
+    try {
+      const data = await api<Appointment[]>(`/appointments/horse/${id}?status=UPCOMING`);
+      setNextAppointment(data.length > 0 ? data[0] : null);
+    } catch {
+      setNextAppointment(null);
+    }
+  };
+
   useEffect(() => { loadHorse(); }, [id]);
   useEffect(() => { loadRecords(tab); }, [tab, id]);
   useEffect(() => { if (id) loadHealthSummary(); }, [id]);
+  useEffect(() => { if (id) loadNextAppointment(); }, [id]);
+  useEffect(() => { if (tab === 'appointments') loadAppointments(); }, [tab, id]);
 
   const handleEditHorse = async (e: FormEvent) => {
     e.preventDefault();
@@ -187,7 +353,7 @@ export default function HorseProfile() {
         name: editForm.name,
         age: editForm.age ? parseInt(editForm.age) : null,
         breed: editForm.breed || null,
-        stableLocation: editForm.stableLocation || null,
+        stableId: editForm.stableId || null,
         ownerNotes: editForm.ownerNotes || null,
         identifyingInfo: editForm.identifyingInfo || null,
       }),
@@ -267,29 +433,69 @@ export default function HorseProfile() {
   const handleAddRecord = async (e: FormEvent) => {
     e.preventDefault();
     setRecError('');
-    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
+    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab === 'dentist' ? 'dentist-visits' : tab;
     try {
       const formData = new FormData();
       formData.append('date', recForm.date);
       if (recForm.notes) formData.append('notes', recForm.notes);
+      if (tab === 'vet') {
+        if (recForm.vetName) formData.append('vetName', recForm.vetName);
+        const reason = recForm.visitReason === 'Other' ? recForm.visitReasonOther : recForm.visitReason;
+        if (reason) formData.append('visitReason', reason);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
+      }
+      if (tab === 'farrier') {
+        if (recForm.farrierName) formData.append('farrierName', recForm.farrierName);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
+      }
+      if (tab === 'dentist') {
+        if (recForm.dentistName) formData.append('dentistName', recForm.dentistName);
+        if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
+      }
       if (tab === 'vaccinations') {
         if (recForm.name) formData.append('name', recForm.name);
         if (recForm.dueDate) formData.append('dueDate', recForm.dueDate);
       }
-      if (tab === 'expenses' && recForm.amount) {
-        formData.append('amount', recForm.amount);
+      if (tab === 'expenses') {
+        if (recForm.category) formData.append('category', recForm.category);
+        if (recForm.amount) formData.append('amount', recForm.amount);
       }
       const file = recFileRef.current?.files?.[0];
       if (file) formData.append('file', file);
-      await api(`/health/${id}/${endpoint}`, { method: 'POST', body: formData });
+      const url = editingRecordId
+        ? `/health/${id}/${endpoint}/${editingRecordId}`
+        : `/health/${id}/${endpoint}`;
+      await api(url, { method: editingRecordId ? 'PUT' : 'POST', body: formData });
       setShowAddRecord(false);
-      setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '' });
+      setEditingRecordId(null);
+      setRecForm({ date: '', notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' });
       if (recFileRef.current) recFileRef.current.value = '';
-      toast.success('Record added');
+      toast.success(editingRecordId ? 'Record updated' : 'Record added');
       loadRecords(tab);
     } catch (err: unknown) {
       setRecError(err instanceof Error ? err.message : 'Failed to add record');
     }
+  };
+
+  const handleEditRecord = (r: HealthRecord) => {
+    const VET_REASONS = ['Routine check-up', 'Lameness investigation', 'Colic', 'Injury / wound', 'Respiratory issue', 'Eye issue', 'Pre-purchase examination', 'Emergency'];
+    const isPreset = r.visitReason && VET_REASONS.includes(r.visitReason);
+    setEditingRecordId(r.id);
+    setRecForm({
+      date: r.date ? r.date.split('T')[0] : '',
+      notes: r.notes || '',
+      name: r.name || '',
+      dueDate: r.dueDate ? r.dueDate.split('T')[0] : '',
+      amount: r.amount != null ? String(r.amount) : '',
+      vetName: r.vetName || '',
+      visitReason: isPreset ? (r.visitReason || '') : (r.visitReason ? 'Other' : ''),
+      visitReasonOther: isPreset ? '' : (r.visitReason || ''),
+      farrierName: r.farrierName || '',
+      dentistName: r.dentistName || '',
+      category: r.category || '',
+    });
+    setRecError('');
+    setShowAddRecord(true);
   };
 
   const handleDeleteRecord = (recordId: string) => {
@@ -300,7 +506,7 @@ export default function HorseProfile() {
 
   const confirmDeleteRecord = async () => {
     if (!deleteRecordTarget) return;
-    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab;
+    const endpoint = tab === 'vet' ? 'vet-visits' : tab === 'farrier' ? 'farrier-visits' : tab === 'dentist' ? 'dentist-visits' : tab;
     await api(`/health/${id}/${endpoint}/${deleteRecordTarget.id}`, { method: 'DELETE' });
     toast.success('Record deleted');
     setDeleteRecordTarget(null);
@@ -452,6 +658,130 @@ export default function HorseProfile() {
     }
   };
 
+  const handleApptSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setApptError('');
+    try {
+      const scheduledAt = new Date(`${apptForm.scheduledDate}T${apptForm.scheduledTime}`).toISOString();
+      const body: Record<string, unknown> = {
+        type: apptForm.type,
+        scheduledAt,
+        practitionerName: apptForm.practitionerName || null,
+        contactNumber: apptForm.contactNumber || null,
+        locationAtStable: apptForm.locationAtStable,
+        locationOther: apptForm.locationAtStable ? null : (apptForm.locationOther || null),
+        notes: apptForm.notes || null,
+      };
+      if (apptForm.type === 'OTHER') body.typeOther = apptForm.typeOther || null;
+      if (editingApptId) {
+        await api(`/appointments/${editingApptId}`, { method: 'PUT', body: JSON.stringify(body) });
+        toast.success('Appointment updated');
+      } else {
+        await api(`/appointments/horse/${id}`, { method: 'POST', body: JSON.stringify(body) });
+        toast.success('Appointment added');
+      }
+      setShowApptForm(false);
+      setEditingApptId(null);
+      loadAppointments();
+    } catch (err: unknown) {
+      setApptError(err instanceof Error ? err.message : 'Failed to save appointment');
+    }
+  };
+
+  const openEditAppt = (appt: Appointment) => {
+    const d = new Date(appt.scheduledAt);
+    setEditingApptId(appt.id);
+    setApptForm({
+      type: appt.type,
+      typeOther: appt.typeOther || '',
+      scheduledDate: d.toISOString().split('T')[0],
+      scheduledTime: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      practitionerName: appt.practitionerName || '',
+      contactNumber: appt.contactNumber || '',
+      locationAtStable: appt.locationAtStable,
+      locationOther: appt.locationOther || '',
+      notes: appt.notes || '',
+    });
+    setApptError('');
+    setShowApptForm(true);
+  };
+
+  const openCompleteAppt = (appt: Appointment) => {
+    setCompletingAppt(appt);
+    setCompleteForm({
+      notes: appt.notes || '',
+      vetName: appt.practitionerName || '',
+      visitReason: '',
+      visitReasonOther: '',
+      farrierName: appt.practitionerName || '',
+      dentistName: appt.practitionerName || '',
+      name: appt.typeOther || '',
+      dueDate: '',
+      amount: '',
+      category: appt.typeOther || '',
+    });
+    setShowCompleteAppt(true);
+  };
+
+  const handleCompleteAppt = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!completingAppt) return;
+    try {
+      const body: Record<string, unknown> = { notes: completeForm.notes || null };
+      if (completingAppt.type === 'VET') {
+        body.vetName = completeForm.vetName || null;
+        const reason = completeForm.visitReason === 'Other' ? completeForm.visitReasonOther : completeForm.visitReason;
+        body.visitReason = reason || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
+      if (completingAppt.type === 'FARRIER') {
+        body.farrierName = completeForm.farrierName || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
+      if (completingAppt.type === 'DENTIST') {
+        body.dentistName = completeForm.dentistName || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
+      if (completingAppt.type === 'VACCINATION') {
+        body.name = completeForm.name || null;
+        body.dueDate = completeForm.dueDate || null;
+      }
+      if (completingAppt.type === 'OTHER') {
+        body.category = completeForm.category || null;
+        body.amount = completeForm.amount ? parseFloat(completeForm.amount) : null;
+      }
+      await api(`/appointments/${completingAppt.id}/complete`, { method: 'POST', body: JSON.stringify(body) });
+      toast.success('Appointment completed and record saved');
+      setShowCompleteAppt(false);
+      setCompletingAppt(null);
+      loadAppointments();
+      // Reload the matching health record tab if currently viewing it
+      const typeToTab: Record<string, Tab> = {
+        VET: 'vet', FARRIER: 'farrier', DENTIST: 'dentist', VACCINATION: 'vaccinations', OTHER: 'expenses',
+      };
+      const matchTab = typeToTab[completingAppt.type];
+      if (matchTab && tab === matchTab) loadRecords(tab);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to complete appointment');
+    }
+  };
+
+  const handleCancelAppt = async (appt: Appointment) => {
+    setCancelApptTarget(appt);
+  };
+
+  const confirmCancelAppt = async () => {
+    if (!cancelApptTarget) return;
+    try {
+      await api(`/appointments/${cancelApptTarget.id}/cancel`, { method: 'POST' });
+      toast.success('Appointment cancelled');
+      setCancelApptTarget(null);
+      loadAppointments();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel appointment');
+    }
+  };
+
   const formatDateRange = (plan: AppliedPlan): string => {
     const start = new Date(plan.startDate);
     const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -499,14 +829,20 @@ export default function HorseProfile() {
   );
   if (!horse) return null;
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'programmes', label: 'Programmes' },
-    { key: 'vet', label: 'Vet' },
-    { key: 'farrier', label: 'Farrier' },
-    { key: 'vaccinations', label: 'Vaccines' },
-    { key: 'expenses', label: 'Expenses' },
+  const canViewHealth = !isStableStaff || !!horse._isPriority;
+  const allTabs: { key: Tab; label: string; visible: boolean }[] = [
+    { key: 'overview', label: 'Overview', visible: true },
+    { key: 'programmes', label: 'Programmes', visible: true },
+    { key: 'vet', label: 'Vet', visible: canViewHealth },
+    { key: 'farrier', label: 'Farrier', visible: canViewHealth },
+    { key: 'dentist', label: 'Dentist', visible: canViewHealth },
+    { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
+    { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
+    { key: 'appointments', label: 'Appointments', visible: canEdit },
+    { key: 'documents', label: 'Documents', visible: true },
+    { key: 'timeline', label: 'Timeline', visible: canViewHealth },
   ];
+  const tabs = allTabs.filter((t) => t.visible);
 
   return (
     <div className="overflow-hidden">
@@ -516,6 +852,11 @@ export default function HorseProfile() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate min-w-0">{horse.name}</h2>
+        {horse._isPriority && (
+          <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            Priority
+          </span>
+        )}
         <Button asChild size="sm" className="ml-auto shrink-0">
           <Link to={`/horses/${id}/planner`}>
             <Calendar className="w-4 h-4 sm:mr-2" />
@@ -541,8 +882,19 @@ export default function HorseProfile() {
 
       {tab === 'overview' && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Health records restricted banner for non-priority stable staff */}
+          {isStableStaff && !horse._isPriority && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Health records not available</p>
+                <p className="text-xs text-amber-600 mt-0.5">You can only view health records for horses you're assigned as priority carer for. Contact your stable lead to be assigned.</p>
+              </div>
+            </div>
+          )}
+
           {/* Health status summary */}
-          {healthSummary && (
+          {healthSummary && canViewHealth && (
             <div className="bg-white rounded-xl border p-4 sm:p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Health status</h3>
               <div className="flex flex-wrap gap-2">
@@ -572,6 +924,45 @@ export default function HorseProfile() {
                     ? `Farrier: ${daysSince(healthSummary.lastFarrierDate)}d ago`
                     : 'No farrier visits'}
                 </div>
+                {/* Overdue / due-soon vet */}
+                {healthSummary.overdueVet.map((v) => (
+                  <button key={v.id} onClick={() => setTab('vet')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Vet overdue
+                  </button>
+                ))}
+                {healthSummary.dueSoonVet.map((v) => (
+                  <button key={v.id} onClick={() => setTab('vet')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors">
+                    <Stethoscope className="w-3.5 h-3.5" />
+                    Vet due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
+                {/* Overdue / due-soon farrier */}
+                {healthSummary.overdueFarrier.map((v) => (
+                  <button key={v.id} onClick={() => setTab('farrier')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Farrier overdue
+                  </button>
+                ))}
+                {healthSummary.dueSoonFarrier.map((v) => (
+                  <button key={v.id} onClick={() => setTab('farrier')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors">
+                    <Scissors className="w-3.5 h-3.5" />
+                    Farrier due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
+                {/* Overdue / due-soon dentist */}
+                {healthSummary.overdueDentist.map((v) => (
+                  <button key={v.id} onClick={() => setTab('dentist')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Dentist overdue
+                  </button>
+                ))}
+                {healthSummary.dueSoonDentist.map((v) => (
+                  <button key={v.id} onClick={() => setTab('dentist')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Dentist due in {daysUntil(v.dueDate)}d
+                  </button>
+                ))}
                 {/* Overdue vaccinations */}
                 {healthSummary.overdueVaccinations.map((v) => (
                   <button
@@ -602,6 +993,48 @@ export default function HorseProfile() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Next appointment panel */}
+          {nextAppointment !== undefined && (
+            <div className="bg-white rounded-xl border p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">Next appointment</h3>
+                <button
+                  onClick={() => setTab('appointments')}
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  View all
+                </button>
+              </div>
+              {nextAppointment === null ? (
+                <p className="text-sm text-gray-400">No upcoming appointments.</p>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-900">{formatApptDate(nextAppointment.scheduledAt)}</span>
+                      <ApptTypeBadge
+                        type={nextAppointment.type}
+                        label={nextAppointment.type === 'OTHER' ? (nextAppointment.typeOther ?? 'Other') : undefined}
+                      />
+                    </div>
+                    {nextAppointment.practitionerName && (
+                      <p className="text-xs text-gray-500 mt-0.5">{nextAppointment.practitionerName}</p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {nextAppointment.locationAtStable ? 'At stable' : (nextAppointment.locationOther ?? 'Other location')}
+                      {nextAppointment.contactNumber && ` · ${nextAppointment.contactNumber}`}
+                    </p>
+                  </div>
+                  {daysUntil(nextAppointment.scheduledAt) <= 7 && (
+                    <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded shrink-0">
+                      {daysUntil(nextAppointment.scheduledAt) === 0 ? 'Today' : `${daysUntil(nextAppointment.scheduledAt)}d away`}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -654,8 +1087,13 @@ export default function HorseProfile() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stable location</label>
-                  <input value={editForm.stableLocation} onChange={(e) => setEditForm({ ...editForm, stableLocation: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stable</label>
+                  <select value={editForm.stableId} onChange={(e) => setEditForm({ ...editForm, stableId: e.target.value })} className="w-full border rounded-lg px-3 py-2">
+                    <option value="">No stable</option>
+                    {stables.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Identifying info</label>
@@ -675,7 +1113,7 @@ export default function HorseProfile() {
                 <div className="grid grid-cols-2 gap-4">
                   {horse.breed && <div><span className="text-sm text-gray-500">Breed</span><div>{horse.breed}</div></div>}
                   {horse.age && <div><span className="text-sm text-gray-500">Age</span><div>{horse.age}</div></div>}
-                  {horse.stableLocation && <div><span className="text-sm text-gray-500">Stable</span><div>{horse.stableLocation}</div></div>}
+                  {(horse.stable || horse.stableLocation) && <div><span className="text-sm text-gray-500">Stable</span><div>{horse.stable?.name || horse.stableLocation}</div></div>}
                   {horse.identifyingInfo && <div><span className="text-sm text-gray-500">ID info</span><div>{horse.identifyingInfo}</div></div>}
                 </div>
                 {horse.ownerNotes && <div className="mt-4"><span className="text-sm text-gray-500">Notes</span><div className="mt-1">{horse.ownerNotes}</div></div>}
@@ -714,6 +1152,11 @@ export default function HorseProfile() {
                 <p className="text-sm text-gray-500">No users assigned</p>
               )}
             </div>
+          )}
+
+          {/* Priority care panel — visible to owner, stable lead, and admin */}
+          {(isAdmin || isOwner || user?.role === 'STABLE_LEAD') && horse?.stableId && (
+            <PriorityPanel horseId={id!} />
           )}
 
         </div>
@@ -799,17 +1242,113 @@ export default function HorseProfile() {
         </div>
       )}
 
+      {/* Appointments tab */}
+      {tab === 'appointments' && (() => {
+        const upcoming = appointments
+          .filter((a) => a.status === 'UPCOMING')
+          .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+        const past = appointments
+          .filter((a) => a.status !== 'UPCOMING')
+          .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+
+        const ApptRow = ({ appt }: { appt: Appointment }) => (
+          <div className="flex items-start justify-between gap-2 py-3 border-b last:border-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-gray-900">{formatApptDate(appt.scheduledAt)}</span>
+                <ApptTypeBadge type={appt.type} label={appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : undefined} />
+                {appt.status !== 'UPCOMING' && (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${appt.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {appt.status === 'COMPLETED' ? 'Done' : 'Cancelled'}
+                  </span>
+                )}
+              </div>
+              {appt.practitionerName && (
+                <div className="text-sm text-gray-600 mt-0.5">{appt.practitionerName}</div>
+              )}
+              <div className="text-xs text-gray-400 mt-0.5">
+                {appt.locationAtStable ? (horse?.stable?.name ?? 'At stable') : (appt.locationOther ?? 'Other location')}
+              </div>
+              {appt.notes && (
+                <div className="text-xs text-gray-500 mt-1 truncate max-w-xs">{appt.notes}</div>
+              )}
+            </div>
+            {canEdit && (
+              <div className="flex items-center gap-1 shrink-0">
+                {appt.status === 'UPCOMING' && (
+                  <Button variant="link" size="sm" className="text-green-600 hover:text-green-700 text-xs" onClick={() => openCompleteAppt(appt)}>
+                    Mark done
+                  </Button>
+                )}
+                <Button variant="link" size="sm" className="text-gray-500 hover:text-gray-700 text-xs" onClick={() => openEditAppt(appt)}>
+                  Edit
+                </Button>
+                {appt.status === 'UPCOMING' && (
+                  <Button variant="link" size="sm" className="text-red-500 hover:text-red-600 text-xs" onClick={() => handleCancelAppt(appt)}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+        return (
+          <div className="bg-white rounded-xl border p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Appointments</h3>
+              {canEdit && (
+                <Button size="sm" onClick={() => {
+                  setEditingApptId(null);
+                  setApptForm({ type: 'VET', typeOther: '', scheduledDate: '', scheduledTime: '09:00', practitionerName: '', contactNumber: '', locationAtStable: true, locationOther: '', notes: '' });
+                  setApptError('');
+                  setShowApptForm(true);
+                }}>
+                  Add appointment
+                </Button>
+              )}
+            </div>
+
+            {/* Upcoming */}
+            <div className="mb-4">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Upcoming</h4>
+              {upcoming.length === 0 ? (
+                <p className="text-sm text-gray-500">No upcoming appointments.</p>
+              ) : (
+                <div>{upcoming.map((a) => <ApptRow key={a.id} appt={a} />)}</div>
+              )}
+            </div>
+
+            {/* Past */}
+            <div>
+              <button
+                className="flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 hover:text-gray-700"
+                onClick={() => setShowPastAppts((v) => !v)}
+              >
+                {showPastAppts ? '▾' : '▸'} Past ({past.length})
+              </button>
+              {showPastAppts && past.length > 0 && (
+                <div>{past.map((a) => <ApptRow key={a.id} appt={a} />)}</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Health / expense records tab */}
-      {!['overview', 'programmes'].includes(tab) && (
+      {!['overview', 'programmes', 'appointments'].includes(tab) && (
         <div className="bg-white rounded-xl border p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab}</h3>
+            <h3 className="font-semibold capitalize">{tab === 'vet' ? 'Vet visits' : tab === 'farrier' ? 'Farrier visits' : tab === 'dentist' ? 'Dentist visits' : tab}</h3>
             {canEdit && (
-              <Button size="sm" onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '' }); setShowAddRecord(true); }}>
+              <Button size="sm" onClick={() => { setRecForm({ date: new Date().toISOString().split('T')[0], notes: '', name: '', dueDate: '', amount: '', vetName: '', visitReason: '', visitReasonOther: '', farrierName: '', dentistName: '', category: '' }); setShowAddRecord(true); }}>
                 Add record
               </Button>
             )}
           </div>
+          {horse._accessType === 'LEAD_VIEW' && tab !== 'expenses' && (
+            <p className="text-xs text-gray-400 mb-3 italic">Dates only — detailed notes are visible to the owner.</p>
+          )}
 
           {records.length === 0 ? (
             <p className="text-sm text-gray-500">No records yet.</p>
@@ -819,10 +1358,15 @@ export default function HorseProfile() {
                 <div key={r.id} className="flex items-start justify-between py-3 border-b last:border-0">
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium">{new Date(r.date).toLocaleDateString('en-GB')}</div>
+                    {r.visitReason && <div className="text-sm text-gray-700">{r.visitReason}</div>}
+                    {r.vetName && <div className="text-xs text-gray-500">{r.vetName}</div>}
+                    {r.farrierName && <div className="text-xs text-gray-500">{r.farrierName}</div>}
+                    {r.dentistName && <div className="text-xs text-gray-500">{r.dentistName}</div>}
                     {r.name && <div className="text-sm text-gray-700">{r.name}</div>}
+                    {r.category && <div className="text-xs font-medium text-brand-600 mt-0.5">{r.category}</div>}
+                    {r.amount != null && <div className="text-sm text-gray-700 mt-0.5">£{Number(r.amount).toFixed(2)}</div>}
                     {r.notes && <div className="text-sm text-gray-500 mt-1">{r.notes}</div>}
-                    {r.dueDate && <div className="text-xs text-amber-600 mt-1">Due: {new Date(r.dueDate).toLocaleDateString('en-GB')}</div>}
-                    {r.amount != null && <div className="text-sm text-gray-600 mt-1">Amount: {r.amount}</div>}
+                    {r.dueDate && <div className="text-xs text-amber-600 mt-1">Next due: {new Date(r.dueDate).toLocaleDateString('en-GB')}</div>}
                     {r.fileUrl && (
                       <div className="mt-2">
                         {r.fileName?.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
@@ -838,13 +1382,26 @@ export default function HorseProfile() {
                     )}
                   </div>
                   {canEdit && (
-                    <Button variant="link" size="sm" className="text-red-500 hover:text-red-600 shrink-0 ml-3" onClick={() => handleDeleteRecord(r.id)}>Delete</Button>
+                    <div className="flex items-center gap-1 shrink-0 ml-3">
+                      <Button variant="link" size="sm" className="text-gray-500 hover:text-gray-700" onClick={() => handleEditRecord(r)}>Edit</Button>
+                      <Button variant="link" size="sm" className="text-red-500 hover:text-red-600" onClick={() => handleDeleteRecord(r.id)}>Delete</Button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
           )}
         </div>
+      )}
+
+      {/* Documents tab */}
+      {tab === 'documents' && id && (
+        <DocumentVault horseId={id} canEdit={canEdit} />
+      )}
+
+      {/* Timeline tab */}
+      {tab === 'timeline' && id && (
+        <HealthTimeline horseId={id} />
       )}
 
       {/* Quick-log FAB — visible when user has edit access */}
@@ -1021,13 +1578,70 @@ export default function HorseProfile() {
       </Modal>
 
       {/* Add record modal */}
-      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setRecError(''); }} title={`Add ${tab} record`}>
+      <Modal open={showAddRecord} onClose={() => { setShowAddRecord(false); setEditingRecordId(null); setRecError(''); }} title={`${editingRecordId ? 'Edit' : 'Add'} ${tab === 'vet' ? 'vet visit' : tab === 'farrier' ? 'farrier visit' : tab === 'dentist' ? 'dentist visit' : tab + ' record'}`}>
         {recError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{recError}</div>}
         <form onSubmit={handleAddRecord} className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input type="date" value={recForm.date} onChange={(e) => setRecForm({ ...recForm, date: e.target.value })} className="w-full border rounded-lg px-3 py-2" required />
           </div>
+          {tab === 'vet' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vet / Practice</label>
+                <input value={recForm.vetName} onChange={(e) => setRecForm({ ...recForm, vetName: e.target.value })} placeholder="e.g. Dr. Smith – ABC Veterinary" className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for visit</label>
+                <select value={recForm.visitReason} onChange={(e) => setRecForm({ ...recForm, visitReason: e.target.value, visitReasonOther: '' })} className="w-full border rounded-lg px-3 py-2">
+                  <option value="">— Select —</option>
+                  <option>Routine check-up</option>
+                  <option>Lameness investigation</option>
+                  <option>Colic</option>
+                  <option>Injury / wound</option>
+                  <option>Respiratory issue</option>
+                  <option>Eye issue</option>
+                  <option>Pre-purchase examination</option>
+                  <option>Emergency</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              {recForm.visitReason === 'Other' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Describe reason</label>
+                  <input value={recForm.visitReasonOther} onChange={(e) => setRecForm({ ...recForm, visitReasonOther: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
+          )}
+          {tab === 'farrier' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
+                <input value={recForm.farrierName} onChange={(e) => setRecForm({ ...recForm, farrierName: e.target.value })} placeholder="e.g. John Smith" className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
+          )}
+          {tab === 'dentist' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
+                <input value={recForm.dentistName} onChange={(e) => setRecForm({ ...recForm, dentistName: e.target.value })} placeholder="e.g. Jane Doe" className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
+          )}
           {tab === 'vaccinations' && (
             <>
               <div>
@@ -1035,16 +1649,41 @@ export default function HorseProfile() {
                 <input value={recForm.name} onChange={(e) => setRecForm({ ...recForm, name: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due date (reminder)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
                 <input type="date" value={recForm.dueDate} onChange={(e) => setRecForm({ ...recForm, dueDate: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
               </div>
             </>
           )}
           {tab === 'expenses' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" value={recForm.amount} onChange={(e) => setRecForm({ ...recForm, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <input
+                  list="expense-categories"
+                  value={recForm.category}
+                  onChange={(e) => setRecForm({ ...recForm, category: e.target.value })}
+                  placeholder="e.g. Vet, Feed, Equipment…"
+                  className="w-full border rounded-lg px-3 py-2"
+                />
+                <datalist id="expense-categories">
+                  <option value="Vet" />
+                  <option value="Farrier" />
+                  <option value="Dentist" />
+                  <option value="Vaccinations" />
+                  <option value="Feed" />
+                  <option value="Bedding" />
+                  <option value="Equipment" />
+                  <option value="Competition" />
+                  <option value="Insurance" />
+                  <option value="Transport" />
+                  <option value="Other" />
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                <input type="number" step="0.01" min="0" value={recForm.amount} onChange={(e) => setRecForm({ ...recForm, amount: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </>
           )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
@@ -1092,6 +1731,324 @@ export default function HorseProfile() {
             {repeatLoading ? 'Creating...' : 'Repeat programme'}
           </Button>
         </form>
+      </Modal>
+
+      {/* Add / Edit appointment modal */}
+      <Modal
+        open={showApptForm}
+        onClose={() => { setShowApptForm(false); setEditingApptId(null); setApptError(''); }}
+        title={editingApptId ? 'Edit appointment' : 'Add appointment'}
+      >
+        {apptError && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{apptError}</div>}
+        <form onSubmit={handleApptSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select
+              value={apptForm.type}
+              onChange={(e) => setApptForm({ ...apptForm, type: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              required
+            >
+              <option value="VET">Vet</option>
+              <option value="FARRIER">Farrier</option>
+              <option value="DENTIST">Dentist</option>
+              <option value="VACCINATION">Vaccination</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          {apptForm.type === 'OTHER' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Appointment description</label>
+              <input
+                value={apptForm.typeOther}
+                onChange={(e) => setApptForm({ ...apptForm, typeOther: e.target.value })}
+                placeholder="Describe the appointment"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input
+                type="date"
+                value={apptForm.scheduledDate}
+                onChange={(e) => setApptForm({ ...apptForm, scheduledDate: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+              <input
+                type="time"
+                value={apptForm.scheduledTime}
+                onChange={(e) => setApptForm({ ...apptForm, scheduledTime: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Practitioner name</label>
+            <input
+              value={apptForm.practitionerName}
+              onChange={(e) => setApptForm({ ...apptForm, practitionerName: e.target.value })}
+              placeholder="e.g. Dr. Smith"
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contact number</label>
+            <input
+              value={apptForm.contactNumber}
+              onChange={(e) => setApptForm({ ...apptForm, contactNumber: e.target.value })}
+              placeholder="e.g. 07700 900000"
+              className="w-full border rounded-lg px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="apptLocation"
+                  checked={apptForm.locationAtStable}
+                  onChange={() => setApptForm({ ...apptForm, locationAtStable: true, locationOther: '' })}
+                />
+                At stable
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="apptLocation"
+                  checked={!apptForm.locationAtStable}
+                  onChange={() => setApptForm({ ...apptForm, locationAtStable: false })}
+                />
+                Other location
+              </label>
+            </div>
+          </div>
+          {!apptForm.locationAtStable && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location details</label>
+              <input
+                value={apptForm.locationOther}
+                onChange={(e) => setApptForm({ ...apptForm, locationOther: e.target.value })}
+                placeholder="e.g. Equine clinic, 10 High Street"
+                className="w-full border rounded-lg px-3 py-2"
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea
+              value={apptForm.notes}
+              onChange={(e) => setApptForm({ ...apptForm, notes: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              rows={3}
+            />
+          </div>
+          <Button type="submit" className="w-full">
+            {editingApptId ? 'Save changes' : 'Add appointment'}
+          </Button>
+        </form>
+      </Modal>
+
+      {/* Complete appointment modal */}
+      <Modal
+        open={showCompleteAppt}
+        onClose={() => { setShowCompleteAppt(false); setCompletingAppt(null); }}
+        title="Mark appointment as done"
+      >
+        {completingAppt && (
+          <div className="space-y-4">
+            {/* Summary */}
+            <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-900">{formatApptDate(completingAppt.scheduledAt)}</span>
+                <ApptTypeBadge type={completingAppt.type} label={completingAppt.type === 'OTHER' ? (completingAppt.typeOther ?? 'Other') : undefined} />
+              </div>
+              {completingAppt.practitionerName && (
+                <div className="text-gray-600">{completingAppt.practitionerName}</div>
+              )}
+            </div>
+
+            {/* Health record fields */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Health record details</h4>
+              <form onSubmit={handleCompleteAppt} className="space-y-3">
+                {completingAppt.type === 'VET' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Vet / Practice</label>
+                      <input
+                        value={completeForm.vetName}
+                        onChange={(e) => setCompleteForm({ ...completeForm, vetName: e.target.value })}
+                        placeholder="e.g. Dr. Smith – ABC Veterinary"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reason for visit</label>
+                      <select
+                        value={completeForm.visitReason}
+                        onChange={(e) => setCompleteForm({ ...completeForm, visitReason: e.target.value, visitReasonOther: '' })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      >
+                        <option value="">— Select —</option>
+                        <option>Routine check-up</option>
+                        <option>Lameness investigation</option>
+                        <option>Colic</option>
+                        <option>Injury / wound</option>
+                        <option>Respiratory issue</option>
+                        <option>Eye issue</option>
+                        <option>Pre-purchase examination</option>
+                        <option>Emergency</option>
+                        <option>Other</option>
+                      </select>
+                    </div>
+                    {completeForm.visitReason === 'Other' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Describe reason</label>
+                        <input
+                          value={completeForm.visitReasonOther}
+                          onChange={(e) => setCompleteForm({ ...completeForm, visitReasonOther: e.target.value })}
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                {completingAppt.type === 'FARRIER' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Farrier name</label>
+                      <input
+                        value={completeForm.farrierName}
+                        onChange={(e) => setCompleteForm({ ...completeForm, farrierName: e.target.value })}
+                        placeholder="e.g. John Smith"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                {completingAppt.type === 'DENTIST' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Dentist name</label>
+                      <input
+                        value={completeForm.dentistName}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dentistName: e.target.value })}
+                        placeholder="e.g. Jane Doe"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                {completingAppt.type === 'VACCINATION' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Vaccine name</label>
+                      <input
+                        value={completeForm.name}
+                        onChange={(e) => setCompleteForm({ ...completeForm, name: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Next due date</label>
+                      <input
+                        type="date"
+                        value={completeForm.dueDate}
+                        onChange={(e) => setCompleteForm({ ...completeForm, dueDate: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                {completingAppt.type === 'OTHER' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <input
+                        value={completeForm.category}
+                        onChange={(e) => setCompleteForm({ ...completeForm, category: e.target.value })}
+                        placeholder="e.g. Physiotherapy"
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={completeForm.amount}
+                        onChange={(e) => setCompleteForm({ ...completeForm, amount: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    value={completeForm.notes}
+                    onChange={(e) => setCompleteForm({ ...completeForm, notes: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    rows={3}
+                  />
+                </div>
+                <Button type="submit" className="w-full">Mark as done &amp; save record</Button>
+              </form>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Cancel appointment confirmation modal */}
+      <Modal
+        open={!!cancelApptTarget}
+        onClose={() => setCancelApptTarget(null)}
+        title="Cancel appointment"
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Cancel the <strong>{cancelApptTarget ? APPT_TYPE_LABELS[cancelApptTarget.type] : ''}</strong> appointment on{' '}
+          <strong>{cancelApptTarget ? formatApptDate(cancelApptTarget.scheduledAt) : ''}</strong>?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" onClick={() => setCancelApptTarget(null)}>Keep</Button>
+          <Button variant="destructive" onClick={confirmCancelAppt}>Cancel appointment</Button>
+        </div>
       </Modal>
 
       {/* Share plan modal */}
