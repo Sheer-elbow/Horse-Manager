@@ -577,6 +577,7 @@ enum SecurityEventType {
   TOKEN_REFRESHED
   PASSWORD_RESET_USED
   SUSPICIOUS_ACTIVITY
+  USER_REGISTERED
 }
 
 model SecurityEvent {
