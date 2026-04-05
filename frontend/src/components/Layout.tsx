@@ -1,7 +1,7 @@
 import React, { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus, UserCircle, FileText, Shield } from 'lucide-react';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, Building2, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus, UserCircle, FileText, Shield } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
 import QuickLogModal from './QuickLogModal';
@@ -17,6 +17,7 @@ const NAV_ITEMS: { path: string; label: string; icon: React.ElementType; indent?
   { path: '/horses', label: 'Horses', icon: Dog, roles: ALL_ROLES },
   { path: '/appointments', label: 'Appointments', icon: CalendarClock, roles: ALL_ROLES },
   { path: '/programmes', label: 'Programmes', icon: BookOpen, roles: ['ADMIN', 'STABLE_LEAD', 'TRAINER'] },
+  { path: '/stable', label: 'My Stable', icon: Building2, roles: ALL_ROLES },
   { path: '/stables', label: 'Stables', icon: Home, roles: ['ADMIN'] },
   { path: '/invoices', label: 'Invoices', icon: Receipt, roles: ['ADMIN', 'STABLE_LEAD', 'OWNER'] },
   { path: '/costs', label: 'Costs', icon: BarChart2, indent: true, roles: ['ADMIN', 'STABLE_LEAD', 'OWNER'] },
@@ -58,15 +59,10 @@ export default function Layout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const STABLE_LEAD_ITEMS = [
-    { path: '/stable', label: 'My Stable', icon: Home, roles: ['STABLE_LEAD', 'OWNER'] as Role[] },
-  ];
   const role = user?.role as Role | undefined;
   const allItems = user?.role === 'ADMIN'
     ? [...NAV_ITEMS, ...ADMIN_ITEMS]
-    : (user?.role === 'STABLE_LEAD' || user?.role === 'OWNER')
-      ? [...NAV_ITEMS, ...STABLE_LEAD_ITEMS]
-      : NAV_ITEMS;
+    : NAV_ITEMS;
   const items = role ? allItems.filter((item) => item.roles.includes(role)) : [];
 
   return (
