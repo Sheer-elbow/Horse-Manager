@@ -1,15 +1,17 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
+import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('token');
+  const resetSuccess = searchParams.get('reset') === '1';
 
   // Login form state
   const [email, setEmail] = useState('');
@@ -20,6 +22,7 @@ export default function Login() {
   // Invite accept state
   const [inviteName, setInviteName] = useState('');
   const [invitePassword, setInvitePassword] = useState('');
+  const [invitePasswordTouched, setInvitePasswordTouched] = useState(false);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,7 +44,12 @@ export default function Login() {
 
   const handleAcceptInvite = async (e: FormEvent) => {
     e.preventDefault();
+    setInvitePasswordTouched(true);
     setError('');
+    if (!passwordValid(invitePassword)) {
+      setError('Please meet all password requirements.');
+      return;
+    }
     setLoading(true);
     try {
       const data = await api<AuthTokens>('/auth/accept-invite', {
@@ -68,6 +76,11 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg border p-6">
+          {resetSuccess && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+              Password reset successfully. You can now sign in.
+            </div>
+          )}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
               {error}
@@ -91,11 +104,21 @@ export default function Login() {
                 <input
                   type="password"
                   value={invitePassword}
-                  onChange={(e) => setInvitePassword(e.target.value)}
+                  onChange={(e) => { setInvitePassword(e.target.value); setInvitePasswordTouched(true); }}
                   className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   required
-                  minLength={8}
+                  minLength={12}
                 />
+                {invitePasswordTouched && invitePassword.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {PASSWORD_RULES.map((r) => (
+                      <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(invitePassword) ? 'text-green-600' : 'text-gray-400'}`}>
+                        <span>{r.test(invitePassword) ? '✓' : '○'}</span>
+                        {r.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Setting up...' : 'Create account'}
@@ -126,6 +149,11 @@ export default function Login() {
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Signing in...' : 'Sign in'}
               </Button>
+              <div className="text-center">
+                <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-gray-700">
+                  Forgot your password?
+                </Link>
+              </div>
             </form>
           )}
         </div>

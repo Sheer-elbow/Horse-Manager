@@ -22,7 +22,8 @@ if [ ! -f .env ]; then
 fi
 
 echo "1/4  Pulling latest code..."
-git pull origin "$(git rev-parse --abbrev-ref HEAD)" 2>/dev/null || true
+git checkout main
+git pull origin main
 
 echo "2/4  Building containers..."
 docker compose build --no-cache

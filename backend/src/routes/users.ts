@@ -90,6 +90,15 @@ router.put('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Res
         })
       : null;
 
+    // Prevent demoting the last admin — there must always be at least one
+    if (existing?.role === 'ADMIN' && data.role !== 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        res.status(400).json({ error: 'Cannot demote the last admin account' });
+        return;
+      }
+    }
+
     const user = await prisma.user.update({
       where: { id: req.params.id },
       data: {

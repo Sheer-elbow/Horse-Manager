@@ -99,7 +99,7 @@ export default function Planner() {
   const canEditPlan = hasEditPermission && (isAdmin || user?.role === 'TRAINER');
   // Session logging: Admin + Trainer + Rider
   const canLogSession = hasEditPermission && (isAdmin || user?.role === 'TRAINER' || user?.role === 'RIDER');
-  const weekLocked = isWeekInPast(currentWeekStart);
+  const isPastWeek = isWeekInPast(currentWeekStart);
 
   // Build workout lookup by ID
   const workoutMap = new Map<string, Workout>();
@@ -446,7 +446,7 @@ export default function Planner() {
           <div className="text-[9px] text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
         )}
         {/* Action buttons */}
-        {canEditPlan && !weekLocked && (
+        {canEditPlan && true && (
           <div className="flex gap-1 mt-1 flex-wrap">
             <button
               onClick={(e) => { e.stopPropagation(); openEditPlanned(dayIdx, slot); }}
@@ -483,8 +483,8 @@ export default function Planner() {
 
   const LegacyPlannedCard = ({ planned, dayIdx, slot }: { planned: PlannedSession | undefined; dayIdx: number; slot: 'AM' | 'PM' }) => (
     <div
-      className={`rounded p-1.5 ${planned ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canEditPlan && !weekLocked ? 'cursor-pointer hover:bg-blue-100' : ''}`}
-      onClick={() => canEditPlan && !weekLocked && openEditPlanned(dayIdx, slot)}
+      className={`rounded p-1.5 ${planned ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canEditPlan && true ? 'cursor-pointer hover:bg-blue-100' : ''}`}
+      onClick={() => canEditPlan && true && openEditPlanned(dayIdx, slot)}
     >
       <div className="text-[10px] text-gray-400 uppercase">Plan</div>
       {planned ? (
@@ -494,7 +494,7 @@ export default function Planner() {
           {planned.intensityRpe && <div className="text-gray-500">RPE {planned.intensityRpe}</div>}
         </>
       ) : (
-        <div className="text-gray-300">{canEditPlan && !weekLocked ? '+ Add' : '-'}</div>
+        <div className="text-gray-300">{canEditPlan && true ? '+ Add' : '-'}</div>
       )}
     </div>
   );
@@ -554,6 +554,15 @@ export default function Planner() {
               &larr;
             </button>
 
+            {toDateStr(currentWeekStart) !== toDateStr(getMondayOfWeek(new Date())) && (
+              <button
+                onClick={() => setCurrentWeekStart(getMondayOfWeek(new Date()))}
+                className="px-2 sm:px-3 py-1 sm:py-1.5 border rounded-lg text-xs sm:text-sm bg-white hover:bg-gray-50 text-gray-600 font-medium shrink-0"
+              >
+                Today
+              </button>
+            )}
+
             <div className="flex gap-1 overflow-x-auto scrollbar-hide min-w-0">
               {blockWeeks.map((w, i) => (
                 <button
@@ -579,7 +588,7 @@ export default function Planner() {
               &rarr;
             </button>
 
-            {canEditPlan && !weekLocked && (
+            {canEditPlan && true && (
               <button
                 onClick={() => {
                   const targets = blockWeeks.filter((w) => toDateStr(w) !== toDateStr(currentWeekStart) && !isWeekInPast(w));
@@ -603,9 +612,9 @@ export default function Planner() {
               {' - '}
               {addDays(currentWeekStart, 6).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
-            {weekLocked && (
-              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                Locked
+            {isPastWeek && (
+              <span className="bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full text-xs font-medium">
+                Past week
               </span>
             )}
           </div>

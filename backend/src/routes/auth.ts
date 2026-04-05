@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { config } from '../config';
 import { authenticate } from '../middleware/auth';
-import { loginLimiter, refreshLimiter, forgotPasswordLimiter } from '../middleware/rateLimiter';
+import { loginLimiter, inviteAcceptLimiter, refreshLimiter, forgotPasswordLimiter } from '../middleware/rateLimiter';
 import { sendInviteEmail, sendPasswordResetEmail } from '../services/email';
 import { logSecurityEvent } from '../services/securityLog';
 import { AuthRequest, JwtPayload } from '../types';
@@ -224,7 +224,7 @@ const acceptInviteSchema = z.object({
   password: passwordSchema,
 });
 
-router.post('/accept-invite', loginLimiter, async (req, res: Response) => {
+router.post('/accept-invite', inviteAcceptLimiter, async (req, res: Response) => {
   try {
     const body = acceptInviteSchema.parse(req.body);
 

@@ -1,20 +1,21 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Button } from '../components/ui/button';
-import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
+import { PASSWORD_RULES } from '../lib/passwordRules';
 
-export default function ChangePassword() {
-  const { user, updateUser } = useAuth();
+export default function ResetPassword() {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [currentPassword, setCurrentPassword] = useState('');
+  const token = searchParams.get('token');
+
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
 
+  const allRulesMet = PASSWORD_RULES.every((r) => r.test(newPassword));
   const passwordsMatch = newPassword === confirm;
 
   const handleSubmit = async (e: FormEvent) => {
@@ -22,10 +23,7 @@ export default function ChangePassword() {
     setTouched(true);
     setError('');
 
-    if (!passwordValid(newPassword)) {
-      setError('Please meet all password requirements below.');
-      return;
-    }
+    if (!allRulesMet) return;
     if (!passwordsMatch) {
       setError('Passwords do not match');
       return;
@@ -33,49 +31,52 @@ export default function ChangePassword() {
 
     setLoading(true);
     try {
-      await api('/auth/change-password', {
+      await api('/auth/reset-password', {
         method: 'POST',
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ token, newPassword }),
       });
-      if (user) {
-        updateUser({ ...user, mustChangePassword: false });
-      }
-      navigate('/');
+      navigate('/login?reset=1');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to change password');
+      setError(err instanceof Error ? err.message : 'Reset failed. The link may have expired.');
     } finally {
       setLoading(false);
     }
   };
 
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-sidebar px-4">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-xl shadow-lg border p-6 text-center space-y-3">
+            <p className="text-sm font-medium text-gray-700">Invalid reset link</p>
+            <p className="text-sm text-gray-500">
+              This link is missing a reset token. Please request a new one.
+            </p>
+            <Link to="/forgot-password" className="block text-sm text-brand-600 hover:underline">
+              Request new reset link
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-sidebar px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">Change Password</h1>
-          {user?.mustChangePassword && (
-            <p className="text-amber-400 mt-2 text-sm">
-              You must set a new password before continuing. Use the temporary password you were given as your current password.
-            </p>
-          )}
+          <h1 className="text-3xl font-bold text-white">Smart Stable Manager</h1>
+          <p className="text-sidebar-muted mt-2">Choose a new password</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg border p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Current password</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                required
-              />
-            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">New password</label>
               <input
@@ -84,8 +85,9 @@ export default function ChangePassword() {
                 onChange={(e) => { setNewPassword(e.target.value); setTouched(true); }}
                 className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 required
-                minLength={12}
+                autoFocus
               />
+              {/* Inline password rules */}
               {touched && newPassword.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {PASSWORD_RULES.map((r) => (
@@ -97,6 +99,7 @@ export default function ChangePassword() {
                 </ul>
               )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Confirm new password</label>
               <input
@@ -110,8 +113,9 @@ export default function ChangePassword() {
                 <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
               )}
             </div>
+
             <Button type="submit" disabled={loading} className="w-full">
-              {loading ? 'Changing...' : 'Change password'}
+              {loading ? 'Saving...' : 'Set new password'}
             </Button>
           </form>
         </div>

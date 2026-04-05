@@ -35,9 +35,10 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     recordUpload.single('file')(req, res, (err) => {
       if (err) {
-        const msg = err instanceof multer.MulterError
-          ? `Upload error: ${err.message}`
-          : err.message || 'Upload failed';
+        if (err instanceof multer.MulterError) {
+          console.error('Multer error:', err.code, err.message);
+        }
+        const msg = err instanceof multer.MulterError ? 'File upload failed' : err.message || 'Upload failed';
         reject(new Error(msg));
       } else {
         resolve();
@@ -414,11 +415,17 @@ router.post('/:horseId/expenses', authenticate, requireHorseAccess('EDIT'), asyn
     await handleFileUpload(req, res);
     const { date, notes, amount, category } = req.body;
     if (!date) { res.status(400).json({ error: 'Date is required' }); return; }
+    const parsedAmount = amount !== undefined && amount !== '' ? parseFloat(amount) : null;
+    if (parsedAmount !== null && (isNaN(parsedAmount) || parsedAmount < 0 || parsedAmount > 10_000_000)) {
+      res.status(400).json({ error: 'Amount must be a non-negative number up to 10,000,000' });
+      return;
+    }
     const { fileUrl, fileName } = getFileInfo(req);
     const expense = await prisma.expenseNote.create({
       data: {
         horseId: req.params.horseId,
         date: new Date(date + 'T00:00:00Z'),
+        amount: parsedAmount,
         category: category || null,
         amount: amount ? parseFloat(amount) : null,
         notes: notes || null,
