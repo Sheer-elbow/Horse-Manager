@@ -286,6 +286,47 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Onboarding hint — shown to non-admin users with no horses assigned */}
+      {hasNoHorses && !isNewAdmin && (() => {
+        const role = user?.role;
+        let heading = '';
+        let body = '';
+        let cta: { label: string; to: string } | null = null;
+
+        if (role === 'OWNER') {
+          heading = 'Add your first horse';
+          body = 'Register your horse to start tracking health records, training plans and costs.';
+          cta = { label: 'Add a horse', to: '/horses' };
+        } else if (role === 'TRAINER') {
+          heading = 'No horses assigned yet';
+          body = 'Ask your stable admin to assign horses to you, or browse training programmes while you wait.';
+          cta = { label: 'View programmes', to: '/programmes' };
+        } else if (role === 'STABLE_LEAD') {
+          heading = 'Set up your stable';
+          body = 'Create a stable, add horses, and invite your team to get started.';
+          cta = { label: 'Go to My Stable', to: '/stable' };
+        } else {
+          // RIDER / GROOM
+          heading = 'No horses assigned yet';
+          body = 'Your stable manager will assign horses to you. Check back soon or reach out to them directly.';
+        }
+
+        return (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 flex items-start gap-4">
+            <div className="text-3xl leading-none mt-0.5">&#x1f40e;</div>
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">{heading}</h3>
+              <p className="text-sm text-gray-500">{body}</p>
+              {cta && (
+                <Link to={cta.to} className="inline-block mt-3 text-sm font-medium text-brand-600 hover:underline">
+                  {cta.label} →
+                </Link>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Today's sessions */}
       {(dashData?.todayWorkouts.length ?? 0) > 0 && (
         <div>
@@ -479,7 +520,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-xl border p-6 text-center">
               <div className="text-4xl mb-2">&#x1f40e;</div>
               <p className="text-gray-500 text-sm">No horses yet.</p>
-              {user?.role === 'ADMIN' && (
+              {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
                 <Link to="/horses" className="text-brand-600 hover:underline text-sm mt-1 inline-block">Add your first horse</Link>
               )}
             </div>
