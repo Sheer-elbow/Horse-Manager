@@ -1,5 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../db';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { logSecurityEvent } from '../services/securityLog';
@@ -75,6 +77,123 @@ router.put('/me', authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
     console.error('Update profile error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/users/me/export — download all personal data (GDPR Art 20)
+router.get('/me/export', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const data = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, email: true, name: true, role: true, createdAt: true,
+        acceptedTermsAt: true, acceptedPrivacyAt: true,
+        assignments: {
+          select: {
+            permission: true,
+            horse: {
+              select: {
+                id: true, name: true, age: true, breed: true, ownerNotes: true,
+                stableLocation: true, identifyingInfo: true, createdAt: true,
+              },
+            },
+          },
+        },
+        stableAssignments: {
+          select: { stable: { select: { id: true, name: true, address: true } }, createdAt: true },
+        },
+        stableMemberships: {
+          select: { stable: { select: { id: true, name: true } }, type: true, createdAt: true },
+        },
+        sessionLogs: {
+          select: {
+            id: true, date: true, slot: true, sessionType: true,
+            durationMinutes: true, intensityRpe: true, notes: true,
+            rider: true, deviationReason: true, createdAt: true,
+            horse: { select: { id: true, name: true } },
+          },
+        },
+        notificationPreference: true,
+        ownedStables: {
+          select: { id: true, name: true, address: true, createdAt: true },
+        },
+      },
+    });
+    if (!data) { res.status(404).json({ error: 'User not found' }); return; }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="smart-stable-manager-export-${new Date().toISOString().slice(0, 10)}.json"`);
+    res.json({ exportedAt: new Date().toISOString(), data });
+  } catch (err) {
+    console.error('Data export error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/users/me — self-service account deletion (GDPR Art 17)
+router.delete('/me', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true },
+    });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    // Prevent the last admin from deleting themselves
+    if (user.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        res.status(400).json({ error: 'Cannot delete the last admin account. Transfer admin role first.' });
+        return;
+      }
+    }
+
+    // Check for owned stables — require transfer or deletion first
+    const ownedStables = await prisma.stable.count({ where: { ownerId: userId } });
+    if (ownedStables > 0) {
+      res.status(400).json({ error: 'You own one or more stables. Please transfer ownership or delete them before deleting your account.' });
+      return;
+    }
+
+    // Clean up uploaded files associated with horses the user owns exclusively
+    const exclusiveHorses = await prisma.horseAssignment.findMany({
+      where: { userId, permission: 'EDIT' },
+      select: { horseId: true },
+    });
+    for (const { horseId } of exclusiveHorses) {
+      const otherEditors = await prisma.horseAssignment.count({
+        where: { horseId, permission: 'EDIT', userId: { not: userId } },
+      });
+      if (otherEditors === 0) {
+        // This user is the sole editor — delete the horse's uploaded files
+        const horse = await prisma.horse.findUnique({ where: { id: horseId }, select: { photoUrl: true } });
+        if (horse?.photoUrl) {
+          const filePath = path.join(process.cwd(), horse.photoUrl.replace(/^\/api\/uploads\//, 'uploads/'));
+          try { fs.unlinkSync(filePath); } catch { /* file may already be gone */ }
+        }
+      }
+    }
+
+    // Anonymise security events rather than deleting them (retain audit trail)
+    await prisma.securityEvent.updateMany({
+      where: { userId },
+      data: { userId: null, email: null },
+    });
+
+    // Delete the user — cascading deletes handle assignments, tokens, preferences, etc.
+    await prisma.user.delete({ where: { id: userId } });
+
+    void logSecurityEvent('USER_DELETED', req, {
+      outcome: 'info',
+      metadata: { selfDeletion: true, deletedEmail: user.email },
+    });
+
+    res.json({ message: 'Account deleted successfully' });
+  } catch (err) {
+    console.error('Self-deletion error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

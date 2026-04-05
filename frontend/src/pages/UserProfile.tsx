@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api/client';
+import { api, clearTokens } from '../api/client';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
@@ -37,6 +37,12 @@ export default function UserProfile() {
   const [passwordTouched, setPasswordTouched] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+
+  // Account deletion
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     api<ProfileData>('/users/me')
@@ -198,6 +204,88 @@ export default function UserProfile() {
             {passwordLoading ? 'Updating...' : 'Update password'}
           </Button>
         </form>
+      </div>
+
+      {/* Data export */}
+      <div className="bg-white rounded-xl border p-5">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Export my data</h3>
+        <p className="text-sm text-gray-500 mb-3">Download all your personal data in JSON format.</p>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              const res = await fetch('/api/users/me/export', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+              });
+              if (!res.ok) throw new Error('Export failed');
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `smart-stable-manager-export-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success('Data exported');
+            } catch {
+              toast.error('Failed to export data');
+            }
+          }}
+        >
+          Download my data
+        </Button>
+      </div>
+
+      {/* Delete account */}
+      <div className="bg-white rounded-xl border border-red-200 p-5">
+        <h3 className="text-sm font-semibold text-red-700 uppercase tracking-wide mb-2">Delete account</h3>
+        <p className="text-sm text-gray-500 mb-3">
+          Permanently delete your account and all associated data. This action cannot be undone.
+        </p>
+        {deleteError && (
+          <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{deleteError}</div>
+        )}
+        {!showDeleteConfirm ? (
+          <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => setShowDeleteConfirm(true)}>
+            Delete my account
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-red-700">
+              Are you sure? Type your email <strong>{profile?.email}</strong> to confirm.
+            </p>
+            <input
+              type="email"
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              placeholder="Enter your email to confirm"
+              className="w-full border border-red-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(''); setDeleteError(''); }}>
+                Cancel
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={deleteLoading || deleteConfirmEmail !== profile?.email}
+                onClick={async () => {
+                  setDeleteLoading(true);
+                  setDeleteError('');
+                  try {
+                    await api('/users/me', { method: 'DELETE' });
+                    clearTokens();
+                    window.location.href = '/login';
+                  } catch (err) {
+                    setDeleteError(err instanceof Error ? err.message : 'Failed to delete account');
+                  } finally {
+                    setDeleteLoading(false);
+                  }
+                }}
+              >
+                {deleteLoading ? 'Deleting...' : 'Permanently delete'}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
