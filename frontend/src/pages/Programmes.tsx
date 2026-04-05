@@ -22,7 +22,7 @@ const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const CATEGORIES = [
   'Flatwork', 'Jumping', 'Hacking', 'Groundwork', 'Cross-country',
-  'Lungeing', 'Fitness', 'Conditioning', 'Rest', 'Other',
+  'Lungeing', 'Fitness', 'Conditioning', 'Stick and ball', 'Chukkas', 'Rest', 'Other',
 ];
 
 const INTENSITY_LEVELS = [
@@ -32,17 +32,21 @@ const INTENSITY_LEVELS = [
   { label: 'Very Hard', rpeMin: 9, rpeMax: 10 },
 ];
 
+const JUMP_TYPES = ['Upright', 'Oxer', 'Cross-pole', 'Combination', 'Triple bar', 'Water', 'Ditch', 'Bank', 'Mixed'];
+
 const CELL_COLORS: Record<string, string> = {
-  Flatwork:       'bg-blue-100 text-blue-700 border-blue-200',
-  Jumping:        'bg-orange-100 text-orange-700 border-orange-200',
-  Hacking:        'bg-green-100 text-green-700 border-green-200',
-  Groundwork:     'bg-yellow-100 text-yellow-700 border-yellow-200',
-  'Cross-country':'bg-red-100 text-red-700 border-red-200',
-  Lungeing:       'bg-indigo-100 text-indigo-700 border-indigo-200',
-  Fitness:        'bg-pink-100 text-pink-700 border-pink-200',
-  Conditioning:   'bg-teal-100 text-teal-700 border-teal-200',
-  Rest:           'bg-gray-100 text-gray-400 border-gray-200',
-  Other:          'bg-gray-100 text-gray-600 border-gray-200',
+  Flatwork:         'bg-blue-100 text-blue-700 border-blue-200',
+  Jumping:          'bg-orange-100 text-orange-700 border-orange-200',
+  Hacking:          'bg-green-100 text-green-700 border-green-200',
+  Groundwork:       'bg-yellow-100 text-yellow-700 border-yellow-200',
+  'Cross-country':  'bg-red-100 text-red-700 border-red-200',
+  Lungeing:         'bg-indigo-100 text-indigo-700 border-indigo-200',
+  Fitness:          'bg-pink-100 text-pink-700 border-pink-200',
+  Conditioning:     'bg-teal-100 text-teal-700 border-teal-200',
+  'Stick and ball': 'bg-lime-100 text-lime-700 border-lime-200',
+  Chukkas:          'bg-amber-100 text-amber-700 border-amber-200',
+  Rest:             'bg-gray-100 text-gray-400 border-gray-200',
+  Other:            'bg-gray-100 text-gray-600 border-gray-200',
 };
 
 type BuilderCell = {
@@ -53,6 +57,7 @@ type BuilderCell = {
   intensityLabel: string | null;
   intensityRpeMin: number | null;
   intensityRpeMax: number | null;
+  blocks: { name: string; text: string }[];
 };
 
 type EditForm = {
@@ -60,7 +65,17 @@ type EditForm = {
   category: string;
   durationMin: string;
   durationMax: string;
-  intensity: string;
+  // Intensity
+  intensityMode: 'rpe' | 'distance';
+  intensity: string;       // RPE preset label
+  distance: string;
+  distanceUnit: 'km' | 'miles';
+  pace: string;
+  paceUnit: 'min/km' | 'min/mile' | 'km/h' | 'mph';
+  // Jumping extras
+  jumpHeight: string;
+  jumpType: string;
+  jumpCount: string;
 };
 
 export default function Programmes() {
@@ -107,7 +122,7 @@ export default function Programmes() {
   const [builderNumWeeks, setBuilderNumWeeks] = useState(4);
   const [builderCells, setBuilderCells] = useState<Record<string, BuilderCell>>({});
   const [editCell, setEditCell] = useState<{ week: number; day: number } | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensity: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensityMode: 'rpe', intensity: '', distance: '', distanceUnit: 'km', pace: '', paceUnit: 'min/km', jumpHeight: '', jumpType: '', jumpCount: '' });
   const [builderSaving, setBuilderSaving] = useState(false);
 
   const canManage = user?.role === 'ADMIN' || user?.role === 'TRAINER';
@@ -373,20 +388,54 @@ export default function Programmes() {
     setBuilderOpen(true);
   };
 
+  const handleBuildInApp = async () => {
+    const name = form.name.trim();
+    if (!name) { setError('Enter a programme name first'); return; }
+    setUploading(true);
+    try {
+      const newProg = await api<Programme>('/programmes', {
+        method: 'POST',
+        body: JSON.stringify({ name, description: form.description || null }),
+      });
+      setShowAdd(false);
+      setForm({ name: '', description: '' });
+      setError('');
+      load();
+      openBuilder(newProg);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create programme');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const BLANK_FORM: EditForm = { title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensityMode: 'rpe', intensity: '', distance: '', distanceUnit: 'km', pace: '', paceUnit: 'min/km', jumpHeight: '', jumpType: '', jumpCount: '' };
+
   const selectCell = (week: number, day: number) => {
     const key = `${week}-${day}`;
     const existing = builderCells[key];
     if (existing) {
       const preset = INTENSITY_LEVELS.find((l) => l.label === existing.intensityLabel);
+      // Detect distance/pace label: e.g. "5km @ 6:30min/km"
+      const distMatch = existing.intensityLabel?.match(/^([\d.]+)(km|miles)\s*@\s*([\d.:]+)(min\/km|min\/mile|km\/h|mph)$/);
+      const jumpHeight = existing.blocks.find((b) => b.name === 'Height')?.text ?? '';
+      const jumpType   = existing.blocks.find((b) => b.name === 'Type')?.text ?? '';
+      const jumpCount  = existing.blocks.find((b) => b.name === 'Fences')?.text ?? '';
       setEditForm({
         title: existing.title,
         category: existing.category,
         durationMin: existing.durationMin != null ? String(existing.durationMin) : '',
         durationMax: existing.durationMax != null ? String(existing.durationMax) : '',
+        intensityMode: distMatch ? 'distance' : 'rpe',
         intensity: preset?.label ?? '',
+        distance: distMatch ? distMatch[1] : '',
+        distanceUnit: (distMatch?.[2] as 'km' | 'miles') ?? 'km',
+        pace: distMatch ? distMatch[3] : '',
+        paceUnit: (distMatch?.[4] as EditForm['paceUnit']) ?? 'min/km',
+        jumpHeight, jumpType, jumpCount,
       });
     } else {
-      setEditForm({ title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensity: '' });
+      setEditForm(BLANK_FORM);
     }
     setEditCell({ week, day });
   };
@@ -394,28 +443,47 @@ export default function Programmes() {
   const saveEditCell = () => {
     if (!editCell) return;
     const key = `${editCell.week}-${editCell.day}`;
-    const preset = INTENSITY_LEVELS.find((l) => l.label === editForm.intensity);
     const isRest = editForm.category === 'Rest' || !editForm.title.trim();
     if (isRest) {
-      setBuilderCells((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-    } else {
-      setBuilderCells((prev) => ({
-        ...prev,
-        [key]: {
-          title: editForm.title.trim(),
-          category: editForm.category,
-          durationMin: editForm.durationMin ? parseInt(editForm.durationMin, 10) : null,
-          durationMax: editForm.durationMax ? parseInt(editForm.durationMax, 10) : null,
-          intensityLabel: preset?.label ?? (editForm.intensity || null),
-          intensityRpeMin: preset?.rpeMin ?? null,
-          intensityRpeMax: preset?.rpeMax ?? null,
-        },
-      }));
+      setBuilderCells((prev) => { const next = { ...prev }; delete next[key]; return next; });
+      setEditCell(null);
+      return;
     }
+
+    // Intensity
+    let intensityLabel: string | null = null;
+    let intensityRpeMin: number | null = null;
+    let intensityRpeMax: number | null = null;
+    if (editForm.intensityMode === 'rpe' && editForm.intensity) {
+      const preset = INTENSITY_LEVELS.find((l) => l.label === editForm.intensity);
+      intensityLabel = preset?.label ?? editForm.intensity;
+      intensityRpeMin = preset?.rpeMin ?? null;
+      intensityRpeMax = preset?.rpeMax ?? null;
+    } else if (editForm.intensityMode === 'distance' && editForm.distance) {
+      intensityLabel = `${editForm.distance}${editForm.distanceUnit} @ ${editForm.pace}${editForm.paceUnit}`;
+    }
+
+    // Blocks — jumping extras stored as structured blocks
+    const blocks: { name: string; text: string }[] = [];
+    if (editForm.category === 'Jumping') {
+      if (editForm.jumpHeight) blocks.push({ name: 'Height', text: editForm.jumpHeight });
+      if (editForm.jumpType)   blocks.push({ name: 'Type',   text: editForm.jumpType });
+      if (editForm.jumpCount)  blocks.push({ name: 'Fences', text: editForm.jumpCount });
+    }
+
+    setBuilderCells((prev) => ({
+      ...prev,
+      [key]: {
+        title: editForm.title.trim(),
+        category: editForm.category,
+        durationMin: editForm.durationMin ? parseInt(editForm.durationMin, 10) : null,
+        durationMax: editForm.durationMax ? parseInt(editForm.durationMax, 10) : null,
+        intensityLabel,
+        intensityRpeMin,
+        intensityRpeMax,
+        blocks,
+      },
+    }));
     setEditCell(null);
   };
 
@@ -438,7 +506,7 @@ export default function Programmes() {
       for (let d = 1; d <= 7; d++) {
         const cell = builderCells[`${w}-${d}`];
         if (cell) {
-          scheduleData.push({ week: w, day: d, ...cell, blocks: [] });
+          scheduleData.push({ week: w, day: d, ...cell });
         } else {
           scheduleData.push({
             week: w, day: d,
@@ -614,65 +682,63 @@ export default function Programmes() {
       </Modal>
 
       {/* ─── Add programme modal ─────────────────────────────── */}
-      <Modal open={showAdd} onClose={() => { setShowAdd(false); setError(''); }} title="New programme" wide>
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setError(''); setForm({ name: '', description: '' }); }} title="New programme" wide>
         {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm whitespace-pre-line">{error}</div>}
 
-        {/* Primary: Upload ZIP package */}
-        <form onSubmit={handleZipUpload} className="space-y-3">
+        {/* Shared name / description */}
+        <div className="space-y-2 mb-4">
           <div>
-            <div className="text-sm font-medium text-gray-700 mb-1">Import ZIP package</div>
-            <p className="text-xs text-gray-400 mb-2">A ZIP containing <code>schedule.csv</code> and optionally <code>manual.html</code>. Ideal for LLM-generated programmes.</p>
-            <input
-              ref={zipInputRef}
-              type="file"
-              accept=".zip"
-              className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Programme name</label>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. Spring Flatwork Block" />
           </div>
-          <Button type="submit" disabled={uploading} className="w-full">
-            {uploading ? 'Uploading...' : 'Import ZIP'}
-          </Button>
-        </form>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Description (optional)</label>
+            <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" />
+          </div>
+        </div>
 
-        {/* Legacy methods — collapsed by default */}
-        <details className="mt-4 group">
-          <summary className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600 list-none">
-            <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform shrink-0" />
-            Other import methods (HTML upload, manual entry)
-          </summary>
+        {/* Two primary paths */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <button
+            type="button"
+            onClick={handleBuildInApp}
+            disabled={uploading}
+            className="flex flex-col items-center gap-2 p-4 border-2 border-brand-200 rounded-xl bg-brand-50 hover:bg-brand-100 hover:border-brand-400 transition-colors text-center"
+          >
+            <Grid3X3 className="w-7 h-7 text-brand-600" />
+            <div>
+              <div className="font-semibold text-sm text-brand-700">Build in-app</div>
+              <div className="text-xs text-brand-500 mt-0.5">Visual week×day schedule grid</div>
+            </div>
+          </button>
 
-          <div className="mt-3 space-y-4 pl-1 border-l-2 border-gray-100 ml-1">
-            {/* Upload HTML file */}
-            <form onSubmit={handleUpload} className="space-y-3">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Upload HTML reference doc</div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".html,.htm"
-                className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
-              />
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Name (optional)</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Defaults to filename" />
-              </div>
-              <Button type="submit" disabled={uploading} variant="secondary" size="sm" className="w-full">
-                {uploading ? 'Uploading...' : 'Upload HTML'}
+          <div className="flex flex-col p-4 border-2 border-gray-200 rounded-xl bg-gray-50">
+            <div className="font-semibold text-sm text-gray-700 mb-1">Import ZIP</div>
+            <div className="text-xs text-gray-400 mb-2">ZIP with <code>schedule.csv</code> + optional <code>manual.html</code></div>
+            <input ref={zipInputRef} type="file" accept=".zip" className="text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-white file:text-gray-600 hover:file:bg-gray-100 mb-2" />
+            <form onSubmit={handleZipUpload} className="mt-auto">
+              <Button type="submit" size="sm" variant="outline" disabled={uploading} className="w-full">
+                {uploading ? 'Uploading…' : 'Import ZIP'}
               </Button>
             </form>
+          </div>
+        </div>
 
+        {/* Legacy methods collapsed */}
+        <details className="group">
+          <summary className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600 list-none">
+            <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform shrink-0" />
+            Other methods (HTML upload, blank)
+          </summary>
+          <div className="mt-3 space-y-4 pl-1 border-l-2 border-gray-100 ml-1">
+            <form onSubmit={handleUpload} className="space-y-2">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Upload HTML reference doc</div>
+              <input ref={fileInputRef} type="file" accept=".html,.htm" className="w-full text-sm text-gray-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-600" />
+              <Button type="submit" disabled={uploading} variant="secondary" size="sm" className="w-full">{uploading ? 'Uploading...' : 'Upload HTML'}</Button>
+            </form>
             <div className="border-t" />
-
-            {/* Manual creation */}
-            <form onSubmit={handleAdd} className="space-y-3">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Create blank programme</div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" required />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
-                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
-              </div>
+            <form onSubmit={handleAdd} className="space-y-2">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Create blank (no schedule)</div>
               <Button type="submit" variant="secondary" size="sm" className="w-full">Create blank</Button>
             </form>
           </div>
@@ -888,6 +954,8 @@ export default function Programmes() {
             <div className="text-sm font-medium text-gray-700">
               Week {editCell.week} · {DAYS_SHORT[editCell.day - 1]}
             </div>
+
+            {/* Title + Category */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Session title</label>
@@ -910,42 +978,90 @@ export default function Programmes() {
                   {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Duration (min)</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={1}
-                    value={editForm.durationMin}
-                    onChange={(e) => setEditForm({ ...editForm, durationMin: e.target.value })}
-                    placeholder="Min"
-                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
-                  />
-                  <span className="text-gray-400 shrink-0">–</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={editForm.durationMax}
-                    onChange={(e) => setEditForm({ ...editForm, durationMax: e.target.value })}
-                    placeholder="Max"
-                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
-                  />
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Duration (min)</label>
+              <div className="flex items-center gap-1.5">
+                <input type="number" min={1} value={editForm.durationMin} onChange={(e) => setEditForm({ ...editForm, durationMin: e.target.value })} placeholder="Min" className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                <span className="text-gray-400 shrink-0">–</span>
+                <input type="number" min={1} value={editForm.durationMax} onChange={(e) => setEditForm({ ...editForm, durationMax: e.target.value })} placeholder="Max" className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+              </div>
+            </div>
+
+            {/* Intensity — RPE or Distance/Pace toggle */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="text-xs font-medium text-gray-600">Intensity</label>
+                <div className="flex rounded-lg border overflow-hidden text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, intensityMode: 'rpe' })}
+                    className={`px-2.5 py-1 ${editForm.intensityMode === 'rpe' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    RPE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, intensityMode: 'distance' })}
+                    className={`px-2.5 py-1 border-l ${editForm.intensityMode === 'distance' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    Distance / Pace
+                  </button>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Intensity</label>
-                <select
-                  value={editForm.intensity}
-                  onChange={(e) => setEditForm({ ...editForm, intensity: e.target.value })}
-                  className="w-full border rounded-lg px-2 py-1.5 text-sm"
-                >
+
+              {editForm.intensityMode === 'rpe' ? (
+                <select value={editForm.intensity} onChange={(e) => setEditForm({ ...editForm, intensity: e.target.value })} className="w-full border rounded-lg px-2 py-1.5 text-sm">
                   <option value="">None</option>
                   {INTENSITY_LEVELS.map((l) => (
                     <option key={l.label} value={l.label}>{l.label} (RPE {l.rpeMin}–{l.rpeMax})</option>
                   ))}
                 </select>
-              </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input type="number" min={0} step={0.1} value={editForm.distance} onChange={(e) => setEditForm({ ...editForm, distance: e.target.value })} placeholder="Distance" className="w-24 border rounded-lg px-2 py-1.5 text-sm" />
+                  <select value={editForm.distanceUnit} onChange={(e) => setEditForm({ ...editForm, distanceUnit: e.target.value as 'km' | 'miles' })} className="border rounded-lg px-2 py-1.5 text-sm">
+                    <option value="km">km</option>
+                    <option value="miles">miles</option>
+                  </select>
+                  <span className="text-gray-400 text-xs">@</span>
+                  <input type="text" value={editForm.pace} onChange={(e) => setEditForm({ ...editForm, pace: e.target.value })} placeholder="e.g. 6:30" className="w-20 border rounded-lg px-2 py-1.5 text-sm" />
+                  <select value={editForm.paceUnit} onChange={(e) => setEditForm({ ...editForm, paceUnit: e.target.value as EditForm['paceUnit'] })} className="border rounded-lg px-2 py-1.5 text-sm">
+                    <option value="min/km">min/km</option>
+                    <option value="min/mile">min/mi</option>
+                    <option value="km/h">km/h</option>
+                    <option value="mph">mph</option>
+                  </select>
+                </div>
+              )}
             </div>
+
+            {/* Jumping extras */}
+            {editForm.category === 'Jumping' && (
+              <div className="border-t pt-3">
+                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Jumping details</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Height</label>
+                    <input value={editForm.jumpHeight} onChange={(e) => setEditForm({ ...editForm, jumpHeight: e.target.value })} placeholder="e.g. 80cm" className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Type</label>
+                    <select value={editForm.jumpType} onChange={(e) => setEditForm({ ...editForm, jumpType: e.target.value })} className="w-full border rounded-lg px-2 py-1.5 text-sm">
+                      <option value="">Any</option>
+                      {JUMP_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">No. of fences</label>
+                    <input type="number" min={1} value={editForm.jumpCount} onChange={(e) => setEditForm({ ...editForm, jumpCount: e.target.value })} placeholder="e.g. 8" className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2 justify-end pt-1">
               <Button size="sm" variant="ghost" onClick={clearEditCell}>Clear cell</Button>
               <Button size="sm" variant="outline" onClick={() => setEditCell(null)}>Cancel</Button>
