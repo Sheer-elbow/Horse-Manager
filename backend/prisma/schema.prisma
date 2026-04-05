@@ -100,6 +100,7 @@ model User {
   createdRecurringInvoices     RecurringInvoice[]        @relation("RecurringInvoiceCreator")
   ownedRecurringInvoiceSplits  RecurringInvoiceSplit[]   @relation("RecurringInvoiceSplitOwner")
   uploadedDocuments            HorseDocument[]           @relation("DocumentUploader")
+  ownedStables                 Stable[]                  @relation("StableOwner")
 
   @@map("users")
 }
@@ -138,9 +139,11 @@ model Stable {
   id        String   @id @default(uuid())
   name      String   @unique
   address   String?
+  ownerId   String?  @map("owner_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  owner               User?              @relation("StableOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   horses              Horse[]
   stableAssignments   StableAssignment[]
   stableMemberships   StableMembership[]

@@ -11,19 +11,35 @@ const stableSchema = z.object({
   address: z.string().nullable().optional(),
 });
 
-// GET /api/stables/my — stables the current user is assigned to (STABLE_LEAD)
+const STABLE_INCLUDE = {
+  _count: { select: { horses: true, stableAssignments: true } },
+  owner: { select: { id: true, name: true, email: true } },
+} as const;
+
+/** Returns true if the user may manage (edit/delete) this stable */
+function canManageStable(userId: string, role: string, stable: { ownerId: string | null }) {
+  return role === 'ADMIN' || stable.ownerId === userId;
+}
+
+// GET /api/stables/my — stables the current user is assigned to OR owns
 router.get('/my', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { userId } = req.user!;
-    const assignments = await prisma.stableAssignment.findMany({
-      where: { userId },
-      include: {
-        stable: {
-          include: { _count: { select: { horses: true, stableAssignments: true } } },
-        },
-      },
-    });
-    res.json(assignments.map((a) => a.stable));
+    const [assignments, owned] = await Promise.all([
+      prisma.stableAssignment.findMany({
+        where: { userId },
+        include: { stable: { include: STABLE_INCLUDE } },
+      }),
+      prisma.stable.findMany({
+        where: { ownerId: userId },
+        include: STABLE_INCLUDE,
+      }),
+    ]);
+    const assignedStables = assignments.map((a) => a.stable);
+    // Merge, deduplicating by id
+    const seen = new Set(assignedStables.map((s) => s.id));
+    const all = [...assignedStables, ...owned.filter((s) => !seen.has(s.id))];
+    res.json(all);
   } catch (err) {
     console.error('List my stables error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -35,7 +51,7 @@ router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
     const stables = await prisma.stable.findMany({
       orderBy: { name: 'asc' },
-      include: { _count: { select: { horses: true } } },
+      include: STABLE_INCLUDE,
     });
     res.json(stables);
   } catch (err) {
@@ -44,12 +60,22 @@ router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/stables (admin only)
-router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+// POST /api/stables — admin or OWNER creating their own stable
+router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId, role } = req.user!;
+  if (role !== 'ADMIN' && role !== 'OWNER') {
+    res.status(403).json({ error: 'Admin or Owner access required' });
+    return;
+  }
   try {
     const data = stableSchema.parse(req.body);
     const stable = await prisma.stable.create({
-      data: { name: data.name, address: data.address ?? null },
+      data: {
+        name: data.name,
+        address: data.address ?? null,
+        ownerId: role === 'OWNER' ? userId : null,
+      },
+      include: STABLE_INCLUDE,
     });
     res.status(201).json(stable);
   } catch (err) {
@@ -71,7 +97,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const stable = await prisma.stable.findUnique({
       where: { id: req.params.id },
-      include: { _count: { select: { horses: true, stableAssignments: true } } },
+      include: STABLE_INCLUDE,
     });
     if (!stable) {
       res.status(404).json({ error: 'Stable not found' });
@@ -87,12 +113,13 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 // GET /api/stables/:id/memberships — owners with horses in this stable
 router.get('/:id/memberships', authenticate, async (req: AuthRequest, res: Response) => {
   const { userId, role } = req.user!;
-  // ADMIN or STABLE_LEAD of this stable
+  // ADMIN, STABLE_LEAD of this stable, or the stable owner
   if (role !== 'ADMIN') {
-    const assignment = await prisma.stableAssignment.findUnique({
-      where: { userId_stableId: { userId, stableId: req.params.id } },
-    });
-    if (!assignment) {
+    const [assignment, stable] = await Promise.all([
+      prisma.stableAssignment.findUnique({ where: { userId_stableId: { userId, stableId: req.params.id } } }),
+      prisma.stable.findUnique({ where: { id: req.params.id }, select: { ownerId: true } }),
+    ]);
+    if (!assignment && stable?.ownerId !== userId) {
       res.status(403).json({ error: 'Stable Lead or Admin access required' });
       return;
     }
@@ -110,13 +137,20 @@ router.get('/:id/memberships', authenticate, async (req: AuthRequest, res: Respo
   }
 });
 
-// PUT /api/stables/:id (admin only)
-router.put('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+// PUT /api/stables/:id — admin or stable owner
+router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId, role } = req.user!;
   try {
+    const existing = await prisma.stable.findUnique({ where: { id: req.params.id }, select: { ownerId: true } });
+    if (!existing) { res.status(404).json({ error: 'Stable not found' }); return; }
+    if (!canManageStable(userId, role, existing)) {
+      res.status(403).json({ error: 'Admin or stable owner access required' }); return;
+    }
     const data = stableSchema.parse(req.body);
     const stable = await prisma.stable.update({
       where: { id: req.params.id },
       data: { name: data.name, address: data.address ?? null },
+      include: STABLE_INCLUDE,
     });
     res.json(stable);
   } catch (err) {
@@ -128,14 +162,20 @@ router.put('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Res
       res.status(409).json({ error: 'A stable with that name already exists' });
       return;
     }
-    res.status(404).json({ error: 'Stable not found' });
+    console.error('Update stable error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE /api/stables/:id (admin only)
-router.delete('/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+// DELETE /api/stables/:id — admin or stable owner
+router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId, role } = req.user!;
   try {
-    // Check for horses still assigned
+    const existing = await prisma.stable.findUnique({ where: { id: req.params.id }, select: { ownerId: true } });
+    if (!existing) { res.status(404).json({ error: 'Stable not found' }); return; }
+    if (!canManageStable(userId, role, existing)) {
+      res.status(403).json({ error: 'Admin or stable owner access required' }); return;
+    }
     const count = await prisma.horse.count({ where: { stableId: req.params.id } });
     if (count > 0) {
       res.status(409).json({ error: `Cannot delete: ${count} horse${count === 1 ? '' : 's'} still assigned to this stable` });
