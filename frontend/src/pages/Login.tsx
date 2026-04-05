@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
+import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
 
 export default function Login() {
   const { login } = useAuth();
@@ -21,6 +22,7 @@ export default function Login() {
   // Invite accept state
   const [inviteName, setInviteName] = useState('');
   const [invitePassword, setInvitePassword] = useState('');
+  const [invitePasswordTouched, setInvitePasswordTouched] = useState(false);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -42,7 +44,12 @@ export default function Login() {
 
   const handleAcceptInvite = async (e: FormEvent) => {
     e.preventDefault();
+    setInvitePasswordTouched(true);
     setError('');
+    if (!passwordValid(invitePassword)) {
+      setError('Please meet all password requirements.');
+      return;
+    }
     setLoading(true);
     try {
       const data = await api<AuthTokens>('/auth/accept-invite', {
@@ -97,11 +104,21 @@ export default function Login() {
                 <input
                   type="password"
                   value={invitePassword}
-                  onChange={(e) => setInvitePassword(e.target.value)}
+                  onChange={(e) => { setInvitePassword(e.target.value); setInvitePasswordTouched(true); }}
                   className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   required
-                  minLength={8}
+                  minLength={12}
                 />
+                {invitePasswordTouched && invitePassword.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {PASSWORD_RULES.map((r) => (
+                      <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(invitePassword) ? 'text-green-600' : 'text-gray-400'}`}>
+                        <span>{r.test(invitePassword) ? '✓' : '○'}</span>
+                        {r.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Setting up...' : 'Create account'}

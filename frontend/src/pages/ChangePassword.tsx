@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Button } from '../components/ui/button';
+import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
 
 export default function ChangePassword() {
   const { user, updateUser } = useAuth();
@@ -12,17 +13,21 @@ export default function ChangePassword() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  const passwordsMatch = newPassword === confirm;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setTouched(true);
     setError('');
 
-    if (newPassword !== confirm) {
-      setError('Passwords do not match');
+    if (!passwordValid(newPassword)) {
+      setError('Please meet all password requirements below.');
       return;
     }
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters');
+    if (!passwordsMatch) {
+      setError('Passwords do not match');
       return;
     }
 
@@ -49,7 +54,9 @@ export default function ChangePassword() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white">Change Password</h1>
           {user?.mustChangePassword && (
-            <p className="text-amber-400 mt-2 text-sm">You must change your password before continuing.</p>
+            <p className="text-amber-400 mt-2 text-sm">
+              You must set a new password before continuing. Use the temporary password you were given as your current password.
+            </p>
           )}
         </div>
 
@@ -74,11 +81,21 @@ export default function ChangePassword() {
               <input
                 type="password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => { setNewPassword(e.target.value); setTouched(true); }}
                 className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 required
-                minLength={8}
+                minLength={12}
               />
+              {touched && newPassword.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {PASSWORD_RULES.map((r) => (
+                    <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(newPassword) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span>{r.test(newPassword) ? '✓' : '○'}</span>
+                      {r.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Confirm new password</label>
@@ -89,6 +106,9 @@ export default function ChangePassword() {
                 className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 required
               />
+              {touched && confirm.length > 0 && !passwordsMatch && (
+                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+              )}
             </div>
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? 'Changing...' : 'Change password'}

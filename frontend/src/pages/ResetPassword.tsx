@@ -2,14 +2,7 @@ import { useState, FormEvent } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Button } from '../components/ui/button';
-
-const RULES = [
-  { label: 'At least 12 characters', test: (p: string) => p.length >= 12 },
-  { label: 'One uppercase letter', test: (p: string) => /[A-Z]/.test(p) },
-  { label: 'One lowercase letter', test: (p: string) => /[a-z]/.test(p) },
-  { label: 'One number', test: (p: string) => /[0-9]/.test(p) },
-  { label: 'One special character', test: (p: string) => /[^A-Za-z0-9]/.test(p) },
-];
+import { PASSWORD_RULES } from '../lib/passwordRules';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -22,7 +15,7 @@ export default function ResetPassword() {
   const [error, setError] = useState('');
   const [touched, setTouched] = useState(false);
 
-  const allRulesMet = RULES.every((r) => r.test(newPassword));
+  const allRulesMet = PASSWORD_RULES.every((r) => r.test(newPassword));
   const passwordsMatch = newPassword === confirm;
 
   const handleSubmit = async (e: FormEvent) => {
@@ -97,7 +90,7 @@ export default function ResetPassword() {
               {/* Inline password rules */}
               {touched && newPassword.length > 0 && (
                 <ul className="mt-2 space-y-1">
-                  {RULES.map((r) => (
+                  {PASSWORD_RULES.map((r) => (
                     <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(newPassword) ? 'text-green-600' : 'text-gray-400'}`}>
                       <span>{r.test(newPassword) ? '✓' : '○'}</span>
                       {r.label}
