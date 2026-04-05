@@ -315,6 +315,43 @@ export default function Planner() {
     }
   };
 
+  // One-click "completed as planned" — submits without opening the modal
+  const handleCompleteAsPlanned = async (dayOffset: number, slot: 'AM' | 'PM') => {
+    const dateStr = toDateStr(addDays(currentWeekStart, dayOffset));
+    const planned = getPlannedForSlot(dayOffset, slot);
+    const workout = planned?.workoutId ? workoutMap.get(planned.workoutId) : undefined;
+
+    let sessionType: string | null = null;
+    let durationMinutes: number | null = null;
+    let intensityRpe: number | null = null;
+    let notes: string | null = 'Completed as planned';
+
+    if (workout && !workout.isRest) {
+      const entry = workout.currentData;
+      sessionType = entry.title || entry.category || null;
+      durationMinutes = entry.durationMin != null && entry.durationMax != null
+        ? Math.round((entry.durationMin + entry.durationMax) / 2)
+        : entry.durationMin ?? entry.durationMax ?? null;
+      intensityRpe = entry.intensityRpeMin != null && entry.intensityRpeMax != null
+        ? Math.round((entry.intensityRpeMin + entry.intensityRpeMax) / 2)
+        : entry.intensityRpeMin ?? entry.intensityRpeMax ?? null;
+    } else if (planned) {
+      sessionType = planned.sessionType || null;
+      durationMinutes = planned.durationMinutes ?? null;
+      intensityRpe = planned.intensityRpe ?? null;
+    }
+
+    try {
+      await api('/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ horseId, date: dateStr, slot, plannedSessionId: planned?.id || null, sessionType, durationMinutes, intensityRpe, notes, rider: null, deviationReason: null }),
+      });
+      loadWeekData();
+    } catch (err) {
+      console.error('Complete as planned failed:', err);
+    }
+  };
+
   const handleSaveActual = async (e: FormEvent) => {
     e.preventDefault();
     const planned = plannedSessions.find(
@@ -410,47 +447,47 @@ export default function Planner() {
     return (
       <div className={`rounded p-1.5 ${isRest ? 'bg-gray-50 border border-gray-200' : 'bg-purple-50 border border-purple-200'}`}>
         <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[10px] text-gray-400 uppercase">
+          <span className="text-xs text-gray-400 uppercase">
             {isRest ? 'Rest' : 'Programme'}
           </span>
           {isModified && (
-            <span className="text-[9px] text-amber-600 font-medium">modified</span>
+            <span className="text-[11px] text-amber-600 font-medium">modified</span>
           )}
         </div>
         {!isRest && (
           <>
-            <div className="font-medium text-purple-800 text-[11px] leading-tight">{entry.title}</div>
+            <div className="font-medium text-purple-800 text-xs leading-tight">{entry.title}</div>
             {entry.category && entry.category.toLowerCase() !== entry.title.toLowerCase() && (
-              <div className="text-[10px] text-purple-500">{entry.category}</div>
+              <div className="text-xs text-purple-500">{entry.category}</div>
             )}
             {formatDuration(entry) && (
-              <div className="text-[10px] text-gray-500">{formatDuration(entry)}</div>
+              <div className="text-xs text-gray-500">{formatDuration(entry)}</div>
             )}
             {formatIntensity(entry) && (
-              <div className="text-[10px] text-gray-500">{formatIntensity(entry)}</div>
+              <div className="text-xs text-gray-500">{formatIntensity(entry)}</div>
             )}
             {entry.blocks.length > 0 && (
-              <div className="text-[10px] text-gray-400 mt-0.5 truncate" title={entry.blocks.map(b => `${b.name}: ${b.text}`).join(', ')}>
+              <div className="text-xs text-gray-400 mt-0.5 truncate" title={entry.blocks.map(b => `${b.name}: ${b.text}`).join(', ')}>
                 {entry.blocks.length} block{entry.blocks.length !== 1 ? 's' : ''}
               </div>
             )}
             {entry.substitution && (
-              <div className="text-[10px] text-orange-500 truncate" title={entry.substitution}>Sub: {entry.substitution}</div>
+              <div className="text-xs text-orange-500 truncate" title={entry.substitution}>Sub: {entry.substitution}</div>
             )}
           </>
         )}
         {isRest && (
-          <div className="font-medium text-gray-500 text-[11px]">Rest day</div>
+          <div className="font-medium text-gray-500 text-xs">Rest day</div>
         )}
         {progName && (
-          <div className="text-[9px] text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
+          <div className="text-[11px] text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
         )}
         {/* Action buttons */}
         {canEditPlan && true && (
           <div className="flex gap-1 mt-1 flex-wrap">
             <button
               onClick={(e) => { e.stopPropagation(); openEditPlanned(dayIdx, slot); }}
-              className="text-[9px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+              className="text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
               title="Edit planned session"
             >
               Edit
@@ -459,14 +496,14 @@ export default function Planner() {
               <>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleResetWorkout(workout.id); }}
-                  className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
                   title="Reset to original programme data"
                 >
                   Reset
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); openMoveModal(workout.id); }}
-                  className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
                   title="Move or swap with another day"
                 >
                   Move
@@ -486,7 +523,7 @@ export default function Planner() {
       className={`rounded p-1.5 ${planned ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canEditPlan && true ? 'cursor-pointer hover:bg-blue-100' : ''}`}
       onClick={() => canEditPlan && true && openEditPlanned(dayIdx, slot)}
     >
-      <div className="text-[10px] text-gray-400 uppercase">Plan</div>
+      <div className="text-xs text-gray-400 uppercase">Plan</div>
       {planned ? (
         <>
           <div className="font-medium text-blue-800">{planned.sessionType || '-'}</div>
@@ -603,7 +640,7 @@ export default function Planner() {
           </div>
 
           {/* Week info bar */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 text-xs sm:text-sm">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2 text-xs sm:text-sm">
             <span className="font-medium">
               Week {weekNumber}/{activeBlock.numWeeks}
             </span>
@@ -617,6 +654,26 @@ export default function Planner() {
                 Past week
               </span>
             )}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-3 mb-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-purple-200 border border-purple-300 shrink-0" />
+              Programme
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200 shrink-0" />
+              Planned
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-green-100 border border-green-200 shrink-0" />
+              Logged
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-gray-100 border border-dashed border-gray-300 shrink-0" />
+              Empty
+            </div>
           </div>
 
           {/* Grid - Desktop: 8-column layout, Mobile: vertical day cards */}
@@ -661,14 +718,25 @@ export default function Planner() {
                           className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canLogSession ? 'cursor-pointer hover:bg-green-100' : ''}`}
                           onClick={() => canLogSession && openLogActual(dayIdx, slot)}
                         >
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-gray-400 uppercase">Actual</span>
-                            {actual?._edited && (
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-400 uppercase">Actual</span>
+                              {actual?._edited && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
+                                  className="text-[11px] text-amber-600 hover:underline"
+                                >
+                                  edited
+                                </button>
+                              )}
+                            </div>
+                            {canLogSession && !actual && planned && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
-                                className="text-[9px] text-amber-600 hover:underline"
+                                onClick={(e) => { e.stopPropagation(); handleCompleteAsPlanned(dayIdx, slot); }}
+                                className="text-[11px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 shrink-0"
+                                title="Mark as completed as planned"
                               >
-                                edited
+                                ✓ Done
                               </button>
                             )}
                           </div>
@@ -708,7 +776,7 @@ export default function Planner() {
                       const workout = planned?.workoutId ? workoutMap.get(planned.workoutId) : undefined;
                       return (
                         <div key={slot} className="text-xs space-y-1">
-                          <div className="text-[10px] font-medium text-gray-500">{slot}</div>
+                          <div className="text-xs font-medium text-gray-500">{slot}</div>
                           {workout ? (
                             <WorkoutCard workout={workout} planned={planned!} slot={slot} dayIdx={dayIdx} />
                           ) : (
@@ -718,14 +786,25 @@ export default function Planner() {
                             className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canLogSession ? 'cursor-pointer hover:bg-green-100' : ''}`}
                             onClick={() => canLogSession && openLogActual(dayIdx, slot)}
                           >
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] text-gray-400 uppercase">Actual</span>
-                              {actual?._edited && (
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-400 uppercase">Actual</span>
+                                {actual?._edited && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
+                                    className="text-[11px] text-amber-600 hover:underline"
+                                  >
+                                    edited
+                                  </button>
+                                )}
+                              </div>
+                              {canLogSession && !actual && planned && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
-                                  className="text-[9px] text-amber-600 hover:underline"
+                                  onClick={(e) => { e.stopPropagation(); handleCompleteAsPlanned(dayIdx, slot); }}
+                                  className="text-[11px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 shrink-0"
+                                  title="Mark as completed as planned"
                                 >
-                                  edited
+                                  ✓ Done
                                 </button>
                               )}
                             </div>
@@ -765,21 +844,21 @@ export default function Planner() {
                       >
                         <div className="font-medium text-purple-800 truncate">{entry.title}</div>
                         {!w.isRest && entry.category && (
-                          <div className="text-[10px] text-purple-500">{entry.category}</div>
+                          <div className="text-xs text-purple-500">{entry.category}</div>
                         )}
                         {formatDuration(entry) && (
-                          <div className="text-[10px] text-gray-500">{formatDuration(entry)}</div>
+                          <div className="text-xs text-gray-500">{formatDuration(entry)}</div>
                         )}
-                        <div className="text-[9px] text-gray-400 mt-0.5">
+                        <div className="text-[11px] text-gray-400 mt-0.5">
                           W{w.originWeek}D{w.originDay}
                         </div>
                         {progName && (
-                          <div className="text-[9px] text-gray-400 truncate" title={progName}>{progName}</div>
+                          <div className="text-[11px] text-gray-400 truncate" title={progName}>{progName}</div>
                         )}
                         {canEditPlan && w.appliedPlan?.status === 'ACTIVE' && (
                           <button
                             onClick={() => openMoveModal(w.id)}
-                            className="mt-1 text-[9px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+                            className="mt-1 text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
                           >
                             Schedule
                           </button>
