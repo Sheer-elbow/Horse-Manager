@@ -315,6 +315,43 @@ export default function Planner() {
     }
   };
 
+  // One-click "completed as planned" — submits without opening the modal
+  const handleCompleteAsPlanned = async (dayOffset: number, slot: 'AM' | 'PM') => {
+    const dateStr = toDateStr(addDays(currentWeekStart, dayOffset));
+    const planned = getPlannedForSlot(dayOffset, slot);
+    const workout = planned?.workoutId ? workoutMap.get(planned.workoutId) : undefined;
+
+    let sessionType: string | null = null;
+    let durationMinutes: number | null = null;
+    let intensityRpe: number | null = null;
+    let notes: string | null = 'Completed as planned';
+
+    if (workout && !workout.isRest) {
+      const entry = workout.currentData;
+      sessionType = entry.title || entry.category || null;
+      durationMinutes = entry.durationMin != null && entry.durationMax != null
+        ? Math.round((entry.durationMin + entry.durationMax) / 2)
+        : entry.durationMin ?? entry.durationMax ?? null;
+      intensityRpe = entry.intensityRpeMin != null && entry.intensityRpeMax != null
+        ? Math.round((entry.intensityRpeMin + entry.intensityRpeMax) / 2)
+        : entry.intensityRpeMin ?? entry.intensityRpeMax ?? null;
+    } else if (planned) {
+      sessionType = planned.sessionType || null;
+      durationMinutes = planned.durationMinutes ?? null;
+      intensityRpe = planned.intensityRpe ?? null;
+    }
+
+    try {
+      await api('/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ horseId, date: dateStr, slot, plannedSessionId: planned?.id || null, sessionType, durationMinutes, intensityRpe, notes, rider: null, deviationReason: null }),
+      });
+      loadWeekData();
+    } catch (err) {
+      console.error('Complete as planned failed:', err);
+    }
+  };
+
   const handleSaveActual = async (e: FormEvent) => {
     e.preventDefault();
     const planned = plannedSessions.find(
@@ -661,14 +698,25 @@ export default function Planner() {
                           className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canLogSession ? 'cursor-pointer hover:bg-green-100' : ''}`}
                           onClick={() => canLogSession && openLogActual(dayIdx, slot)}
                         >
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-gray-400 uppercase">Actual</span>
-                            {actual?._edited && (
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-gray-400 uppercase">Actual</span>
+                              {actual?._edited && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
+                                  className="text-[11px] text-amber-600 hover:underline"
+                                >
+                                  edited
+                                </button>
+                              )}
+                            </div>
+                            {canLogSession && !actual && planned && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
-                                className="text-[11px] text-amber-600 hover:underline"
+                                onClick={(e) => { e.stopPropagation(); handleCompleteAsPlanned(dayIdx, slot); }}
+                                className="text-[11px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 shrink-0"
+                                title="Mark as completed as planned"
                               >
-                                edited
+                                ✓ Done
                               </button>
                             )}
                           </div>
@@ -718,14 +766,25 @@ export default function Planner() {
                             className={`rounded p-1.5 ${actual ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-dashed border-gray-200'} ${canLogSession ? 'cursor-pointer hover:bg-green-100' : ''}`}
                             onClick={() => canLogSession && openLogActual(dayIdx, slot)}
                           >
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs text-gray-400 uppercase">Actual</span>
-                              {actual?._edited && (
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-400 uppercase">Actual</span>
+                                {actual?._edited && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
+                                    className="text-[11px] text-amber-600 hover:underline"
+                                  >
+                                    edited
+                                  </button>
+                                )}
+                              </div>
+                              {canLogSession && !actual && planned && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
-                                  className="text-[11px] text-amber-600 hover:underline"
+                                  onClick={(e) => { e.stopPropagation(); handleCompleteAsPlanned(dayIdx, slot); }}
+                                  className="text-[11px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 shrink-0"
+                                  title="Mark as completed as planned"
                                 >
-                                  edited
+                                  ✓ Done
                                 </button>
                               )}
                             </div>
