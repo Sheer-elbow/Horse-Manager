@@ -383,26 +383,12 @@ router.post('/copy-week', authenticate, requireRole('ADMIN', 'TRAINER'), async (
       const newDate = new Date(session.date);
       newDate.setUTCDate(newDate.getUTCDate() + dayOffset);
 
-      const newSession = await prisma.plannedSession.upsert({
-        where: {
-          horseId_date_slot: {
-            horseId: data.horseId,
-            date: newDate,
-            slot: session.slot,
-          },
-        },
-        create: {
+      const newSession = await prisma.plannedSession.create({
+        data: {
           planBlockId: data.planBlockId,
           horseId: data.horseId,
           date: newDate,
           slot: session.slot,
-          sessionType: session.sessionType,
-          description: session.description,
-          durationMinutes: session.durationMinutes,
-          intensityRpe: session.intensityRpe,
-          notes: session.notes,
-        },
-        update: {
           sessionType: session.sessionType,
           description: session.description,
           durationMinutes: session.durationMinutes,
