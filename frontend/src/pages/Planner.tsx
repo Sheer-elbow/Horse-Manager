@@ -492,6 +492,11 @@ export default function Planner() {
         {progName && (
           <div className="text-[11px] text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
         )}
+        {planned.notes && (
+          <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={planned.notes}>
+            {planned.notes}
+          </div>
+        )}
         {/* Action buttons */}
         {canEditPlan && (
           <div className="flex gap-1 mt-1 flex-wrap">
@@ -540,6 +545,11 @@ export default function Planner() {
       <div className="font-medium text-blue-800 text-xs">{planned.sessionType || '—'}</div>
       {planned.durationMinutes && <div className="text-xs text-gray-500">{planned.durationMinutes}min</div>}
       {planned.intensityRpe && <div className="text-xs text-gray-500">RPE {planned.intensityRpe}</div>}
+      {planned.notes && (
+        <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={planned.notes}>
+          {planned.notes}
+        </div>
+      )}
       {canEditPlan && (
         <div className="flex gap-1 mt-1">
           <button
@@ -728,7 +738,7 @@ export default function Planner() {
                     const actualList = getActualForSlot(dayIdx, slot);
                     const dateStr = toDateStr(addDays(currentWeekStart, dayIdx));
                     return (
-                      <div key={dayIdx} className="bg-white border rounded-lg p-2 min-h-[100px] text-xs space-y-1">
+                      <div key={dayIdx} className="bg-white border rounded-lg p-2 text-xs space-y-1">
                         {/* Planned sessions */}
                         {plannedList.map((planned) => {
                           const workout = planned.workoutId ? workoutMap.get(planned.workoutId) : undefined;
@@ -763,9 +773,9 @@ export default function Planner() {
                         {canEditPlan && (
                           <button
                             onClick={() => openEditPlanned(dayIdx, slot)}
-                            className="w-full text-[11px] py-0.5 rounded border border-dashed border-gray-200 text-gray-300 hover:text-gray-500 hover:border-gray-400"
+                            className="w-full text-[11px] py-1 rounded border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 font-medium"
                           >
-                            + Plan
+                            + Add session
                           </button>
                         )}
 
@@ -802,14 +812,19 @@ export default function Planner() {
                             {actual.durationMinutes && <div className="text-gray-500">{actual.durationMinutes}min</div>}
                             {actual.intensityRpe && <div className="text-gray-500">RPE {actual.intensityRpe}</div>}
                             {actual.rider && <div className="text-gray-400">{actual.rider}</div>}
+                            {actual.notes && (
+                              <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={actual.notes}>
+                                {actual.notes}
+                              </div>
+                            )}
                           </div>
                         ))}
                         {canLogSession && (
                           <button
                             onClick={() => openLogActual(dayIdx, slot)}
-                            className="w-full text-[11px] py-0.5 rounded border border-dashed border-gray-200 text-gray-300 hover:text-gray-500 hover:border-gray-400"
+                            className="w-full text-[11px] py-1 rounded border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 font-medium"
                           >
-                            + Log
+                            + Log session
                           </button>
                         )}
                       </div>
@@ -869,9 +884,9 @@ export default function Planner() {
                           {canEditPlan && (
                             <button
                               onClick={() => openEditPlanned(dayIdx, slot)}
-                              className="w-full text-[11px] py-0.5 rounded border border-dashed border-gray-200 text-gray-300 hover:text-gray-500 hover:border-gray-400"
+                              className="w-full text-[11px] py-1 rounded border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 font-medium"
                             >
-                              + Plan
+                              + Add session
                             </button>
                           )}
                           {actualList.map((actual) => (
@@ -894,14 +909,17 @@ export default function Planner() {
                               <div className="font-medium text-green-800">{actual.sessionType || '-'}</div>
                               {actual.durationMinutes && <div className="text-gray-500">{actual.durationMinutes}min</div>}
                               {actual.intensityRpe && <div className="text-gray-500">RPE {actual.intensityRpe}</div>}
+                              {actual.notes && (
+                                <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={actual.notes}>{actual.notes}</div>
+                              )}
                             </div>
                           ))}
                           {canLogSession && (
                             <button
                               onClick={() => openLogActual(dayIdx, slot)}
-                              className="w-full text-[11px] py-0.5 rounded border border-dashed border-gray-200 text-gray-300 hover:text-gray-500 hover:border-gray-400"
+                              className="w-full text-[11px] py-1 rounded border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 font-medium"
                             >
-                              + Log
+                              + Log session
                             </button>
                           )}
                         </div>
@@ -1002,6 +1020,10 @@ export default function Planner() {
             <input value={plannedForm.sessionType} onChange={(e) => setPlannedForm({ ...plannedForm, sessionType: e.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="Or type custom..." />
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+            <textarea value={plannedForm.notes} onChange={(e) => setPlannedForm({ ...plannedForm, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={2} placeholder="Optional comments..." />
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea value={plannedForm.description} onChange={(e) => setPlannedForm({ ...plannedForm, description: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={2} />
           </div>
@@ -1014,10 +1036,6 @@ export default function Planner() {
               <label className="block text-sm font-medium text-gray-700 mb-1">RPE (1-10)</label>
               <input type="number" min="1" max="10" value={plannedForm.intensityRpe} onChange={(e) => setPlannedForm({ ...plannedForm, intensityRpe: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <textarea value={plannedForm.notes} onChange={(e) => setPlannedForm({ ...plannedForm, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={2} />
           </div>
           <button type="submit" className="w-full bg-brand-600 text-white py-2 rounded-lg font-medium hover:bg-brand-700">Save planned session</button>
         </form>
@@ -1049,6 +1067,10 @@ export default function Planner() {
             </div>
             <input value={actualForm.sessionType} onChange={(e) => setActualForm({ ...actualForm, sessionType: e.target.value })} className="w-full border rounded-lg px-3 py-2" placeholder="Or type custom..." />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Comments</label>
+            <textarea value={actualForm.notes} onChange={(e) => setActualForm({ ...actualForm, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={2} placeholder="Optional comments..." />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
@@ -1062,10 +1084,6 @@ export default function Planner() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Rider / Person</label>
             <input value={actualForm.rider} onChange={(e) => setActualForm({ ...actualForm, rider: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-            <textarea value={actualForm.notes} onChange={(e) => setActualForm({ ...actualForm, notes: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={2} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Deviation from plan? (reason)</label>
