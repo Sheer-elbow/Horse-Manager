@@ -554,6 +554,15 @@ export default function Planner() {
               &larr;
             </button>
 
+            {toDateStr(currentWeekStart) !== toDateStr(getMondayOfWeek(new Date())) && (
+              <button
+                onClick={() => setCurrentWeekStart(getMondayOfWeek(new Date()))}
+                className="px-2 sm:px-3 py-1 sm:py-1.5 border rounded-lg text-xs sm:text-sm bg-white hover:bg-gray-50 text-gray-600 font-medium shrink-0"
+              >
+                Today
+              </button>
+            )}
+
             <div className="flex gap-1 overflow-x-auto scrollbar-hide min-w-0">
               {blockWeeks.map((w, i) => (
                 <button
