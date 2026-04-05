@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
-import { Stable, StableAssignment, HorsePriority, Horse, User } from '../types';
+import { Stable, StableAssignment, HorsePriority, Horse, User, StableMembership } from '../types';
 import { Button } from '../components/ui/button';
 import Modal from '../components/Modal';
 import { Skeleton } from '../components/Skeleton';
@@ -62,6 +62,7 @@ export default function StableManage() {
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [addUserId, setAddUserId] = useState('');
   const [addError, setAddError] = useState('');
+  const [pendingMemberships, setPendingMemberships] = useState<StableMembership[]>([]);
 
   const isAdmin = user?.role === 'ADMIN';
   const [stableAppointments, setStableAppointments] = useState<Appointment[]>([]);
@@ -87,7 +88,31 @@ export default function StableManage() {
     api<Appointment[]>(`/appointments/stable/${selectedStableId}`)
       .then(setStableAppointments)
       .catch(() => setStableAppointments([]));
+    api<StableMembership[]>(`/stables/${selectedStableId}/memberships`)
+      .then((m) => setPendingMemberships(m.filter((mb) => mb.type === 'REQUESTED')))
+      .catch(() => setPendingMemberships([]));
   }, [selectedStableId]);
+
+  const handleApproveMembership = async (userId: string) => {
+    try {
+      await api(`/stables/${selectedStableId}/memberships/${userId}/approve`, { method: 'POST' });
+      toast.success('Membership approved');
+      setPendingMemberships((prev) => prev.filter((m) => m.userId !== userId));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const handleRejectMembership = async (userId: string, name: string) => {
+    if (!window.confirm(`Decline membership request from ${name}?`)) return;
+    try {
+      await api(`/stables/${selectedStableId}/memberships/${userId}`, { method: 'DELETE' });
+      toast.success('Request declined');
+      setPendingMemberships((prev) => prev.filter((m) => m.userId !== userId));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    }
+  };
 
   useEffect(() => {
     if (!selectedStableId) return;
@@ -275,6 +300,34 @@ export default function StableManage() {
           </button>
         ))}
       </div>
+
+      {/* Pending membership requests */}
+      {pendingMemberships.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-200 text-amber-800 text-xs font-bold">{pendingMemberships.length}</span>
+            Pending membership requests
+          </h3>
+          <div className="space-y-2">
+            {pendingMemberships.map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-2 bg-white rounded-lg px-3 py-2 border border-amber-100">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{m.user?.name || m.user?.email}</div>
+                  {m.user?.name && <div className="text-xs text-gray-400">{m.user.email}</div>}
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button size="sm" onClick={() => handleApproveMembership(m.userId)} className="text-green-700 bg-green-100 hover:bg-green-200 border-0">
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRejectMembership(m.userId, m.user?.name || m.user?.email || 'this user')}>
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Staff tab */}
       {tab === 'staff' && (

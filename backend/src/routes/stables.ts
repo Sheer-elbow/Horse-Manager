@@ -188,4 +188,94 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/stables/memberships/mine — current user's own memberships
+router.get('/memberships/mine', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const memberships = await prisma.stableMembership.findMany({
+      where: { userId: req.user!.userId },
+      include: { stable: { select: { id: true, name: true } } },
+    });
+    res.json(memberships);
+  } catch (err) {
+    console.error('List my memberships error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/stables/:id/memberships/request — OWNER requests to join a stable
+router.post('/:id/memberships/request', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId, role } = req.user!;
+  if (role !== 'OWNER') {
+    res.status(403).json({ error: 'Only horse owners can request stable membership' });
+    return;
+  }
+  try {
+    const stable = await prisma.stable.findUnique({ where: { id: req.params.id } });
+    if (!stable) { res.status(404).json({ error: 'Stable not found' }); return; }
+
+    const existing = await prisma.stableMembership.findUnique({
+      where: { userId_stableId: { userId, stableId: req.params.id } },
+    });
+    if (existing) {
+      res.status(409).json({ error: 'You already have a membership or pending request for this stable' });
+      return;
+    }
+
+    const membership = await prisma.stableMembership.create({
+      data: { userId, stableId: req.params.id, type: 'REQUESTED' },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+    res.status(201).json(membership);
+  } catch (err) {
+    console.error('Request membership error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/stables/:id/memberships/:userId/approve — STABLE_LEAD/admin approves request
+router.post('/:id/memberships/:userId/approve', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId: actorId, role } = req.user!;
+  try {
+    const [assignment, stable] = await Promise.all([
+      prisma.stableAssignment.findUnique({ where: { userId_stableId: { userId: actorId, stableId: req.params.id } } }),
+      prisma.stable.findUnique({ where: { id: req.params.id }, select: { ownerId: true } }),
+    ]);
+    if (role !== 'ADMIN' && !assignment && stable?.ownerId !== actorId) {
+      res.status(403).json({ error: 'Stable Lead or Admin access required' }); return;
+    }
+
+    const membership = await prisma.stableMembership.update({
+      where: { userId_stableId: { userId: req.params.userId, stableId: req.params.id } },
+      data: { type: 'APPROVED' },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    });
+    res.json(membership);
+  } catch (err) {
+    console.error('Approve membership error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/stables/:id/memberships/:userId — reject/remove membership
+router.delete('/:id/memberships/:userId', authenticate, async (req: AuthRequest, res: Response) => {
+  const { userId: actorId, role } = req.user!;
+  try {
+    const [assignment, stable] = await Promise.all([
+      prisma.stableAssignment.findUnique({ where: { userId_stableId: { userId: actorId, stableId: req.params.id } } }),
+      prisma.stable.findUnique({ where: { id: req.params.id }, select: { ownerId: true } }),
+    ]);
+    // Actor can be admin, stable lead/owner, OR the member removing themselves
+    if (role !== 'ADMIN' && !assignment && stable?.ownerId !== actorId && actorId !== req.params.userId) {
+      res.status(403).json({ error: 'Access denied' }); return;
+    }
+    await prisma.stableMembership.delete({
+      where: { userId_stableId: { userId: req.params.userId, stableId: req.params.id } },
+    });
+    res.json({ message: 'Membership removed' });
+  } catch (err) {
+    console.error('Remove membership error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

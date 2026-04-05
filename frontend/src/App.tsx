@@ -67,7 +67,7 @@ function AppRoutes() {
       <Route path="/admin/security" element={<ProtectedRoute adminOnly><SecurityDashboard /></ProtectedRoute>} />
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
       <Route path="/settings/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
-      <Route path="/stable" element={<ProtectedRoute><StableManage /></ProtectedRoute>} />
+      <Route path="/stable" element={<ProtectedRoute><StableManage /></ProtectedRoute>} />  {/* accessible to STABLE_LEAD and OWNER */}
       <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
       <Route path="/costs" element={<ProtectedRoute><CostDashboard /></ProtectedRoute>} />

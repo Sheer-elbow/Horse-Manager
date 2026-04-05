@@ -69,6 +69,7 @@ export interface StableMembership {
   stableId: string;
   type: 'AUTO' | 'REQUESTED' | 'APPROVED';
   createdAt: string;
+  user?: { id: string; email: string; name: string | null; role: string };
 }
 
 export interface Programme {
