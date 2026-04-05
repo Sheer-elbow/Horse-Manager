@@ -27,8 +27,10 @@ import stableRoutes from './routes/stables';
 import stableAssignmentRoutes from './routes/stableAssignments';
 import horsePriorityRoutes from './routes/horsePriority';
 import documentRoutes, { getExpiringDocuments } from './routes/documents';
+import weatherRoutes from './routes/weather';
 import { startNotificationScheduler } from './services/notification-scheduler';
 import { startDataRetentionScheduler } from './services/data-retention';
+import { pruneWeatherCache } from './services/weather';
 import { metricsMiddleware, register, startMetricsRefresh } from './metrics';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -118,6 +120,7 @@ app.use('/api/stables/:stableId/assignments', stableAssignmentRoutes);
 app.use('/api/stables/:stableId/priorities', stableAssignmentRoutes);
 app.use('/api/horses/:horseId/priority', horsePriorityRoutes);
 app.use('/api/horses/:horseId/documents', documentRoutes);
+app.use('/api/weather', weatherRoutes);
 
 // Expiring documents — cross-horse summary for dashboard widget
 app.get('/api/documents/expiring', async (req, res) => {
@@ -225,6 +228,8 @@ async function main() {
   startNotificationScheduler();
   startDataRetentionScheduler();
   startMetricsRefresh();
+  // Prune stale weather cache entries every hour to prevent unbounded growth
+  setInterval(pruneWeatherCache, 60 * 60 * 1000);
 }
 
 main().catch((err) => {

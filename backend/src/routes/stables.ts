@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { AuthRequest } from '../types';
+import { geocodeAddress } from '../services/geocoding';
 
 const router = Router();
 
@@ -10,6 +11,24 @@ const stableSchema = z.object({
   name: z.string().min(1).max(100),
   address: z.string().nullable().optional(),
 });
+
+/**
+ * Fire-and-forget geocoding: resolves the stable's address to lat/lng and
+ * writes the result back to the database without blocking the HTTP response.
+ * Called after every stable create or address-changing update.
+ */
+function triggerGeocode(stableId: string, address: string | null | undefined): void {
+  if (!address) return;
+  geocodeAddress(address).then((coords) => {
+    if (!coords) return;
+    return prisma.stable.update({
+      where: { id: stableId },
+      data: { latitude: coords.latitude, longitude: coords.longitude },
+    });
+  }).catch((err) => {
+    console.error(`[geocoding] Failed to write coords for stable ${stableId}:`, err);
+  });
+}
 
 const STABLE_INCLUDE = {
   _count: { select: { horses: true, stableAssignments: true } },
@@ -77,6 +96,8 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
       },
       include: STABLE_INCLUDE,
     });
+    // Geocode the address asynchronously — does not block the response
+    triggerGeocode(stable.id, data.address);
     res.status(201).json(stable);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -141,17 +162,29 @@ router.get('/:id/memberships', authenticate, async (req: AuthRequest, res: Respo
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   const { userId, role } = req.user!;
   try {
-    const existing = await prisma.stable.findUnique({ where: { id: req.params.id }, select: { ownerId: true } });
+    const existing = await prisma.stable.findUnique({
+      where: { id: req.params.id },
+      select: { ownerId: true, address: true },
+    });
     if (!existing) { res.status(404).json({ error: 'Stable not found' }); return; }
     if (!canManageStable(userId, role, existing)) {
       res.status(403).json({ error: 'Admin or stable owner access required' }); return;
     }
     const data = stableSchema.parse(req.body);
+    const addressChanged = (data.address ?? null) !== existing.address;
     const stable = await prisma.stable.update({
       where: { id: req.params.id },
-      data: { name: data.name, address: data.address ?? null },
+      // Clear stale coordinates when the address changes; they will be
+      // repopulated by triggerGeocode once the new address resolves.
+      data: {
+        name: data.name,
+        address: data.address ?? null,
+        ...(addressChanged && { latitude: null, longitude: null }),
+      },
       include: STABLE_INCLUDE,
     });
+    // Re-geocode only when the address has changed
+    if (addressChanged) triggerGeocode(stable.id, data.address);
     res.json(stable);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -185,6 +218,46 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Stable deleted' });
   } catch {
     res.status(404).json({ error: 'Stable not found' });
+  }
+});
+
+// POST /api/stables/geocode-backfill — admin-only: geocode all stables that
+// have an address but no coordinates. Safe to call multiple times.
+router.post('/geocode-backfill', authenticate, requireAdmin, async (_req: AuthRequest, res: Response) => {
+  try {
+    const stables = await prisma.stable.findMany({
+      where: { address: { not: null }, latitude: null },
+      select: { id: true, address: true },
+    });
+
+    if (stables.length === 0) {
+      res.json({ message: 'All stables with addresses already have coordinates.', processed: 0 });
+      return;
+    }
+
+    // Return immediately and run backfill in the background to avoid timeout
+    res.json({ message: `Geocoding ${stables.length} stable(s) in the background.`, queued: stables.length });
+
+    // Process sequentially with a small delay to respect Nominatim's 1 req/s limit
+    (async () => {
+      let resolved = 0;
+      for (const stable of stables) {
+        const coords = await geocodeAddress(stable.address!);
+        if (coords) {
+          await prisma.stable.update({
+            where: { id: stable.id },
+            data: { latitude: coords.latitude, longitude: coords.longitude },
+          });
+          resolved++;
+        }
+        // 1.1 s gap — satisfies Nominatim's 1 req/s policy in the fallback path
+        await new Promise((r) => setTimeout(r, 1100));
+      }
+      console.info(`[geocoding] Backfill complete: ${resolved}/${stables.length} resolved.`);
+    })();
+  } catch (err) {
+    console.error('Geocode backfill error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
