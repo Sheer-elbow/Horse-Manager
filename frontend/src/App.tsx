@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import ChangePassword from './pages/ChangePassword';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import HorseList from './pages/HorseList';
 import HorseProfile from './pages/HorseProfile';
@@ -48,6 +50,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
       <Route path="/accept-invite" element={<Login />} />
+      <Route path="/forgot-password" element={<AuthRoute><ForgotPassword /></AuthRoute>} />
+      <Route path="/reset-password" element={<AuthRoute><ResetPassword /></AuthRoute>} />
       <Route path="/change-password" element={<PasswordRoute><ChangePassword /></PasswordRoute>} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/horses" element={<ProtectedRoute><HorseList /></ProtectedRoute>} />

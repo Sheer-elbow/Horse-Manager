@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
@@ -10,6 +10,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get('token');
+  const resetSuccess = searchParams.get('reset') === '1';
 
   // Login form state
   const [email, setEmail] = useState('');
@@ -68,6 +69,11 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg border p-6">
+          {resetSuccess && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+              Password reset successfully. You can now sign in.
+            </div>
+          )}
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
               {error}
@@ -126,6 +132,11 @@ export default function Login() {
               <Button type="submit" disabled={loading} className="w-full">
                 {loading ? 'Signing in...' : 'Sign in'}
               </Button>
+              <div className="text-center">
+                <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-gray-700">
+                  Forgot your password?
+                </Link>
+              </div>
             </form>
           )}
         </div>
