@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Horse, User, Stable } from '../types';
-import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText, Plus } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
 import { listExpiringDocuments } from '../api/documents';
 import type { HorseDocument } from '../types';
-import QuickLogModal from '../components/QuickLogModal';
 
 interface Appointment {
   id: string;
@@ -112,8 +111,6 @@ export default function Dashboard() {
   const [myStableStaffCount, setMyStableStaffCount] = useState<number | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expiringDocs, setExpiringDocs] = useState<HorseDocument[]>([]);
-  const [showQuickLog, setShowQuickLog] = useState(false);
-
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   useEffect(() => {
@@ -549,27 +546,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick-log FAB */}
-      {horses.length > 0 && (
-        <button
-          onClick={() => setShowQuickLog(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
-          title="Log a session"
-        >
-          <Plus className="w-5 h-5" />
-          <span className="hidden sm:inline">Log session</span>
-        </button>
-      )}
-
-      <QuickLogModal
-        open={showQuickLog}
-        onClose={() => setShowQuickLog(false)}
-        horses={horses}
-        onLogged={() => {
-          // refresh dashboard data so recent activity updates
-          api<DashboardData>('/dashboard').then(setDashData).catch(() => {});
-        }}
-      />
 
       {/* Team overview (admin only) */}
       {user?.role === 'ADMIN' && users.length > 0 && (
