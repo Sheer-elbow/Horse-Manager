@@ -21,9 +21,11 @@ export interface Stable {
   id: string;
   name: string;
   address: string | null;
+  ownerId: string | null;
+  owner?: { id: string; name: string | null; email: string } | null;
   createdAt: string;
   updatedAt: string;
-  _count?: { horses: number };
+  _count?: { horses: number; stableAssignments?: number };
 }
 
 export interface Horse {
@@ -67,6 +69,7 @@ export interface StableMembership {
   stableId: string;
   type: 'AUTO' | 'REQUESTED' | 'APPROVED';
   createdAt: string;
+  user?: { id: string; email: string; name: string | null; role: string };
 }
 
 export interface Programme {

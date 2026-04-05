@@ -59,12 +59,12 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   const STABLE_LEAD_ITEMS = [
-    { path: '/stable', label: 'My Stable', icon: Home, roles: ['STABLE_LEAD'] as Role[] },
+    { path: '/stable', label: 'My Stable', icon: Home, roles: ['STABLE_LEAD', 'OWNER'] as Role[] },
   ];
   const role = user?.role as Role | undefined;
   const allItems = user?.role === 'ADMIN'
     ? [...NAV_ITEMS, ...ADMIN_ITEMS]
-    : user?.role === 'STABLE_LEAD'
+    : (user?.role === 'STABLE_LEAD' || user?.role === 'OWNER')
       ? [...NAV_ITEMS, ...STABLE_LEAD_ITEMS]
       : NAV_ITEMS;
   const items = role ? allItems.filter((item) => item.roles.includes(role)) : [];

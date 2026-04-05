@@ -1,7 +1,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
-import { Stable } from '../types';
+import { Stable, StableMembership } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -23,12 +23,20 @@ export default function Stables() {
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<Stable | null>(null);
 
+  // Owner membership state
+  const [myMemberships, setMyMemberships] = useState<StableMembership[]>([]);
+
   const isAdmin = user?.role === 'ADMIN';
+  const isOwner = user?.role === 'OWNER';
 
   const load = async () => {
     try {
       const s = await api<Stable[]>('/stables');
       setStables(s);
+      if (isOwner) {
+        const my = await api<StableMembership[]>('/stables/memberships/mine').catch(() => [] as StableMembership[]);
+        setMyMemberships(my);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -36,7 +44,27 @@ export default function Stables() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [isOwner]);
+
+  const requestJoin = async (stableId: string) => {
+    try {
+      await api(`/stables/${stableId}/memberships/request`, { method: 'POST' });
+      toast.success('Membership requested — your stable manager will review it');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Request failed');
+    }
+  };
+
+  const cancelRequest = async (stableId: string) => {
+    try {
+      await api(`/stables/${stableId}/memberships/${user!.id}`, { method: 'DELETE' });
+      toast.success('Request cancelled');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed');
+    }
+  };
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
@@ -125,29 +153,62 @@ export default function Stables() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stables.map((s) => (
-            <div key={s.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-semibold text-gray-900 truncate">{s.name}</div>
-                  {s.address && <div className="text-sm text-gray-500 mt-0.5">{s.address}</div>}
-                </div>
-                {isAdmin && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => openEdit(s)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors" title="Edit">
-                      <Pencil className="w-4 h-4 text-gray-400" />
-                    </button>
-                    <button onClick={() => setDeleteTarget(s)} className="p-1.5 hover:bg-red-50 rounded-md transition-colors" title="Delete">
-                      <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
-                    </button>
+          {stables.map((s) => {
+            const membership = myMemberships.find((m) => m.stableId === s.id);
+            const isOwnStable = s.ownerId === user?.id;
+            return (
+              <div key={s.id} className="bg-white rounded-xl border p-5 hover:shadow-sm transition-shadow">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-900 truncate">{s.name}</div>
+                    {s.address && <div className="text-sm text-gray-500 mt-0.5">{s.address}</div>}
+                    {s.owner && !isOwnStable && (
+                      <div className="text-xs text-gray-400 mt-0.5">Managed by {s.owner.name || s.owner.email}</div>
+                    )}
+                    {isOwnStable && (
+                      <div className="text-xs text-brand-600 mt-0.5 font-medium">Your stable</div>
+                    )}
                   </div>
-                )}
+                  {(isAdmin || isOwnStable) && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => openEdit(s)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors" title="Edit">
+                        <Pencil className="w-4 h-4 text-gray-400" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(s)} className="p-1.5 hover:bg-red-50 rounded-md transition-colors" title="Delete">
+                        <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-xs text-gray-400">
+                    {s._count?.horses ?? 0} horse{(s._count?.horses ?? 0) === 1 ? '' : 's'}
+                  </div>
+                  {isOwner && !isOwnStable && (
+                    <div>
+                      {!membership && (
+                        <button
+                          onClick={() => requestJoin(s.id)}
+                          className="text-xs text-brand-600 hover:underline font-medium"
+                        >
+                          Request to join
+                        </button>
+                      )}
+                      {membership?.type === 'REQUESTED' && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-amber-600 font-medium">Request pending</span>
+                          <button onClick={() => cancelRequest(s.id)} className="text-xs text-gray-400 hover:text-red-500">Cancel</button>
+                        </div>
+                      )}
+                      {membership?.type === 'APPROVED' && (
+                        <span className="text-xs text-green-600 font-medium">✓ Member</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="text-xs text-gray-400 mt-2">
-                {s._count?.horses ?? 0} horse{(s._count?.horses ?? 0) === 1 ? '' : 's'}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
