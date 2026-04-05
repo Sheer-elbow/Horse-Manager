@@ -16,7 +16,7 @@ export default function HorseList() {
   const [stables, setStables] = useState<Stable[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', age: '', breed: '', stableId: '', ownerNotes: '', identifyingInfo: '' });
+  const [form, setForm] = useState({ name: '', age: '', breed: '', stableId: '', stableLocation: '', ownerNotes: '', identifyingInfo: '' });
   const [error, setError] = useState('');
   const [stableFilter, setStableFilter] = useState<string>('all');
   const [priorityOnly, setPriorityOnly] = useState(false);
@@ -53,12 +53,13 @@ export default function HorseList() {
           age: form.age ? parseInt(form.age) : null,
           breed: form.breed || null,
           stableId: form.stableId || null,
+          stableLocation: form.stableLocation || null,
           ownerNotes: form.ownerNotes || null,
           identifyingInfo: form.identifyingInfo || null,
         }),
       });
       setShowAdd(false);
-      setForm({ name: '', age: '', breed: '', stableId: '', ownerNotes: '', identifyingInfo: '' });
+      setForm({ name: '', age: '', breed: '', stableId: '', stableLocation: '', ownerNotes: '', identifyingInfo: '' });
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add horse');
@@ -225,6 +226,17 @@ export default function HorseList() {
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {form.stableId ? 'Box / paddock location' : 'Where is this horse kept?'}
+            </label>
+            <input
+              value={form.stableLocation}
+              onChange={(e) => setForm({ ...form, stableLocation: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2"
+              placeholder={form.stableId ? 'e.g. Box 4, Back paddock' : 'e.g. Home yard, Main Road Farm'}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Identifying info</label>
