@@ -28,6 +28,7 @@ import stableAssignmentRoutes from './routes/stableAssignments';
 import horsePriorityRoutes from './routes/horsePriority';
 import documentRoutes, { getExpiringDocuments } from './routes/documents';
 import { startNotificationScheduler } from './services/notification-scheduler';
+import { metricsMiddleware, register, startMetricsRefresh } from './metrics';
 import { apiLimiter } from './middleware/rateLimiter';
 
 const app = express();
@@ -65,6 +66,14 @@ app.use((req, _res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
   next();
 });
+
+// Prometheus metrics — internal scrape endpoint (not routed via Caddy)
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+
+app.use(metricsMiddleware);
 
 // Static file serving for uploads — authentication required.
 // Without this gate the entire uploads/ directory is publicly accessible to
@@ -213,6 +222,7 @@ async function main() {
     console.log(`Backend running on port ${config.port} (${config.nodeEnv})`);
   });
   startNotificationScheduler();
+  startMetricsRefresh();
 }
 
 main().catch((err) => {

@@ -4,6 +4,7 @@ import { prisma } from '../db';
 import { authenticate, requireRole } from '../middleware/auth';
 import { createAuditEntry } from '../services/audit';
 import { AuthRequest } from '../types';
+import { sessionsCreatedTotal } from '../metrics';
 
 const router = Router();
 
@@ -195,6 +196,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (
     });
 
     res.status(201).json(session);
+    sessionsCreatedTotal.inc();
+    res.json(session);
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: err.errors });

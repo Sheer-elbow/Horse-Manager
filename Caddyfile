@@ -9,3 +9,7 @@ www.holidayskitak.uk {
 holidayskitak.uk {
     redir https://www.holidayskitak.uk{uri} permanent
 }
+
+grafana.holidayskitak.uk {
+    reverse_proxy grafana:3000
+}
