@@ -1,0 +1,305 @@
+{
+  "title": "Horse Manager",
+  "uid": "horse-manager",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "tags": ["horse-manager"],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Application Health",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "id": 1,
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Request Rate",
+      "id": 2,
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 10 },
+            { "color": "red", "value": 50 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{app=\"horse-manager\"}[5m]))",
+        "legendFormat": "req/s",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate (5xx)",
+      "id": 3,
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.01 },
+            { "color": "red", "value": 0.05 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{app=\"horse-manager\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{app=\"horse-manager\"}[5m]))",
+        "legendFormat": "5xx rate",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "p95 Latency",
+      "id": 4,
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "red", "value": 2 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by(le) (rate(http_request_duration_seconds_bucket{app=\"horse-manager\"}[5m])))",
+        "legendFormat": "p95",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Node.js Heap Used",
+      "id": 5,
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 200000000 },
+            { "color": "red", "value": 400000000 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "nodejs_heap_size_used_bytes{app=\"horse-manager\"}",
+        "legendFormat": "heap used",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "DB Connections Active",
+      "id": 6,
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 50 },
+            { "color": "red", "value": 90 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "pg_stat_activity_count{datname=~\".+\",state=\"active\"}",
+        "legendFormat": "active",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Rate by Route",
+      "id": 7,
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [{
+        "expr": "sum by(route) (rate(http_requests_total{app=\"horse-manager\"}[5m]))",
+        "legendFormat": "{{route}}",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Latency (p50 / p95 / p99)",
+      "id": 8,
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by(le) (rate(http_request_duration_seconds_bucket{app=\"horse-manager\"}[5m])))",
+          "legendFormat": "p50",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(http_request_duration_seconds_bucket{app=\"horse-manager\"}[5m])))",
+          "legendFormat": "p95",
+          "datasource": { "type": "prometheus" }
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by(le) (rate(http_request_duration_seconds_bucket{app=\"horse-manager\"}[5m])))",
+          "legendFormat": "p99",
+          "datasource": { "type": "prometheus" }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Application Usage",
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 },
+      "id": 9,
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Total Horses",
+      "id": 10,
+      "gridPos": { "x": 0, "y": 14, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } } },
+      "targets": [{
+        "expr": "horse_manager_horses_total{app=\"horse-manager\"}",
+        "legendFormat": "horses",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Horses Edited (7 days)",
+      "id": 11,
+      "gridPos": { "x": 4, "y": 14, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "purple" } } },
+      "targets": [{
+        "expr": "horse_manager_horses_edited_7d{app=\"horse-manager\"}",
+        "legendFormat": "edited",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Total Users",
+      "id": 12,
+      "gridPos": { "x": 8, "y": 14, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } } },
+      "targets": [{
+        "expr": "horse_manager_users_total{app=\"horse-manager\"}",
+        "legendFormat": "users",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Active Users (24h)",
+      "id": 13,
+      "gridPos": { "x": 12, "y": 14, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "green", "value": 3 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "horse_manager_active_users_24h{app=\"horse-manager\"}",
+        "legendFormat": "active users",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Training Sessions Logged",
+      "id": 14,
+      "gridPos": { "x": 16, "y": 14, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "orange" } } },
+      "targets": [{
+        "expr": "increase(horse_sessions_created_total{app=\"horse-manager\"}[24h])",
+        "legendFormat": "sessions today",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sessions Logged per Hour",
+      "id": 15,
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [{
+        "expr": "increase(horse_sessions_created_total{app=\"horse-manager\"}[1h])",
+        "legendFormat": "sessions/hr",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "row",
+      "title": "Security",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 },
+      "id": 16,
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Failed Logins (24h)",
+      "id": 17,
+      "gridPos": { "x": 0, "y": 27, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 5 },
+            { "color": "red", "value": 20 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "horse_manager_failed_logins_24h{app=\"horse-manager\"}",
+        "legendFormat": "failed logins",
+        "datasource": { "type": "prometheus" }
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Failed Logins over Time",
+      "id": 18,
+      "gridPos": { "x": 4, "y": 27, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 10 }
+          ]}
+        }
+      },
+      "targets": [{
+        "expr": "horse_manager_failed_logins_24h{app=\"horse-manager\"}",
+        "legendFormat": "failed logins (24h window)",
+        "datasource": { "type": "prometheus" }
+      }]
+    }
+  ]
+}
