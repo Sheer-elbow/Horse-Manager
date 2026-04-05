@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '../components/ui/dropdown-menu';
-import { MoreVertical, Pencil, Trash2, Eye, Layers, BookOpen } from 'lucide-react';
+import { MoreVertical, Pencil, Trash2, Eye, Layers, BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
 
@@ -34,8 +34,13 @@ export default function Programmes() {
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionError, setVersionError] = useState('');
 
+  // Schedule preview per version row
+  const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<ProgrammeVersion | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   // Apply modal
-  const [applyVersion, setApplyVersion] = useState<{ programmeId: string; versionId: string; programmeName: string; version: number } | null>(null);
+  const [applyVersion, setApplyVersion] = useState<{ programmeId: string; versionId: string; programmeName: string; version: number; numWeeks: number } | null>(null);
   const [horses, setHorses] = useState<Horse[]>([]);
   const [applyForm, setApplyForm] = useState({ horseId: '', startDate: '' });
   const [applying, setApplying] = useState(false);
@@ -242,8 +247,26 @@ export default function Programmes() {
 
   // ─── Apply to horse ───────────────────────────────────────
 
-  const openApply = async (programmeId: string, versionId: string, programmeName: string, version: number) => {
-    setApplyVersion({ programmeId, versionId, programmeName, version });
+  const togglePreview = async (programmeId: string, versionId: string) => {
+    if (previewVersionId === versionId) {
+      setPreviewVersionId(null);
+      setPreviewData(null);
+      return;
+    }
+    setPreviewVersionId(versionId);
+    setPreviewLoading(true);
+    try {
+      const full = await api<ProgrammeVersion>(`/programmes/${programmeId}/versions/${versionId}`);
+      setPreviewData(full);
+    } catch {
+      setPreviewData(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const openApply = async (programmeId: string, versionId: string, programmeName: string, version: number, numWeeks: number) => {
+    setApplyVersion({ programmeId, versionId, programmeName, version, numWeeks });
     setApplyForm({ horseId: '', startDate: '' });
     setApplyError('');
     try {
@@ -432,10 +455,11 @@ export default function Programmes() {
       <Modal open={showAdd} onClose={() => { setShowAdd(false); setError(''); }} title="New programme" wide>
         {error && <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm whitespace-pre-line">{error}</div>}
 
-        {/* Upload ZIP package */}
-        <form onSubmit={handleZipUpload} className="space-y-3 mb-4">
-          <div className="text-sm font-medium text-gray-700">Upload ZIP package (schedule.csv + manual.html)</div>
+        {/* Primary: Upload ZIP package */}
+        <form onSubmit={handleZipUpload} className="space-y-3">
           <div>
+            <div className="text-sm font-medium text-gray-700 mb-1">Import ZIP package</div>
+            <p className="text-xs text-gray-400 mb-2">A ZIP containing <code>schedule.csv</code> and optionally <code>manual.html</code>. Ideal for LLM-generated programmes.</p>
             <input
               ref={zipInputRef}
               type="file"
@@ -444,56 +468,53 @@ export default function Programmes() {
             />
           </div>
           <Button type="submit" disabled={uploading} className="w-full">
-            {uploading ? 'Uploading...' : 'Upload ZIP package'}
+            {uploading ? 'Uploading...' : 'Import ZIP'}
           </Button>
         </form>
 
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-          <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-400">or legacy methods</span></div>
-        </div>
+        {/* Legacy methods — collapsed by default */}
+        <details className="mt-4 group">
+          <summary className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600 list-none">
+            <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform shrink-0" />
+            Other import methods (HTML upload, manual entry)
+          </summary>
 
-        {/* Upload HTML file (legacy) */}
-        <form onSubmit={handleUpload} className="space-y-3 mb-4">
-          <div className="text-sm font-medium text-gray-700">Upload HTML programme (legacy)</div>
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".html,.htm"
-              className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name (optional, defaults to filename)</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Programme name" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
-          </div>
-          <Button type="submit" disabled={uploading} variant="secondary" className="w-full">
-            {uploading ? 'Uploading...' : 'Upload HTML file'}
-          </Button>
-        </form>
+          <div className="mt-3 space-y-4 pl-1 border-l-2 border-gray-100 ml-1">
+            {/* Upload HTML file */}
+            <form onSubmit={handleUpload} className="space-y-3">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Upload HTML reference doc</div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".html,.htm"
+                className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
+              />
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Name (optional)</label>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Defaults to filename" />
+              </div>
+              <Button type="submit" disabled={uploading} variant="secondary" size="sm" className="w-full">
+                {uploading ? 'Uploading...' : 'Upload HTML'}
+              </Button>
+            </form>
 
-        <div className="relative my-4">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
-          <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-400">or create manually</span></div>
-        </div>
+            <div className="border-t" />
 
-        {/* Manual creation (legacy) */}
-        <form onSubmit={handleAdd} className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" required />
+            {/* Manual creation */}
+            <form onSubmit={handleAdd} className="space-y-3">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Create blank programme</div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
+                <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
+              </div>
+              <Button type="submit" variant="secondary" size="sm" className="w-full">Create blank</Button>
+            </form>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
-          </div>
-          <Button type="submit" variant="secondary" className="w-full">Create manually</Button>
-        </form>
+        </details>
       </Modal>
 
       {/* ─── View programme HTML modal (legacy) ──────────────── */}
@@ -517,33 +538,103 @@ export default function Programmes() {
         ) : (
           <div className="space-y-3">
             {versions.map((v) => (
-              <div key={v.id} className="border rounded-lg p-3 flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-sm">
-                    v{v.version}
-                    <span className="ml-2">{statusBadge(v.status)}</span>
+              <div key={v.id} className="border rounded-lg overflow-hidden">
+                <div className="p-3 flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm flex items-center gap-2">
+                      v{v.version}
+                      {statusBadge(v.status)}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {v.numWeeks} weeks
+                      {v.manualFileName && <span className="ml-2">· Manual: {v.manualFileName}</span>}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Created {new Date(v.createdAt).toLocaleDateString()}
+                      {v.publishedAt && <span className="ml-2">· Published {new Date(v.publishedAt).toLocaleDateString()}</span>}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {v.numWeeks} weeks
-                    {v.manualFileName && <span className="ml-2">Manual: {v.manualFileName}</span>}
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    Created {new Date(v.createdAt).toLocaleDateString()}
-                    {v.publishedAt && <span className="ml-2">Published {new Date(v.publishedAt).toLocaleDateString()}</span>}
+                  <div className="flex gap-2 shrink-0 ml-3 items-center">
+                    <button
+                      onClick={() => togglePreview(v.programmeId, v.id)}
+                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+                    >
+                      {previewVersionId === v.id
+                        ? <ChevronDown className="w-3.5 h-3.5" />
+                        : <ChevronRight className="w-3.5 h-3.5" />}
+                      Preview
+                    </button>
+                    {v.status === 'DRAFT' && canManage && (
+                      <Button size="sm" variant="outline" onClick={() => handlePublish(v.programmeId, v.id)} className="text-green-600 hover:text-green-700 hover:bg-green-50">
+                        Publish
+                      </Button>
+                    )}
+                    {v.status === 'PUBLISHED' && canManage && (
+                      <Button size="sm" onClick={() => openApply(v.programmeId, v.id, versionProgramme?.name || '', v.version, v.numWeeks)}>
+                        Apply to horse
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0 ml-3">
-                  {v.status === 'DRAFT' && canManage && (
-                    <Button size="sm" variant="outline" onClick={() => handlePublish(v.programmeId, v.id)} className="text-green-600 hover:text-green-700 hover:bg-green-50">
-                      Publish
-                    </Button>
-                  )}
-                  {v.status === 'PUBLISHED' && canManage && (
-                    <Button size="sm" onClick={() => openApply(v.programmeId, v.id, versionProgramme?.name || '', v.version)}>
-                      Apply to horse
-                    </Button>
-                  )}
-                </div>
+
+                {/* Inline schedule preview */}
+                {previewVersionId === v.id && (
+                  <div className="border-t bg-gray-50 p-3">
+                    {previewLoading ? (
+                      <div className="text-xs text-gray-400 text-center py-2">Loading schedule...</div>
+                    ) : previewData?.scheduleData && previewData.scheduleData.length > 0 ? (() => {
+                      const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                      const byWeek: Record<number, typeof previewData.scheduleData> = {};
+                      for (const e of previewData.scheduleData) {
+                        if (!byWeek[e.week]) byWeek[e.week] = [];
+                        byWeek[e.week]!.push(e);
+                      }
+                      const weeks = Object.keys(byWeek).map(Number).sort((a, b) => a - b);
+                      return (
+                        <div className="overflow-x-auto">
+                          <table className="text-xs w-full min-w-max border-collapse">
+                            <thead>
+                              <tr>
+                                <th className="text-left pr-3 py-1 text-gray-500 font-medium whitespace-nowrap">Week</th>
+                                {DAYS.map((d) => (
+                                  <th key={d} className="px-1.5 py-1 text-gray-500 font-medium text-center">{d}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {weeks.map((wk) => (
+                                <tr key={wk} className="border-t border-gray-200">
+                                  <td className="pr-3 py-1 text-gray-400 font-medium whitespace-nowrap">W{wk}</td>
+                                  {[1, 2, 3, 4, 5, 6, 7].map((day) => {
+                                    const entry = byWeek[wk]?.find((e) => e.day === day);
+                                    return (
+                                      <td key={day} className="px-1.5 py-1 text-center">
+                                        {entry && !entry.title.toLowerCase().includes('rest') ? (
+                                          <div
+                                            className="bg-purple-100 text-purple-700 rounded px-1 py-0.5 text-[11px] leading-tight truncate max-w-[64px]"
+                                            title={`${entry.title}${entry.durationMin ? ` · ${entry.durationMin}min` : ''}`}
+                                          >
+                                            {entry.title || entry.category}
+                                          </div>
+                                        ) : entry ? (
+                                          <div className="text-gray-300 text-[11px]">Rest</div>
+                                        ) : (
+                                          <div className="text-gray-200">–</div>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })() : (
+                      <div className="text-xs text-gray-400 text-center py-2">No schedule data available</div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -578,6 +669,16 @@ export default function Programmes() {
               className="w-full border rounded-lg px-3 py-2 text-sm"
               required
             />
+            {applyForm.startDate && applyVersion && (
+              <p className="text-xs text-gray-500 mt-1.5">
+                {applyVersion.numWeeks}-week plan ending{' '}
+                <span className="font-medium text-gray-700">
+                  {new Date(
+                    new Date(applyForm.startDate).getTime() + (applyVersion.numWeeks * 7 - 1) * 24 * 60 * 60 * 1000
+                  ).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </p>
+            )}
           </div>
           <Button type="submit" disabled={applying} className="w-full">
             {applying ? 'Applying...' : 'Apply programme'}
