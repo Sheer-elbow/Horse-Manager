@@ -56,7 +56,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     if (role === 'ADMIN') {
       const horses = await prisma.horse.findMany({
         orderBy: { name: 'asc' },
-        include: { stable: { select: { id: true, name: true } } },
+        include: { stable: { select: { id: true, name: true, address: true } } },
       });
       res.json(horses);
       return;
@@ -74,7 +74,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
         prisma.horse.findMany({
           where: { stableId: { in: stableIds } },
           orderBy: { name: 'asc' },
-          include: { stable: { select: { id: true, name: true } } },
+          include: { stable: { select: { id: true, name: true, address: true } } },
         }),
         prisma.horsePriority.findMany({
           where: { userId },
@@ -89,7 +89,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     // OWNER / TRAINER: only horses explicitly assigned via HorseAssignment
     const assignments = await prisma.horseAssignment.findMany({
       where: { userId },
-      include: { horse: { include: { stable: { select: { id: true, name: true } } } } },
+      include: { horse: { include: { stable: { select: { id: true, name: true, address: true } } } } },
     });
     res.json(assignments.map((a) => ({ ...a.horse, _permission: a.permission })));
   } catch (err) {
@@ -130,7 +130,7 @@ router.get('/:id', authenticate, requireHorseAccess('VIEW'), async (req: HorsePe
     const horse = await prisma.horse.findUnique({
       where: { id: req.params.id },
       include: {
-        stable: { select: { id: true, name: true } },
+        stable: { select: { id: true, name: true, address: true } },
         assignments: {
           include: { user: { select: { id: true, email: true, name: true } } },
         },

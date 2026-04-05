@@ -40,6 +40,45 @@ router.get('/', authenticate, requireAdmin, async (_req, res: Response) => {
   }
 });
 
+// GET /api/users/me — current user's own profile (any authenticated user)
+router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+    });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json(user);
+  } catch (err) {
+    console.error('Get profile error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+const updateProfileSchema = z.object({
+  name: z.string().min(1).nullable().optional(),
+});
+
+// PUT /api/users/me — update own name (any authenticated user)
+router.put('/me', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const body = updateProfileSchema.parse(req.body);
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { name: body.name ?? undefined },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    res.json(user);
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Update profile error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/users/:id
 router.get('/:id', authenticate, requireAdmin, async (req, res: Response) => {
   try {

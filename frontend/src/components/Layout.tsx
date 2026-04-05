@@ -1,26 +1,30 @@
-import { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus } from 'lucide-react';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus, UserCircle } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
 import QuickLogModal from './QuickLogModal';
 import { api } from '../api/client';
 import type { Horse } from '../types';
 
-const NAV_ITEMS = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/horses', label: 'Horses', icon: Dog },
-  { path: '/appointments', label: 'Appointments', icon: CalendarClock },
-  { path: '/invoices', label: 'Invoices', icon: Receipt },
-  { path: '/costs', label: 'Costs', icon: BarChart2, indent: true },
-  { path: '/stables', label: 'Stables', icon: Home },
-  { path: '/programmes', label: 'Programmes', icon: BookOpen },
+type Role = 'ADMIN' | 'STABLE_LEAD' | 'TRAINER' | 'RIDER' | 'GROOM' | 'OWNER';
+
+const ALL_ROLES: Role[] = ['ADMIN', 'STABLE_LEAD', 'TRAINER', 'RIDER', 'GROOM', 'OWNER'];
+
+const NAV_ITEMS: { path: string; label: string; icon: React.ElementType; indent?: boolean; roles: Role[] }[] = [
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ALL_ROLES },
+  { path: '/horses', label: 'Horses', icon: Dog, roles: ALL_ROLES },
+  { path: '/appointments', label: 'Appointments', icon: CalendarClock, roles: ALL_ROLES },
+  { path: '/programmes', label: 'Programmes', icon: BookOpen, roles: ['ADMIN', 'STABLE_LEAD', 'TRAINER'] },
+  { path: '/stables', label: 'Stables', icon: Home, roles: ['ADMIN'] },
+  { path: '/invoices', label: 'Invoices', icon: Receipt, roles: ['ADMIN', 'STABLE_LEAD', 'OWNER'] },
+  { path: '/costs', label: 'Costs', icon: BarChart2, indent: true, roles: ['ADMIN', 'STABLE_LEAD', 'OWNER'] },
 ];
 
-const ADMIN_ITEMS = [
-  { path: '/admin/users', label: 'Users', icon: Users },
-  { path: '/admin/security', label: 'Security', icon: ShieldAlert },
+const ADMIN_ITEMS: { path: string; label: string; icon: React.ElementType; roles: Role[] }[] = [
+  { path: '/admin/users', label: 'Users', icon: Users, roles: ['ADMIN'] },
+  { path: '/admin/security', label: 'Security', icon: ShieldAlert, roles: ['ADMIN'] },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -55,13 +59,15 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   const STABLE_LEAD_ITEMS = [
-    { path: '/stable', label: 'My Stable', icon: Home },
+    { path: '/stable', label: 'My Stable', icon: Home, roles: ['STABLE_LEAD'] as Role[] },
   ];
-  const items = user?.role === 'ADMIN'
+  const role = user?.role as Role | undefined;
+  const allItems = user?.role === 'ADMIN'
     ? [...NAV_ITEMS, ...ADMIN_ITEMS]
     : user?.role === 'STABLE_LEAD'
       ? [...NAV_ITEMS, ...STABLE_LEAD_ITEMS]
       : NAV_ITEMS;
+  const items = role ? allItems.filter((item) => item.roles.includes(role)) : [];
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
@@ -138,6 +144,18 @@ export default function Layout({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-sidebar-border space-y-1">
+            <Link
+              to="/settings/profile"
+              onClick={() => setSidebarOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                location.pathname === '/settings/profile'
+                  ? 'bg-brand-600/90 text-white'
+                  : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground'
+              }`}
+            >
+              <UserCircle className="w-5 h-5 shrink-0" />
+              My Profile
+            </Link>
             <Link
               to="/settings/notifications"
               onClick={() => setSidebarOpen(false)}

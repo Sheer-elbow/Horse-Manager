@@ -31,6 +31,31 @@ export default function Users() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
+  const handleCancelInvite = async (id: string, email: string) => {
+    if (!window.confirm(`Cancel the invite for ${email}?`)) return;
+    try {
+      await api(`/auth/invites/${id}`, { method: 'DELETE' });
+      toast.success('Invite cancelled');
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel invite');
+    }
+  };
+
+  const handleResendInvite = async (id: string, email: string) => {
+    try {
+      const result = await api<{ message: string; inviteUrl?: string }>(`/auth/invites/${id}/resend`, { method: 'POST' });
+      if (result.inviteUrl) {
+        setSuccess(`${result.message}\n\nInvite link: ${result.inviteUrl}`);
+      } else {
+        toast.success(result.message);
+      }
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to resend invite');
+    }
+  };
+
   const load = async () => {
     try {
       const [u, inv] = await Promise.all([
@@ -199,6 +224,7 @@ export default function Users() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Sent</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Expires</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -215,6 +241,25 @@ export default function Users() {
                       <Badge variant="danger">Expired</Badge>
                     ) : (
                       <Badge variant="warning">Pending</Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {!inv.usedAt && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleResendInvite(inv.id, inv.email)}
+                          className="text-xs text-brand-600 hover:underline"
+                        >
+                          Resend
+                        </button>
+                        <span className="text-gray-300">·</span>
+                        <button
+                          onClick={() => handleCancelInvite(inv.id, inv.email)}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

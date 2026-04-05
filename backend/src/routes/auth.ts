@@ -402,4 +402,71 @@ router.get('/invites', authenticate, async (req: AuthRequest, res: Response) => 
   }
 });
 
+// DELETE /api/auth/invites/:id (admin: cancel a pending invite)
+router.delete('/invites/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  if (req.user!.role !== 'ADMIN') {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
+  }
+  try {
+    const invite = await prisma.inviteToken.findUnique({ where: { id: req.params.id } });
+    if (!invite) {
+      res.status(404).json({ error: 'Invite not found' });
+      return;
+    }
+    if (invite.usedAt) {
+      res.status(400).json({ error: 'Cannot cancel an invite that has already been accepted' });
+      return;
+    }
+    await prisma.inviteToken.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Invite cancelled' });
+  } catch (err) {
+    console.error('Cancel invite error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/invites/:id/resend (admin: issue a fresh token and resend email)
+router.post('/invites/:id/resend', authenticate, async (req: AuthRequest, res: Response) => {
+  if (req.user!.role !== 'ADMIN') {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
+  }
+  try {
+    const invite = await prisma.inviteToken.findUnique({ where: { id: req.params.id } });
+    if (!invite) {
+      res.status(404).json({ error: 'Invite not found' });
+      return;
+    }
+    if (invite.usedAt) {
+      res.status(400).json({ error: 'Cannot resend an invite that has already been accepted' });
+      return;
+    }
+    // Issue a fresh token and reset the expiry window
+    const newToken = uuid();
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+    const updated = await prisma.inviteToken.update({
+      where: { id: req.params.id },
+      data: { token: newToken, expiresAt },
+    });
+    const inviteUrl = `${config.appUrl}/accept-invite?token=${newToken}`;
+    let emailSent = false;
+    try {
+      await sendInviteEmail(updated.email, newToken);
+      emailSent = true;
+    } catch (err) {
+      console.error('Failed to resend invite email:', err instanceof Error ? err.message : err);
+    }
+    res.json({
+      message: emailSent
+        ? `Invite resent to ${updated.email}`
+        : `Invite link refreshed but email could not be sent. Share the link manually.`,
+      inviteUrl,
+    });
+  } catch (err) {
+    console.error('Resend invite error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

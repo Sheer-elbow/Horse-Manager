@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import AcceptInvite from './pages/AcceptInvite';
+import UserProfile from './pages/UserProfile';
 import ChangePassword from './pages/ChangePassword';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -49,7 +51,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
-      <Route path="/accept-invite" element={<Login />} />
+      <Route path="/accept-invite" element={<AcceptInvite />} />
       <Route path="/forgot-password" element={<AuthRoute><ForgotPassword /></AuthRoute>} />
       <Route path="/reset-password" element={<AuthRoute><ResetPassword /></AuthRoute>} />
       <Route path="/change-password" element={<PasswordRoute><ChangePassword /></PasswordRoute>} />
@@ -62,6 +64,7 @@ function AppRoutes() {
       <Route path="/admin/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
       <Route path="/admin/security" element={<ProtectedRoute adminOnly><SecurityDashboard /></ProtectedRoute>} />
       <Route path="/settings/notifications" element={<ProtectedRoute><NotificationSettings /></ProtectedRoute>} />
+      <Route path="/settings/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/stable" element={<ProtectedRoute><StableManage /></ProtectedRoute>} />
       <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />

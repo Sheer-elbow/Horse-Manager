@@ -1,28 +1,18 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { api, setTokens } from '../api/client';
-import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
-import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const inviteToken = searchParams.get('token');
   const resetSuccess = searchParams.get('reset') === '1';
 
-  // Login form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Invite accept state
-  const [inviteName, setInviteName] = useState('');
-  const [invitePassword, setInvitePassword] = useState('');
-  const [invitePasswordTouched, setInvitePasswordTouched] = useState(false);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -42,37 +32,12 @@ export default function Login() {
     }
   };
 
-  const handleAcceptInvite = async (e: FormEvent) => {
-    e.preventDefault();
-    setInvitePasswordTouched(true);
-    setError('');
-    if (!passwordValid(invitePassword)) {
-      setError('Please meet all password requirements.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await api<AuthTokens>('/auth/accept-invite', {
-        method: 'POST',
-        body: JSON.stringify({ token: inviteToken, name: inviteName, password: invitePassword }),
-      });
-      setTokens(data.accessToken, data.refreshToken);
-      window.location.href = '/';
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to accept invite');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-sidebar px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">Stable Manager</h1>
-          <p className="text-sidebar-muted mt-2">
-            {inviteToken ? 'Accept your invitation' : 'Sign in to your account'}
-          </p>
+          <h1 className="text-3xl font-bold text-white">Smart Stable Manager</h1>
+          <p className="text-sidebar-muted mt-2">Sign in to your account</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg border p-6">
@@ -86,76 +51,36 @@ export default function Login() {
               {error}
             </div>
           )}
-
-          {inviteToken ? (
-            <form onSubmit={handleAcceptInvite} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Your name</label>
-                <input
-                  type="text"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Choose a password</label>
-                <input
-                  type="password"
-                  value={invitePassword}
-                  onChange={(e) => { setInvitePassword(e.target.value); setInvitePasswordTouched(true); }}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  required
-                  minLength={12}
-                />
-                {invitePasswordTouched && invitePassword.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {PASSWORD_RULES.map((r) => (
-                      <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(invitePassword) ? 'text-green-600' : 'text-gray-400'}`}>
-                        <span>{r.test(invitePassword) ? '✓' : '○'}</span>
-                        {r.label}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <Button type="submit" disabled={loading} className="w-full">
-                {loading ? 'Setting up...' : 'Create account'}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  required
-                />
-              </div>
-              <Button type="submit" disabled={loading} className="w-full">
-                {loading ? 'Signing in...' : 'Sign in'}
-              </Button>
-              <div className="text-center">
-                <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-gray-700">
-                  Forgot your password?
-                </Link>
-              </div>
-            </form>
-          )}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                required
+              />
+            </div>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? 'Signing in...' : 'Sign in'}
+            </Button>
+            <div className="text-center">
+              <Link to="/forgot-password" className="text-sm text-gray-500 hover:text-gray-700">
+                Forgot your password?
+              </Link>
+            </div>
+          </form>
         </div>
       </div>
     </div>
