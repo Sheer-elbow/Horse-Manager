@@ -21,6 +21,8 @@ export interface Stable {
   id: string;
   name: string;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
   ownerId: string | null;
   owner?: { id: string; name: string | null; email: string } | null;
   createdAt: string;
@@ -393,4 +395,30 @@ export interface HorseDocument {
   updatedAt: string;
   uploadedBy: { id: string; name: string | null; email: string };
   horse?: { id: string; name: string };
+}
+
+// ─── Weather ──────────────────────────────────────────────────────────────────
+
+export interface DailyForecast {
+  date: string;
+  weatherCode: number;
+  description: string;
+  tempMax: number;
+  tempMin: number;
+  precipitationSum: number;
+  precipitationProbability: number;
+  windSpeedMax: number;
+  windGustsMax: number;
+  windDirection: number;
+  uvIndexMax: number;
+  sunrise: string;
+  sunset: string;
+}
+
+export interface WeatherForecast {
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  fetchedAt: string;
+  days: DailyForecast[];
 }

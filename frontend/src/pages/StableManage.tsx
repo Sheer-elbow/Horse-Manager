@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
 import { Building2, Users, Star, StarOff, Calendar } from 'lucide-react';
+import WeatherWidget from '../components/WeatherWidget';
 
 interface Appointment {
   id: string;
@@ -247,6 +248,11 @@ export default function StableManage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Weather widget */}
+      {selectedStable && (
+        <WeatherWidget stableId={selectedStable.id} stableName={selectedStable.name} />
       )}
 
       {/* Upcoming appointments */}
