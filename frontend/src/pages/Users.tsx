@@ -7,6 +7,14 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  STABLE_LEAD: 'Manages a stable: can assign horses to staff, view all horses in their stable, and approve membership requests.',
+  TRAINER: 'Creates and manages training programmes, logs sessions, and views all horses they are assigned to.',
+  RIDER: 'Logs their own sessions and views the horses assigned to them.',
+  GROOM: 'Views horse details and daily schedules for horses in their care. Cannot edit programmes.',
+  OWNER: 'Owns one or more horses. Can view their horses\' records and communicate with stable staff.',
+};
+
 export default function Users() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -245,6 +253,9 @@ export default function Users() {
               <option value="OWNER">Owner</option>
               <option value="TRAINER">Trainer</option>
             </select>
+            {ROLE_DESCRIPTIONS[inviteRole] && (
+              <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">{ROLE_DESCRIPTIONS[inviteRole]}</p>
+            )}
           </div>
           <p className="text-xs text-gray-500">An invite link will be sent to this email. The invite expires in 72 hours.</p>
           <Button type="submit" className="w-full">Send invite</Button>
