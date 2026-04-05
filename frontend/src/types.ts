@@ -38,7 +38,7 @@ export interface Horse {
   photoUrl: string | null;
   createdAt: string;
   updatedAt: string;
-  stable?: { id: string; name: string } | null;
+  stable?: { id: string; name: string; address: string | null } | null;
   _permission?: 'VIEW' | 'EDIT';
   _accessType?: 'ADMIN' | 'OWNER_EDIT' | 'TRAINER_VIEW' | 'LEAD_VIEW' | 'STAFF_VIEW';
   _isPriority?: boolean;

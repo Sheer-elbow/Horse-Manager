@@ -1126,7 +1126,18 @@ export default function HorseProfile() {
                 <div className="grid grid-cols-2 gap-4">
                   {horse.breed && <div><span className="text-sm text-gray-500">Breed</span><div>{horse.breed}</div></div>}
                   {horse.age && <div><span className="text-sm text-gray-500">Age</span><div>{horse.age}</div></div>}
-                  {(horse.stable || horse.stableLocation) && <div><span className="text-sm text-gray-500">Stable</span><div>{horse.stable?.name || horse.stableLocation}</div></div>}
+                  {(horse.stable || horse.stableLocation) && (
+                    <div>
+                      <span className="text-sm text-gray-500">Stable</span>
+                      <div>{horse.stable?.name || horse.stableLocation}</div>
+                      {horse.stable?.address && (
+                        <div className="text-xs text-gray-400 mt-0.5">{horse.stable.address}</div>
+                      )}
+                      {horse.stableLocation && horse.stable && (
+                        <div className="text-xs text-gray-400 mt-0.5">{horse.stableLocation}</div>
+                      )}
+                    </div>
+                  )}
                   {horse.identifyingInfo && <div><span className="text-sm text-gray-500">ID info</span><div>{horse.identifyingInfo}</div></div>}
                 </div>
                 {horse.ownerNotes && <div className="mt-4"><span className="text-sm text-gray-500">Notes</span><div className="mt-1">{horse.ownerNotes}</div></div>}
