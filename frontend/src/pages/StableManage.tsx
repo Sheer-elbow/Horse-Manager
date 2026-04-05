@@ -244,7 +244,7 @@ export default function StableManage() {
           {selectedStable.address && (
             <div className="bg-white rounded-xl border p-4 col-span-2 sm:col-span-1">
               <div className="text-sm font-medium text-gray-700 truncate">{selectedStable.address}</div>
-              <div className="text-xs text-gray-500 mt-0.5">Address</div>
+              <div className="text-xs text-gray-500 mt-0.5">Postcode</div>
             </div>
           )}
         </div>
