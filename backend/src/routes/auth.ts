@@ -259,7 +259,7 @@ router.post('/register', apiLimiter, async (req, res: Response) => {
     const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
     const tokens = generateTokens(payload);
 
-    void logSecurityEvent('REGISTER', req, {
+    void logSecurityEvent('USER_REGISTERED', req, {
       userId: user.id,
       email: user.email,
       outcome: 'success',
