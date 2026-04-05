@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import AcceptInvite from './pages/AcceptInvite';
+import Register from './pages/Register';
 import UserProfile from './pages/UserProfile';
 import ChangePassword from './pages/ChangePassword';
 import ForgotPassword from './pages/ForgotPassword';
@@ -51,6 +52,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+      <Route path="/register" element={<AuthRoute><Register /></AuthRoute>} />
       <Route path="/accept-invite" element={<AcceptInvite />} />
       <Route path="/forgot-password" element={<AuthRoute><ForgotPassword /></AuthRoute>} />
       <Route path="/reset-password" element={<AuthRoute><ResetPassword /></AuthRoute>} />

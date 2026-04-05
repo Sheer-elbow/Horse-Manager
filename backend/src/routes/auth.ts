@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { prisma } from '../db';
 import { config } from '../config';
 import { authenticate } from '../middleware/auth';
-import { loginLimiter, inviteAcceptLimiter, refreshLimiter, forgotPasswordLimiter } from '../middleware/rateLimiter';
+import { loginLimiter, inviteAcceptLimiter, refreshLimiter, forgotPasswordLimiter, apiLimiter } from '../middleware/rateLimiter';
 import { sendInviteEmail, sendPasswordResetEmail } from '../services/email';
 import { logSecurityEvent } from '../services/securityLog';
 import { AuthRequest, JwtPayload } from '../types';
@@ -213,6 +213,69 @@ router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => 
       return;
     }
     console.error('Invite error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/register — self-registration (no invite required)
+const registerSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+  password: passwordSchema,
+  // Optional stable to create immediately
+  stableName: z.string().min(1).max(100).optional(),
+  stableAddress: z.string().nullable().optional(),
+});
+
+router.post('/register', apiLimiter, async (req, res: Response) => {
+  try {
+    const body = registerSchema.parse(req.body);
+
+    const existing = await prisma.user.findUnique({ where: { email: body.email } });
+    if (existing) {
+      res.status(409).json({ error: 'An account with this email already exists' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(body.password, 12);
+
+    // Create user with OWNER role in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email: body.email, name: body.name, passwordHash, role: 'OWNER' },
+      });
+
+      let stable = null;
+      if (body.stableName) {
+        stable = await tx.stable.create({
+          data: { name: body.stableName, address: body.stableAddress ?? null, ownerId: user.id },
+        });
+      }
+
+      return { user, stable };
+    });
+
+    const { user } = result;
+    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
+    const tokens = generateTokens(payload);
+
+    void logSecurityEvent('REGISTER', req, {
+      userId: user.id,
+      email: user.email,
+      outcome: 'success',
+      metadata: { stableName: body.stableName ?? null },
+    });
+
+    res.status(201).json({
+      ...tokens,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: false },
+    });
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: err.errors });
+      return;
+    }
+    console.error('Register error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
