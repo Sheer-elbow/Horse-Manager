@@ -238,9 +238,8 @@ router.post('/sessions', authenticate, requireRole('ADMIN', 'TRAINER'), async (r
       }
     }
 
-    const session = await prisma.plannedSession.upsert({
-      where: { horseId_date_slot: { horseId: data.horseId, date: new Date(data.date + 'T00:00:00Z'), slot: data.slot } },
-      create: {
+    const session = await prisma.plannedSession.create({
+      data: {
         planBlockId: data.planBlockId,
         horseId: data.horseId,
         date: new Date(data.date + 'T00:00:00Z'),
@@ -251,15 +250,8 @@ router.post('/sessions', authenticate, requireRole('ADMIN', 'TRAINER'), async (r
         intensityRpe: data.intensityRpe ?? null,
         notes: data.notes ?? null,
       },
-      update: {
-        sessionType: data.sessionType ?? null,
-        description: data.description ?? null,
-        durationMinutes: data.durationMinutes ?? null,
-        intensityRpe: data.intensityRpe ?? null,
-        notes: data.notes ?? null,
-      },
     });
-    res.json(session);
+    res.status(201).json(session);
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: err.errors });
