@@ -427,7 +427,6 @@ router.post('/:horseId/expenses', authenticate, requireHorseAccess('EDIT'), asyn
         date: new Date(date + 'T00:00:00Z'),
         amount: parsedAmount,
         category: category || null,
-        amount: amount ? parseFloat(amount) : null,
         notes: notes || null,
         fileUrl,
         fileName,
