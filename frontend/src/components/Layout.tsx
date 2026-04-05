@@ -1,7 +1,7 @@
 import React, { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus, UserCircle, FileText, Shield } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
 import QuickLogModal from './QuickLogModal';
@@ -168,6 +168,22 @@ export default function Layout({ children }: { children: ReactNode }) {
               <Bell className="w-5 h-5 shrink-0" />
               Notifications
             </Link>
+            <div className="flex items-center gap-3 px-3 py-1.5">
+              <Link
+                to="/privacy"
+                onClick={() => setSidebarOpen(false)}
+                className="text-xs text-sidebar-muted hover:text-sidebar-foreground transition-colors"
+              >
+                <span className="inline-flex items-center gap-1"><Shield className="w-3 h-3" />Privacy</span>
+              </Link>
+              <Link
+                to="/terms"
+                onClick={() => setSidebarOpen(false)}
+                className="text-xs text-sidebar-muted hover:text-sidebar-foreground transition-colors"
+              >
+                <span className="inline-flex items-center gap-1"><FileText className="w-3 h-3" />Terms</span>
+              </Link>
+            </div>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground rounded-lg text-left transition-colors"
