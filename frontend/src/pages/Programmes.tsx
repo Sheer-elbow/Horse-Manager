@@ -12,9 +12,56 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '../components/ui/dropdown-menu';
-import { MoreVertical, Pencil, Trash2, Eye, Layers, BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
+import { MoreVertical, Pencil, Trash2, Eye, Layers, BookOpen, ChevronDown, ChevronRight, Grid3X3 } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
+
+// ─── Programme Builder types & constants ──────────────────────
+
+const DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const CATEGORIES = [
+  'Flatwork', 'Jumping', 'Hacking', 'Groundwork', 'Cross-country',
+  'Lungeing', 'Fitness', 'Conditioning', 'Rest', 'Other',
+];
+
+const INTENSITY_LEVELS = [
+  { label: 'Easy',      rpeMin: 1, rpeMax: 4 },
+  { label: 'Moderate',  rpeMin: 5, rpeMax: 6 },
+  { label: 'Hard',      rpeMin: 7, rpeMax: 8 },
+  { label: 'Very Hard', rpeMin: 9, rpeMax: 10 },
+];
+
+const CELL_COLORS: Record<string, string> = {
+  Flatwork:       'bg-blue-100 text-blue-700 border-blue-200',
+  Jumping:        'bg-orange-100 text-orange-700 border-orange-200',
+  Hacking:        'bg-green-100 text-green-700 border-green-200',
+  Groundwork:     'bg-yellow-100 text-yellow-700 border-yellow-200',
+  'Cross-country':'bg-red-100 text-red-700 border-red-200',
+  Lungeing:       'bg-indigo-100 text-indigo-700 border-indigo-200',
+  Fitness:        'bg-pink-100 text-pink-700 border-pink-200',
+  Conditioning:   'bg-teal-100 text-teal-700 border-teal-200',
+  Rest:           'bg-gray-100 text-gray-400 border-gray-200',
+  Other:          'bg-gray-100 text-gray-600 border-gray-200',
+};
+
+type BuilderCell = {
+  title: string;
+  category: string;
+  durationMin: number | null;
+  durationMax: number | null;
+  intensityLabel: string | null;
+  intensityRpeMin: number | null;
+  intensityRpeMax: number | null;
+};
+
+type EditForm = {
+  title: string;
+  category: string;
+  durationMin: string;
+  durationMax: string;
+  intensity: string;
+};
 
 export default function Programmes() {
   const { user } = useAuth();
@@ -52,6 +99,16 @@ export default function Programmes() {
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  // ─── In-app builder state ─────────────────────────────────
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderProgrammeId, setBuilderProgrammeId] = useState<string | null>(null);
+  const [builderProgrammeName, setBuilderProgrammeName] = useState('');
+  const [builderNumWeeks, setBuilderNumWeeks] = useState(4);
+  const [builderCells, setBuilderCells] = useState<Record<string, BuilderCell>>({});
+  const [editCell, setEditCell] = useState<{ week: number; day: number } | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensity: '' });
+  const [builderSaving, setBuilderSaving] = useState(false);
 
   const canManage = user?.role === 'ADMIN' || user?.role === 'TRAINER';
 
@@ -305,6 +362,108 @@ export default function Programmes() {
     }
   };
 
+  // ─── In-app builder handlers ──────────────────────────────
+
+  const openBuilder = (p: Programme) => {
+    setBuilderProgrammeId(p.id);
+    setBuilderProgrammeName(p.name);
+    setBuilderNumWeeks(4);
+    setBuilderCells({});
+    setEditCell(null);
+    setBuilderOpen(true);
+  };
+
+  const selectCell = (week: number, day: number) => {
+    const key = `${week}-${day}`;
+    const existing = builderCells[key];
+    if (existing) {
+      const preset = INTENSITY_LEVELS.find((l) => l.label === existing.intensityLabel);
+      setEditForm({
+        title: existing.title,
+        category: existing.category,
+        durationMin: existing.durationMin != null ? String(existing.durationMin) : '',
+        durationMax: existing.durationMax != null ? String(existing.durationMax) : '',
+        intensity: preset?.label ?? '',
+      });
+    } else {
+      setEditForm({ title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensity: '' });
+    }
+    setEditCell({ week, day });
+  };
+
+  const saveEditCell = () => {
+    if (!editCell) return;
+    const key = `${editCell.week}-${editCell.day}`;
+    const preset = INTENSITY_LEVELS.find((l) => l.label === editForm.intensity);
+    const isRest = editForm.category === 'Rest' || !editForm.title.trim();
+    if (isRest) {
+      setBuilderCells((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    } else {
+      setBuilderCells((prev) => ({
+        ...prev,
+        [key]: {
+          title: editForm.title.trim(),
+          category: editForm.category,
+          durationMin: editForm.durationMin ? parseInt(editForm.durationMin, 10) : null,
+          durationMax: editForm.durationMax ? parseInt(editForm.durationMax, 10) : null,
+          intensityLabel: preset?.label ?? (editForm.intensity || null),
+          intensityRpeMin: preset?.rpeMin ?? null,
+          intensityRpeMax: preset?.rpeMax ?? null,
+        },
+      }));
+    }
+    setEditCell(null);
+  };
+
+  const clearEditCell = () => {
+    if (!editCell) return;
+    const key = `${editCell.week}-${editCell.day}`;
+    setBuilderCells((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setEditCell(null);
+  };
+
+  const handleSaveBuilder = async () => {
+    if (!builderProgrammeId) return;
+    setBuilderSaving(true);
+    const scheduleData = [];
+    for (let w = 1; w <= builderNumWeeks; w++) {
+      for (let d = 1; d <= 7; d++) {
+        const cell = builderCells[`${w}-${d}`];
+        if (cell) {
+          scheduleData.push({ week: w, day: d, ...cell, blocks: [] });
+        } else {
+          scheduleData.push({
+            week: w, day: d,
+            title: 'Rest', category: 'Rest',
+            durationMin: null, durationMax: null,
+            intensityLabel: null, blocks: [],
+          });
+        }
+      }
+    }
+    try {
+      await api(`/programmes/${builderProgrammeId}/versions`, {
+        method: 'POST',
+        body: JSON.stringify({ numWeeks: builderNumWeeks, scheduleData }),
+      });
+      toast.success('Version saved as draft');
+      setBuilderOpen(false);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save version');
+    } finally {
+      setBuilderSaving(false);
+    }
+  };
+
   // ─── Helpers ──────────────────────────────────────────────
 
   const isVersioned = (p: Programme) => p.status != null;
@@ -404,6 +563,9 @@ export default function Programmes() {
                             </DropdownMenuItem>
                           </>
                         )}
+                        <DropdownMenuItem onClick={() => openBuilder(p)}>
+                          <Grid3X3 className="w-4 h-4" /> Build version
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => startRename(p)}>
                           <Pencil className="w-4 h-4" /> Rename
                         </DropdownMenuItem>
@@ -639,6 +801,175 @@ export default function Programmes() {
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* ─── In-app programme builder modal ─────────────────── */}
+      <Modal
+        open={builderOpen}
+        onClose={() => { setBuilderOpen(false); setEditCell(null); }}
+        title={`Build version — ${builderProgrammeName}`}
+        wide
+      >
+        {/* Week count */}
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-sm font-medium text-gray-700">Weeks:</label>
+          <select
+            value={builderNumWeeks}
+            onChange={(e) => { setBuilderNumWeeks(Number(e.target.value)); setEditCell(null); }}
+            className="border rounded-lg px-2 py-1 text-sm"
+          >
+            {[1,2,3,4,5,6,7,8,9,10,11,12,16,20,24].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+          <span className="text-xs text-gray-400">Click any cell to add a session. Blank cells default to Rest.</span>
+        </div>
+
+        {/* Grid */}
+        <div className="overflow-auto border rounded-lg max-h-64">
+          <table className="text-xs w-full border-collapse">
+            <thead className="sticky top-0 bg-white z-10">
+              <tr>
+                <th className="px-2 py-2 text-left text-gray-500 font-medium border-b w-12">Week</th>
+                {DAYS_SHORT.map((d) => (
+                  <th key={d} className="px-1 py-2 text-center text-gray-500 font-medium border-b min-w-[72px]">{d}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: builderNumWeeks }, (_, wi) => {
+                const week = wi + 1;
+                return (
+                  <tr key={week} className="border-b last:border-0">
+                    <td className="px-2 py-1 text-gray-400 font-medium whitespace-nowrap">W{week}</td>
+                    {[1,2,3,4,5,6,7].map((day) => {
+                      const key = `${week}-${day}`;
+                      const cell = builderCells[key];
+                      const isSelected = editCell?.week === week && editCell?.day === day;
+                      const colorClass = cell ? (CELL_COLORS[cell.category] ?? CELL_COLORS.Other) : '';
+                      return (
+                        <td key={day} className="px-1 py-1">
+                          <button
+                            onClick={() => selectCell(week, day)}
+                            className={`w-full min-h-[32px] rounded border text-left px-1.5 py-1 transition-colors text-[11px] leading-tight ${
+                              isSelected
+                                ? 'ring-2 ring-brand-500 ring-offset-1'
+                                : ''
+                            } ${
+                              cell
+                                ? colorClass
+                                : 'border-dashed border-gray-200 text-gray-300 hover:border-gray-300 hover:text-gray-400'
+                            }`}
+                          >
+                            {cell ? (
+                              <div>
+                                <div className="font-medium truncate max-w-[64px]">{cell.title}</div>
+                                {cell.durationMin && (
+                                  <div className="opacity-70">{cell.durationMin}{cell.durationMax ? `–${cell.durationMax}` : ''}m</div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center w-full">+</div>
+                            )}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Cell editor */}
+        {editCell && (
+          <div className="mt-3 border rounded-lg p-3 bg-gray-50 space-y-3">
+            <div className="text-sm font-medium text-gray-700">
+              Week {editCell.week} · {DAYS_SHORT[editCell.day - 1]}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Session title</label>
+                <input
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  placeholder="e.g. Canter work"
+                  className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveEditCell(); if (e.key === 'Escape') setEditCell(null); }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                <select
+                  value={editForm.category}
+                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                  className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                >
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Duration (min)</label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    value={editForm.durationMin}
+                    onChange={(e) => setEditForm({ ...editForm, durationMin: e.target.value })}
+                    placeholder="Min"
+                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                  />
+                  <span className="text-gray-400 shrink-0">–</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editForm.durationMax}
+                    onChange={(e) => setEditForm({ ...editForm, durationMax: e.target.value })}
+                    placeholder="Max"
+                    className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Intensity</label>
+                <select
+                  value={editForm.intensity}
+                  onChange={(e) => setEditForm({ ...editForm, intensity: e.target.value })}
+                  className="w-full border rounded-lg px-2 py-1.5 text-sm"
+                >
+                  <option value="">None</option>
+                  {INTENSITY_LEVELS.map((l) => (
+                    <option key={l.label} value={l.label}>{l.label} (RPE {l.rpeMin}–{l.rpeMax})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end pt-1">
+              <Button size="sm" variant="ghost" onClick={clearEditCell}>Clear cell</Button>
+              <Button size="sm" variant="outline" onClick={() => setEditCell(null)}>Cancel</Button>
+              <Button size="sm" onClick={saveEditCell}>Save cell</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Category colour legend */}
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {CATEGORIES.filter((c) => c !== 'Rest').map((c) => (
+            <span key={c} className={`text-[11px] px-2 py-0.5 rounded-full border ${CELL_COLORS[c] ?? CELL_COLORS.Other}`}>{c}</span>
+          ))}
+        </div>
+
+        <div className="flex justify-between items-center mt-4 pt-3 border-t">
+          <div className="text-xs text-gray-400">
+            {Object.keys(builderCells).length} session{Object.keys(builderCells).length === 1 ? '' : 's'} planned
+            {' '}· {builderNumWeeks * 7 - Object.keys(builderCells).length} rest days
+          </div>
+          <Button onClick={handleSaveBuilder} disabled={builderSaving}>
+            {builderSaving ? 'Saving...' : 'Save as draft'}
+          </Button>
+        </div>
       </Modal>
 
       {/* ─── Apply to horse modal ────────────────────────────── */}
