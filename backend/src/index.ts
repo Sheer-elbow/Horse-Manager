@@ -28,6 +28,7 @@ import stableAssignmentRoutes from './routes/stableAssignments';
 import horsePriorityRoutes from './routes/horsePriority';
 import documentRoutes, { getExpiringDocuments } from './routes/documents';
 import { startNotificationScheduler } from './services/notification-scheduler';
+import { startDataRetentionScheduler } from './services/data-retention';
 import { metricsMiddleware, register, startMetricsRefresh } from './metrics';
 import { apiLimiter } from './middleware/rateLimiter';
 
@@ -222,6 +223,7 @@ async function main() {
     console.log(`Backend running on port ${config.port} (${config.nodeEnv})`);
   });
   startNotificationScheduler();
+  startDataRetentionScheduler();
   startMetricsRefresh();
 }
 

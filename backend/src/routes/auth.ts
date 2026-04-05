@@ -41,7 +41,7 @@ router.post('/login', loginLimiter, async (req, res: Response) => {
       return;
     }
 
-    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
+    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     const tokens = generateTokens(payload);
     void logSecurityEvent('LOGIN_SUCCESS', req, { userId: user.id, email: user.email, outcome: 'success' });
 
@@ -81,7 +81,13 @@ router.post('/refresh', refreshLimiter, async (req, res: Response) => {
       return;
     }
 
-    const newPayload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
+    // Reject refresh tokens issued before the last password change / logout-all
+    if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.tokenVersion) {
+      res.status(401).json({ error: 'Token has been revoked' });
+      return;
+    }
+
+    const newPayload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     const tokens = generateTokens(newPayload);
     res.json(tokens);
   } catch {
@@ -130,11 +136,15 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
     const passwordHash = await bcrypt.hash(body.newPassword, 12);
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, mustChangePassword: false },
+      data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
     });
     void logSecurityEvent('PASSWORD_CHANGED', req, { userId: user.id, email: user.email, outcome: 'success' });
 
-    res.json({ message: 'Password changed successfully' });
+    // Return fresh tokens so the current session stays alive after the version bump
+    const newPayload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion + 1 };
+    const tokens = generateTokens(newPayload);
+
+    res.json({ message: 'Password changed successfully', ...tokens });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: err.errors });
@@ -222,6 +232,7 @@ const registerSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email(),
   password: passwordSchema,
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: 'You must accept the Terms of Service and Privacy Policy' }) }),
   // Optional stable to create immediately
   stableName: z.string().min(1).max(100).optional(),
   stableAddress: z.string().nullable().optional(),
@@ -239,10 +250,12 @@ router.post('/register', apiLimiter, async (req, res: Response) => {
 
     const passwordHash = await bcrypt.hash(body.password, 12);
 
+    const now = new Date();
+
     // Create user with OWNER role in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { email: body.email, name: body.name, passwordHash, role: 'OWNER' },
+        data: { email: body.email, name: body.name, passwordHash, role: 'OWNER', acceptedTermsAt: now, acceptedPrivacyAt: now },
       });
 
       let stable = null;
@@ -256,7 +269,7 @@ router.post('/register', apiLimiter, async (req, res: Response) => {
     });
 
     const { user } = result;
-    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
+    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     const tokens = generateTokens(payload);
 
     void logSecurityEvent('USER_REGISTERED', req, {
@@ -285,6 +298,7 @@ const acceptInviteSchema = z.object({
   token: z.string(),
   name: z.string().min(1),
   password: passwordSchema,
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: 'You must accept the Terms of Service and Privacy Policy' }) }),
 });
 
 router.post('/accept-invite', inviteAcceptLimiter, async (req, res: Response) => {
@@ -306,6 +320,7 @@ router.post('/accept-invite', inviteAcceptLimiter, async (req, res: Response) =>
     }
 
     const passwordHash = await bcrypt.hash(body.password, 12);
+    const acceptedAt = new Date();
     const user = await prisma.user.create({
       data: {
         email: invite.email,
@@ -313,6 +328,8 @@ router.post('/accept-invite', inviteAcceptLimiter, async (req, res: Response) =>
         name: body.name,
         role: invite.role,
         mustChangePassword: false,
+        acceptedTermsAt: acceptedAt,
+        acceptedPrivacyAt: acceptedAt,
       },
     });
 
@@ -327,7 +344,7 @@ router.post('/accept-invite', inviteAcceptLimiter, async (req, res: Response) =>
       metadata: { name: body.name, role: invite.role },
     });
 
-    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role };
+    const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     const tokens = generateTokens(payload);
 
     res.json({
@@ -426,7 +443,7 @@ router.post('/reset-password', loginLimiter, async (req, res: Response) => {
     await prisma.$transaction([
       prisma.user.update({
         where: { id: record.userId },
-        data: { passwordHash, mustChangePassword: false },
+        data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
       }),
       prisma.passwordResetToken.update({
         where: { id: record.id },

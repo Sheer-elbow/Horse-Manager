@@ -21,6 +21,8 @@ import NotificationSettings from './pages/NotificationSettings';
 import Appointments from './pages/Appointments';
 import Invoices from './pages/Invoices';
 import CostDashboard from './pages/CostDashboard';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 import { ReactNode } from 'react';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: ReactNode; adminOnly?: boolean }) {
@@ -56,6 +58,8 @@ function AppRoutes() {
       <Route path="/accept-invite" element={<AcceptInvite />} />
       <Route path="/forgot-password" element={<AuthRoute><ForgotPassword /></AuthRoute>} />
       <Route path="/reset-password" element={<AuthRoute><ResetPassword /></AuthRoute>} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
       <Route path="/change-password" element={<PasswordRoute><ChangePassword /></PasswordRoute>} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/horses" element={<ProtectedRoute><HorseList /></ProtectedRoute>} />

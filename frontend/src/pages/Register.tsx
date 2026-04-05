@@ -15,6 +15,7 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [stableName, setStableName] = useState('');
   const [stableAddress, setStableAddress] = useState('');
 
@@ -29,6 +30,10 @@ export default function Register() {
       setError('Please meet all password requirements.');
       return;
     }
+    if (!acceptTerms) {
+      setError('You must accept the Terms of Service and Privacy Policy.');
+      return;
+    }
     if (accountType === 'stable' && !stableName.trim()) {
       setError('Please enter a stable name.');
       return;
@@ -41,6 +46,7 @@ export default function Register() {
           name: name.trim(),
           email: email.trim(),
           password,
+          acceptTerms: true,
           stableName: accountType === 'stable' ? stableName.trim() : undefined,
           stableAddress: accountType === 'stable' && stableAddress.trim() ? stableAddress.trim() : undefined,
         }),
@@ -175,11 +181,27 @@ export default function Register() {
                 </>
               )}
 
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="acceptTerms"
+                  checked={acceptTerms}
+                  onChange={(e) => setAcceptTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                <label htmlFor="acceptTerms" className="text-sm text-gray-600">
+                  I agree to the{' '}
+                  <Link to="/terms" target="_blank" className="text-brand-600 hover:underline">Terms of Service</Link>
+                  {' '}and{' '}
+                  <Link to="/privacy" target="_blank" className="text-brand-600 hover:underline">Privacy Policy</Link>
+                </label>
+              </div>
+
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setStep('type')} className="flex-1">
                   Back
                 </Button>
-                <Button type="submit" disabled={loading} className="flex-1">
+                <Button type="submit" disabled={loading || !acceptTerms} className="flex-1">
                   {loading ? 'Creating account...' : 'Create account'}
                 </Button>
               </div>

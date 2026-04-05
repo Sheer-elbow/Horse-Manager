@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
@@ -12,6 +12,7 @@ export default function AcceptInvite() {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -34,11 +35,15 @@ export default function AcceptInvite() {
       setError('Please meet all password requirements.');
       return;
     }
+    if (!acceptTerms) {
+      setError('You must accept the Terms of Service and Privacy Policy.');
+      return;
+    }
     setLoading(true);
     try {
       const data = await api<AuthTokens>('/auth/accept-invite', {
         method: 'POST',
-        body: JSON.stringify({ token, name, password }),
+        body: JSON.stringify({ token, name, password, acceptTerms: true }),
       });
       setTokens(data.accessToken, data.refreshToken);
       window.location.href = '/';
@@ -96,7 +101,22 @@ export default function AcceptInvite() {
                 </ul>
               )}
             </div>
-            <Button type="submit" disabled={loading} className="w-full">
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="acceptTerms"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              <label htmlFor="acceptTerms" className="text-sm text-gray-600">
+                I agree to the{' '}
+                <Link to="/terms" target="_blank" className="text-brand-600 hover:underline">Terms of Service</Link>
+                {' '}and{' '}
+                <Link to="/privacy" target="_blank" className="text-brand-600 hover:underline">Privacy Policy</Link>
+              </label>
+            </div>
+            <Button type="submit" disabled={loading || !acceptTerms} className="w-full">
               {loading ? 'Setting up...' : 'Create account'}
             </Button>
           </form>
