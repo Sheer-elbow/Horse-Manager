@@ -179,15 +179,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (
       }
     }
 
-    const session = await prisma.actualSessionLog.upsert({
-      where: {
-        horseId_date_slot: {
-          horseId: data.horseId,
-          date: new Date(data.date + 'T00:00:00Z'),
-          slot: data.slot,
-        },
-      },
-      create: {
+    const session = await prisma.actualSessionLog.create({
+      data: {
         horseId: data.horseId,
         date: new Date(data.date + 'T00:00:00Z'),
         slot: data.slot,
@@ -200,16 +193,9 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (
         deviationReason: data.deviationReason ?? null,
         createdById: req.user!.userId,
       },
-      update: {
-        sessionType: data.sessionType ?? null,
-        durationMinutes: data.durationMinutes ?? null,
-        intensityRpe: data.intensityRpe ?? null,
-        notes: data.notes ?? null,
-        rider: data.rider ?? null,
-        deviationReason: data.deviationReason ?? null,
-      },
     });
 
+    res.status(201).json(session);
     sessionsCreatedTotal.inc();
     res.json(session);
   } catch (err) {
@@ -284,6 +270,33 @@ router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async
       return;
     }
     console.error('Update session log error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/sessions/:id (admin + trainer + rider who created it)
+router.delete('/:id', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (req: AuthRequest, res: Response) => {
+  try {
+    const existing = await prisma.actualSessionLog.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: 'Session log not found' });
+      return;
+    }
+
+    if (req.user!.role !== 'ADMIN') {
+      const assignment = await prisma.horseAssignment.findUnique({
+        where: { userId_horseId: { userId: req.user!.userId, horseId: existing.horseId } },
+      });
+      if (!assignment || assignment.permission !== 'EDIT') {
+        res.status(403).json({ error: 'Edit access required' });
+        return;
+      }
+    }
+
+    await prisma.actualSessionLog.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Session log deleted' });
+  } catch (err) {
+    console.error('Delete session log error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
