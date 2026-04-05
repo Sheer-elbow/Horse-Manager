@@ -1,15 +1,19 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt } from 'lucide-react';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
+import QuickLogModal from './QuickLogModal';
+import { api } from '../api/client';
+import type { Horse } from '../types';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/horses', label: 'Horses', icon: Dog },
   { path: '/appointments', label: 'Appointments', icon: CalendarClock },
   { path: '/invoices', label: 'Invoices', icon: Receipt },
+  { path: '/costs', label: 'Costs', icon: BarChart2, indent: true },
   { path: '/stables', label: 'Stables', icon: Home },
   { path: '/programmes', label: 'Programmes', icon: BookOpen },
 ];
@@ -25,11 +29,18 @@ export default function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [showQuickLog, setShowQuickLog] = useState(false);
+  const [horses, setHorses] = useState<Horse[]>([]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  // Load horses for the QuickLog FAB (lightweight — just id, name, photoUrl)
+  useEffect(() => {
+    api<Horse[]>('/horses').then(setHorses).catch(() => {});
+  }, []);
 
   // Cmd+K / Ctrl+K global shortcut
   useEffect(() => {
@@ -44,7 +55,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   const STABLE_LEAD_ITEMS = [
-    { path: '/stable', label: 'My Stable', icon: ShieldAlert },
+    { path: '/stable', label: 'My Stable', icon: Home },
   ];
   const items = user?.role === 'ADMIN'
     ? [...NAV_ITEMS, ...ADMIN_ITEMS]
@@ -63,7 +74,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors">
           {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
-        <span className="font-bold text-white">Stable Manager</span>
+        <span className="font-bold text-white">Smart Stable Manager</span>
         <button
           onClick={() => setPaletteOpen(true)}
           className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors"
@@ -81,7 +92,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
           <div className="p-6 border-b border-sidebar-border">
-            <h1 className="text-xl font-bold text-white">Stable Manager</h1>
+            <h1 className="text-xl font-bold text-white">Smart Stable Manager</h1>
             <p className="text-sm text-sidebar-muted mt-1 truncate">{user?.email}</p>
           </div>
 
@@ -102,20 +113,24 @@ export default function Layout({ children }: { children: ReactNode }) {
           <nav className="p-3 space-y-1 mt-1">
             {items.map((item) => {
               const Icon = item.icon;
-              const active = location.pathname === item.path ||
-                (item.path === '/invoices' && location.pathname === '/costs');
+              const active = location.pathname === item.path;
+              const indented = 'indent' in item && item.indent;
               return (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    indented ? 'ml-4 py-1.5' : 'py-2.5'
+                  } ${
                     active
                       ? 'bg-brand-600/90 text-white'
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent'
+                      : indented
+                        ? 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent'
                   }`}
                 >
-                  <Icon className="w-5 h-5 shrink-0" />
+                  <Icon className={`shrink-0 ${indented ? 'w-4 h-4' : 'w-5 h-5'}`} />
                   {item.label}
                 </Link>
               );
@@ -160,6 +175,24 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+
+      {/* Global QuickLog FAB — visible on all pages when user has horses */}
+      {horses.length > 0 && (
+        <button
+          onClick={() => setShowQuickLog(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
+          title="Log a session"
+        >
+          <Plus className="w-5 h-5" />
+          <span className="hidden sm:inline">Log session</span>
+        </button>
+      )}
+
+      <QuickLogModal
+        open={showQuickLog}
+        onClose={() => setShowQuickLog(false)}
+        horses={horses}
+      />
     </div>
   );
 }

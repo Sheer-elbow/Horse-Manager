@@ -140,7 +140,7 @@ export default function HorseProfile() {
   const [records, setRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', age: '', breed: '', stableId: '', ownerNotes: '', identifyingInfo: '' });
+  const [editForm, setEditForm] = useState({ name: '', age: '', breed: '', stableId: '', stableLocation: '', ownerNotes: '', identifyingInfo: '' });
   const [stables, setStables] = useState<Stable[]>([]);
 
   // Assignment modal
@@ -258,6 +258,7 @@ export default function HorseProfile() {
         age: h.age?.toString() || '',
         breed: h.breed || '',
         stableId: h.stableId || '',
+        stableLocation: h.stableLocation || '',
         ownerNotes: h.ownerNotes || '',
         identifyingInfo: h.identifyingInfo || '',
       });
@@ -354,6 +355,7 @@ export default function HorseProfile() {
         age: editForm.age ? parseInt(editForm.age) : null,
         breed: editForm.breed || null,
         stableId: editForm.stableId || null,
+        stableLocation: editForm.stableLocation || null,
         ownerNotes: editForm.ownerNotes || null,
         identifyingInfo: editForm.identifyingInfo || null,
       }),
@@ -1094,6 +1096,17 @@ export default function HorseProfile() {
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {editForm.stableId ? 'Box / paddock location' : 'Where is this horse kept?'}
+                  </label>
+                  <input
+                    value={editForm.stableLocation}
+                    onChange={(e) => setEditForm({ ...editForm, stableLocation: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2"
+                    placeholder={editForm.stableId ? 'e.g. Box 4, Back paddock' : 'e.g. Home yard, Main Road Farm'}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Identifying info</label>

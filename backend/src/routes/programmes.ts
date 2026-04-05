@@ -65,8 +65,10 @@ const programmeSchema = z.object({
 // GET /api/programmes
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    // Trainers only see their own programmes; admins see all
-    const where = req.user!.role === 'ADMIN' ? {} : { createdById: req.user!.userId };
+    // Admins see all; others see their own programmes + all published ones
+    const where = req.user!.role === 'ADMIN'
+      ? {}
+      : { OR: [{ createdById: req.user!.userId }, { status: 'PUBLISHED' as const }] };
     const programmes = await prisma.programme.findMany({
       where,
       orderBy: { name: 'asc' },
