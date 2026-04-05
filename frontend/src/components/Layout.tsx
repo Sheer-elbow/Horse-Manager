@@ -1,7 +1,7 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus } from 'lucide-react';
+import { LayoutDashboard, Dog, BookOpen, Users, LogOut, Menu, X, Bell, Search, Home, ShieldAlert, CalendarClock, Receipt, BarChart2, Plus, UserCircle } from 'lucide-react';
 import { Toaster } from 'sonner';
 import CommandPalette from './CommandPalette';
 import QuickLogModal from './QuickLogModal';
@@ -138,6 +138,18 @@ export default function Layout({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-sidebar-border space-y-1">
+            <Link
+              to="/settings/profile"
+              onClick={() => setSidebarOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                location.pathname === '/settings/profile'
+                  ? 'bg-brand-600/90 text-white'
+                  : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground'
+              }`}
+            >
+              <UserCircle className="w-5 h-5 shrink-0" />
+              My Profile
+            </Link>
             <Link
               to="/settings/notifications"
               onClick={() => setSidebarOpen(false)}
