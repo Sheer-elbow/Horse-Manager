@@ -221,8 +221,8 @@ export default function Stables() {
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-lg px-3 py-2" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Postcode</label>
+            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. RG17 8QT" className="w-full border rounded-lg px-3 py-2" />
           </div>
           <Button type="submit" className="w-full">Create stable</Button>
         </form>
@@ -237,8 +237,8 @@ export default function Stables() {
             <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded-lg px-3 py-2" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-            <input value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Postcode</label>
+            <input value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} placeholder="e.g. RG17 8QT" className="w-full border rounded-lg px-3 py-2" />
           </div>
           <Button type="submit" className="w-full">Save changes</Button>
         </form>
