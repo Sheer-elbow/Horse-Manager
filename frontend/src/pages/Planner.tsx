@@ -640,7 +640,7 @@ export default function Planner() {
           </div>
 
           {/* Week info bar */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 text-xs sm:text-sm">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2 text-xs sm:text-sm">
             <span className="font-medium">
               Week {weekNumber}/{activeBlock.numWeeks}
             </span>
@@ -654,6 +654,26 @@ export default function Planner() {
                 Past week
               </span>
             )}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-3 mb-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-purple-200 border border-purple-300 shrink-0" />
+              Programme
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-blue-100 border border-blue-200 shrink-0" />
+              Planned
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-green-100 border border-green-200 shrink-0" />
+              Logged
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-gray-100 border border-dashed border-gray-300 shrink-0" />
+              Empty
+            </div>
           </div>
 
           {/* Grid - Desktop: 8-column layout, Mobile: vertical day cards */}
