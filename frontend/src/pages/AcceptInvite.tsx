@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
+import { PasswordInput } from '../components/ui/password-input';
 import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
 
 export default function AcceptInvite() {
@@ -82,11 +83,9 @@ export default function AcceptInvite() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Choose a password</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setPasswordTouched(true); }}
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 required
                 minLength={12}
               />
