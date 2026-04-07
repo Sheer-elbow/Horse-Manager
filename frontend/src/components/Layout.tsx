@@ -67,7 +67,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster position="bottom-center" richColors closeButton />
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
