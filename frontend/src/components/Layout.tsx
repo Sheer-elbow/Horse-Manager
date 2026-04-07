@@ -202,23 +202,24 @@ export default function Layout({ children }: { children: ReactNode }) {
           />
         )}
 
-        {/* Main content */}
-        <main className="flex-1 min-w-0 min-h-screen p-4 lg:p-8 overflow-x-hidden">
+        {/* Main content — pb-24 gives clearance for the FAB on mobile */}
+        <main className="flex-1 min-w-0 min-h-screen p-4 pb-24 lg:p-8 lg:pb-8 overflow-x-hidden">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>
         </main>
       </div>
 
-      {/* Global QuickLog FAB — visible on all pages when user has horses */}
+      {/* Global QuickLog FAB — clears iOS home indicator via safe-area-inset-bottom */}
       {horses.length > 0 && (
         <button
           onClick={() => setShowQuickLog(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
+          className="fixed right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
+          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
           aria-label="Log a session"
         >
           <Plus className="w-5 h-5" />
-          <span className="hidden sm:inline">Log session</span>
+          <span>Log session</span>
         </button>
       )}
 
