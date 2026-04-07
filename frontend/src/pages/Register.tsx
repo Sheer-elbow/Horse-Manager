@@ -17,7 +17,6 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordTouched, setPasswordTouched] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [stableName, setStableName] = useState('');
   const [stableAddress, setStableAddress] = useState('');
@@ -27,7 +26,6 @@ export default function Register() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setPasswordTouched(true);
     setError('');
     if (!passwordValid(password)) {
       setError('Please meet all password requirements.');
@@ -72,6 +70,15 @@ export default function Register() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg border p-6">
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 mb-5">
+            <div className="flex gap-1.5">
+              <div className={`h-1.5 rounded-full transition-all duration-300 ${step === 'type' ? 'w-6 bg-brand-500' : 'w-3 bg-brand-300'}`} />
+              <div className={`h-1.5 rounded-full transition-all duration-300 ${step === 'details' ? 'w-6 bg-brand-500' : 'w-3 bg-gray-200'}`} />
+            </div>
+            <span className="text-xs text-gray-400">{step === 'type' ? 'Step 1 of 2' : 'Step 2 of 2'}</span>
+          </div>
+
           {step === 'type' ? (
             <div className="space-y-4">
               <h2 className="text-base font-semibold text-gray-900">How will you use Smart Stable Manager?</h2>
@@ -136,22 +143,21 @@ export default function Register() {
                   <PasswordInput
                     id="password"
                     value={password}
-                    onChange={(e) => { setPassword(e.target.value); setPasswordTouched(true); }}
+                    onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"
                     required
                     minLength={12}
                   />
                 </FormField>
-                {(passwordTouched || password.length > 0) && (
-                  <ul className="mt-2 space-y-1">
-                    {PASSWORD_RULES.map((r) => (
-                      <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(password) ? 'text-green-600' : 'text-gray-400'}`}>
-                        <span>{r.test(password) ? '✓' : '○'}</span>
-                        {r.label}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {/* Password requirements shown upfront so users know what's needed before typing */}
+                <ul className="mt-2 space-y-1">
+                  {PASSWORD_RULES.map((r) => (
+                    <li key={r.label} className={`flex items-center gap-1.5 text-xs transition-colors ${r.test(password) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span>{r.test(password) ? '✓' : '○'}</span>
+                      {r.label}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               {accountType === 'stable' && (
@@ -191,9 +197,9 @@ export default function Register() {
                 />
                 <label htmlFor="acceptTerms" className="text-sm text-gray-600">
                   I agree to the{' '}
-                  <Link to="/terms" target="_blank" className="text-brand-600 hover:underline">Terms of Service</Link>
+                  <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Terms of Service</Link>
                   {' '}and{' '}
-                  <Link to="/privacy" target="_blank" className="text-brand-600 hover:underline">Privacy Policy</Link>
+                  <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Privacy Policy</Link>
                 </label>
               </div>
 
