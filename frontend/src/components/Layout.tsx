@@ -73,7 +73,11 @@ export default function Layout({ children }: { children: ReactNode }) {
 
       {/* Mobile header */}
       <div className="lg:hidden bg-sidebar text-sidebar-foreground px-4 py-3 flex items-center justify-between">
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors"
+          aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+        >
           {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
         <span className="font-bold text-white">Smart Stable Manager</span>
@@ -211,7 +215,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <button
           onClick={() => setShowQuickLog(true)}
           className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
-          title="Log a session"
+          aria-label="Log a session"
         >
           <Plus className="w-5 h-5" />
           <span className="hidden sm:inline">Log session</span>
@@ -222,6 +226,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         open={showQuickLog}
         onClose={() => setShowQuickLog(false)}
         horses={horses}
+        onLogged={() => window.dispatchEvent(new CustomEvent('horse:session-logged'))}
       />
     </div>
   );

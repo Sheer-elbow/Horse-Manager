@@ -158,6 +158,15 @@ export default function Dashboard() {
     load();
   }, [user]);
 
+  // Refresh dashboard when a session is logged via the global FAB
+  useEffect(() => {
+    const handler = () => {
+      api<DashboardData>('/dashboard').then(setDashData).catch(() => {});
+    };
+    window.addEventListener('horse:session-logged', handler);
+    return () => window.removeEventListener('horse:session-logged', handler);
+  }, []);
+
   if (loading) return (
     <div className="space-y-6">
       <div>
