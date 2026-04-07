@@ -611,7 +611,7 @@ export default function Programmes() {
                   {canManage && renamingId !== p.id && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="p-1 hover:bg-gray-100 rounded-md transition-colors">
+                        <button aria-label="Programme options" className="p-1 hover:bg-gray-100 rounded-md transition-colors">
                           <MoreVertical className="w-4 h-4 text-gray-400" />
                         </button>
                       </DropdownMenuTrigger>

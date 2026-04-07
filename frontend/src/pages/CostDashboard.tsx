@@ -269,13 +269,14 @@ export default function CostDashboard() {
       {/* Controls */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 px-2 py-1.5">
-          <button onClick={() => setYear((y) => y - 1)} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={() => setYear((y) => y - 1)} aria-label="Previous year" className="p-1 hover:bg-gray-100 rounded">
             <ChevronLeft className="w-4 h-4 text-gray-600" />
           </button>
           <span className="text-sm font-semibold text-gray-900 w-12 text-center">{year}</span>
           <button
             onClick={() => setYear((y) => y + 1)}
             disabled={year >= new Date().getFullYear()}
+            aria-label="Next year"
             className="p-1 hover:bg-gray-100 rounded disabled:opacity-30"
           >
             <ChevronRight className="w-4 h-4 text-gray-600" />

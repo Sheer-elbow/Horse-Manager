@@ -309,12 +309,14 @@ export default function Invoices() {
                               </button>
                               <button
                                 onClick={() => { setEditingInvoice(invoice); setShowForm(true); }}
+                                aria-label="Edit invoice"
                                 className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
                               >
                                 <Pencil className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => setConfirmDeleteId(invoice.id)}
+                                aria-label="Delete invoice"
                                 className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-gray-500 hover:text-red-600"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -394,13 +396,14 @@ export default function Invoices() {
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       onClick={() => handleToggleRecurring(rec.id)}
+                      aria-label={rec.active ? 'Pause recurring schedule' : 'Resume recurring schedule'}
                       className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
-                      title={rec.active ? 'Pause' : 'Resume'}
                     >
                       {rec.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                     </button>
                     <button
                       onClick={() => setConfirmDeleteRecurringId(rec.id)}
+                      aria-label="Delete recurring schedule"
                       className="p-1.5 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors text-gray-500"
                     >
                       <Trash2 className="w-4 h-4" />

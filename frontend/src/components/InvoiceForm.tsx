@@ -506,7 +506,7 @@ export default function InvoiceForm({ onSaved, onCancel, initialInvoice, onRecur
               <p className="text-sm font-medium text-gray-700 truncate">{file?.name || initialInvoice?.fileName}</p>
               {file && <p className="text-xs text-gray-400">{(file.size / 1024).toFixed(0)} KB</p>}
             </div>
-            <button type="button" onClick={removeFile} className="p-1 hover:bg-gray-200 rounded-full transition-colors">
+            <button type="button" onClick={removeFile} aria-label="Remove file" className="p-1 hover:bg-gray-200 rounded-full transition-colors">
               <X className="w-4 h-4 text-gray-500" />
             </button>
           </div>

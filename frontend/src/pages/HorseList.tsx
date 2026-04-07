@@ -177,7 +177,7 @@ export default function HorseList() {
                 <button
                   onClick={() => setDeleteTarget(h)}
                   className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                  title={`Delete ${h.name}`}
+                  aria-label={`Delete ${h.name}`}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
