@@ -229,6 +229,64 @@ export default function Dashboard() {
         <p className="text-sm text-gray-500 mt-0.5">{todayLabel}</p>
       </div>
 
+      {/* My workload today — shown for RIDER, GROOM, TRAINER */}
+      {(user?.role === 'RIDER' || user?.role === 'GROOM' || user?.role === 'TRAINER') && horses.length > 0 && (() => {
+        const todayDate = new Date();
+        const todayAppts = appointments.filter((a) => {
+          const d = new Date(a.scheduledAt);
+          return a.status === 'UPCOMING' &&
+            d.getFullYear() === todayDate.getFullYear() &&
+            d.getMonth() === todayDate.getMonth() &&
+            d.getDate() === todayDate.getDate();
+        });
+        const sessionsDone = dashData?.todayWorkouts.filter((w) => w.logged).length ?? 0;
+        const sessionsTotal = dashData?.todayWorkouts.length ?? 0;
+        const greeting = todayDate.getHours() < 12 ? 'Good morning' : todayDate.getHours() < 18 ? 'Good afternoon' : 'Good evening';
+        return (
+          <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <p className="font-semibold text-brand-900">{greeting}{user.name ? `, ${user.name.split(' ')[0]}` : ''}</p>
+                <p className="text-sm text-brand-700 mt-0.5">
+                  {sessionsTotal === 0
+                    ? 'No sessions scheduled today'
+                    : sessionsDone === sessionsTotal
+                    ? `All ${sessionsTotal} session${sessionsTotal !== 1 ? 's' : ''} logged`
+                    : `${sessionsDone} of ${sessionsTotal} session${sessionsTotal !== 1 ? 's' : ''} logged`}
+                  {todayAppts.length > 0 && ` · ${todayAppts.length} appointment${todayAppts.length !== 1 ? 's' : ''} today`}
+                </p>
+              </div>
+              {unloggedToday.length > 0 && (
+                <span className="shrink-0 text-xs font-medium bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                  {unloggedToday.length} pending
+                </span>
+              )}
+            </div>
+            {unloggedToday.length > 0 && (
+              <div className="space-y-1.5">
+                {unloggedToday.map((w) => (
+                  <Link
+                    key={w.id}
+                    to={`/horses/${w.horseId}/planner`}
+                    className="flex items-center gap-2.5 bg-white rounded-lg px-3 py-2 border border-brand-100 hover:border-brand-300 transition-colors"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className="text-sm font-medium text-gray-800 truncate flex-1">{w.horse.name}</span>
+                    <span className="text-xs text-gray-500 shrink-0">{w.slot}</span>
+                    {(w.currentData as { title?: string })?.title && (
+                      <span className="text-xs text-gray-400 truncate hidden sm:block max-w-[120px]">
+                        {(w.currentData as { title?: string }).title}
+                      </span>
+                    )}
+                    <span className="text-xs text-brand-600 font-medium shrink-0">Log →</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border p-4 hover:shadow-sm transition-shadow">

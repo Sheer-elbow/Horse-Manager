@@ -37,6 +37,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [horses, setHorses] = useState<Horse[]>([]);
   const [quickLogStableId, setQuickLogStableId] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   const handleLogout = () => {
     logout();
@@ -64,6 +65,17 @@ export default function Layout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    const goOnline = () => setIsOffline(false);
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+    };
+  }, []);
+
   const role = user?.role as Role | undefined;
   const allItems = user?.role === 'ADMIN'
     ? [...NAV_ITEMS, ...ADMIN_ITEMS]
@@ -73,6 +85,14 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       <Toaster position="bottom-center" richColors closeButton />
+
+      {/* Offline banner */}
+      {isOffline && (
+        <div className="fixed top-0 inset-x-0 z-[60] flex items-center justify-center gap-2 bg-gray-900 text-white text-xs font-medium py-1.5 px-4">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+          You're offline — changes will not be saved until your connection is restored
+        </div>
+      )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
