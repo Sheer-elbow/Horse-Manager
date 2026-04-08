@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Check } from 'lucide-react';
 import Modal from './Modal';
 import { api } from '../api/client';
+import { Select } from './ui/select';
 import { Horse } from '../types';
 import { AuthenticatedImage } from './AuthenticatedImage';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +49,11 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
   const [selectedHorses, setSelectedHorses] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Sort: user's own horses (OWNER_EDIT / ADMIN) before shared/view-only horses
+  const myHorses = horses.filter((h) => h._accessType === 'OWNER_EDIT' || h._accessType === 'ADMIN');
+  const otherHorses = horses.filter((h) => h._accessType !== 'OWNER_EDIT' && h._accessType !== 'ADMIN');
+  const sortedHorses = [...myHorses, ...otherHorses];
 
   useEffect(() => {
     if (open) {
@@ -137,9 +143,16 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
             {horses.length === 0 ? (
               <p className="p-3 text-sm text-gray-500">No horses available.</p>
             ) : (
-              horses.map((h) => {
+              sortedHorses.map((h, idx) => {
                 const selected = selectedHorses.has(h.id);
+                const isFirstOther = myHorses.length > 0 && otherHorses.length > 0 && idx === myHorses.length;
                 return (
+                  <>
+                    {isFirstOther && (
+                      <div key={`divider-${h.id}`} className="px-3 py-1.5 bg-gray-50 text-xs text-gray-400 font-medium border-t">
+                        Shared horses
+                      </div>
+                    )}
                   <button
                     key={h.id}
                     type="button"
@@ -175,6 +188,7 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
                       {selected && <Check className="w-3 h-3 text-white" />}
                     </div>
                   </button>
+                  </>
                 );
               })
             )}
@@ -200,14 +214,13 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Slot</label>
-            <select
+            <Select
               value={form.slot}
               onChange={(e) => field('slot', e.target.value as 'AM' | 'PM')}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
             >
               <option value="AM">AM</option>
               <option value="PM">PM</option>
-            </select>
+            </Select>
           </div>
         </div>
 

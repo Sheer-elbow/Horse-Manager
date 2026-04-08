@@ -5,6 +5,7 @@ import { User, InviteToken } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Select } from '../components/ui/select';
 import { toast } from 'sonner';
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -291,13 +292,13 @@ export default function Users() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER')} className="w-full border rounded-lg px-3 py-2">
+            <Select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as 'STABLE_LEAD' | 'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER')}>
               <option value="STABLE_LEAD">Stable Lead</option>
               <option value="RIDER">Rider</option>
               <option value="GROOM">Groom</option>
               <option value="OWNER">Owner</option>
               <option value="TRAINER">Trainer</option>
-            </select>
+            </Select>
             {ROLE_DESCRIPTIONS[inviteRole] && (
               <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">{ROLE_DESCRIPTIONS[inviteRole]}</p>
             )}
@@ -321,14 +322,14 @@ export default function Users() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-            <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as User['role'] })} className="w-full border rounded-lg px-3 py-2" disabled={editUser?.id === currentUser?.id}>
+            <Select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as User['role'] })} disabled={editUser?.id === currentUser?.id}>
               <option value="ADMIN">Admin</option>
               <option value="STABLE_LEAD">Stable Lead</option>
               <option value="RIDER">Rider</option>
               <option value="GROOM">Groom</option>
               <option value="OWNER">Owner</option>
               <option value="TRAINER">Trainer</option>
-            </select>
+            </Select>
             {editUser?.id === currentUser?.id && <p className="text-xs text-gray-400 mt-1">Cannot change your own role</p>}
           </div>
           <Button type="submit" className="w-full">Save changes</Button>
