@@ -7,6 +7,10 @@ import { Skeleton } from '../components/Skeleton';
 import { toast } from 'sonner';
 import { TrendingUp, ChevronLeft, ChevronRight, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import {
+  BarChart as RechartsBar, Bar, Cell, ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+} from 'recharts';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -29,8 +33,6 @@ function fmtFull(n: number): string {
 }
 
 // ─── Bar Chart ────────────────────────────────────────────────
-// Uses absolute pixel heights so bars scale correctly regardless of
-// how the flex container resolves percentage heights.
 
 const MAIN_CHART_H = 96;   // px — grand overview
 const MINI_CHART_H = 48;   // px — per-horse cards
@@ -44,48 +46,33 @@ interface BarChartProps {
 }
 
 function BarChart({ data, height, highlightMonth, color = '#6366f1', dimColor = '#a5b4fc' }: BarChartProps) {
-  const max = Math.max(...data.map((d) => d.amount), 0.01);
-
-  // Y-axis guide lines (0%, 50%, 100%)
-  const guides = [0, 50, 100];
-
+  const chartData = data.map((d) => ({ ...d, label: MONTH_LABELS[d.month - 1] }));
   return (
-    <div className="relative" style={{ height }}>
-      {/* Horizontal guide lines */}
-      {guides.slice(1).map((pct) => (
-        <div
-          key={pct}
-          className="absolute left-0 right-0 border-t border-dashed border-gray-100"
-          style={{ bottom: `${(pct / 100) * height}px` }}
+    <ResponsiveContainer width="100%" height={height}>
+      <RechartsBar data={chartData} barCategoryGap="10%" barGap={1}>
+        <RechartsTooltip
+          cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+          content={({ active, payload }) => {
+            if (!active || !payload?.length || !payload[0].value) return null;
+            return (
+              <div className="rounded-md bg-gray-900 px-2 py-1 text-xs text-white shadow-lg">
+                <span className="font-medium">{payload[0].payload.label}</span>
+                <span className="ml-1.5 text-gray-300">{fmtFull(Number(payload[0].value))}</span>
+              </div>
+            );
+          }}
         />
-      ))}
-      {/* Bars */}
-      <div className="absolute inset-0 flex items-end gap-0.5 px-0.5">
-        {data.map((d) => {
-          const barH = max > 0 ? Math.max((d.amount / max) * height, d.amount > 0 ? 4 : 0) : 0;
-          const isHighlight = d.month === highlightMonth;
-          return (
-            <div key={d.month} className="flex-1 flex flex-col items-center group relative">
-              {/* Tooltip */}
-              {d.amount > 0 && (
-                <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs rounded-md px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
-                  <span className="font-medium">{MONTH_LABELS[d.month - 1]}</span>
-                  <span className="ml-1 text-gray-300">{fmtFull(d.amount)}</span>
-                </div>
-              )}
-              <div
-                className="w-full rounded-t-sm transition-opacity"
-                style={{
-                  height: `${barH}px`,
-                  backgroundColor: isHighlight ? color : d.amount > 0 ? dimColor : '#f3f4f6',
-                  opacity: d.amount === 0 ? 0.3 : 1,
-                }}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
+        <Bar dataKey="amount" radius={[2, 2, 0, 0]} minPointSize={2}>
+          {chartData.map((d) => (
+            <Cell
+              key={d.month}
+              fill={d.month === highlightMonth ? color : d.amount > 0 ? dimColor : '#f3f4f6'}
+              opacity={d.amount === 0 ? 0.4 : 1}
+            />
+          ))}
+        </Bar>
+      </RechartsBar>
+    </ResponsiveContainer>
   );
 }
 
@@ -337,24 +324,16 @@ export default function CostDashboard() {
               </span>
             </div>
 
-            {/* Y-axis label */}
-            <div className="flex gap-3 mt-3">
-              <div className="flex flex-col justify-between text-right" style={{ height: MAIN_CHART_H }}>
-                {[data.grandByMonth.reduce((m, d) => Math.max(m, d.amount), 0), 0].map((v, i) => (
-                  <span key={i} className="text-[10px] text-gray-400 leading-none">{fmt(v)}</span>
+            <div className="mt-3">
+              <BarChart
+                data={data.grandByMonth}
+                height={MAIN_CHART_H}
+                highlightMonth={year === new Date().getFullYear() ? currentMonth : undefined}
+              />
+              <div className="flex mt-1.5">
+                {MONTH_LABELS.map((l, i) => (
+                  <span key={i} className="flex-1 text-center text-[10px] text-gray-400">{l}</span>
                 ))}
-              </div>
-              <div className="flex-1">
-                <BarChart
-                  data={data.grandByMonth}
-                  height={MAIN_CHART_H}
-                  highlightMonth={year === new Date().getFullYear() ? currentMonth : undefined}
-                />
-                <div className="flex mt-1.5">
-                  {MONTH_LABELS.map((l, i) => (
-                    <span key={i} className="flex-1 text-center text-[10px] text-gray-400">{l}</span>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
