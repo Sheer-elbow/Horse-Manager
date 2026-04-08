@@ -834,21 +834,22 @@ export default function HorseProfile() {
   const canViewHealth = !isStableStaff || !!horse._isPriority;
 
   // Two-level navigation: 5 top-level groups, each with 1–4 sub-tabs
-  const TAB_GROUPS: { key: string; label: string; subTabs: { key: Tab; label: string; visible: boolean }[] }[] = [
-    { key: 'overview',  label: 'Overview',  subTabs: [{ key: 'overview', label: 'Overview', visible: true }] },
+  // Sub-tab keys are cast as Tab so TS preserves the union type through map/filter chains.
+  const TAB_GROUPS = [
+    { key: 'overview',  label: 'Overview',  subTabs: [{ key: 'overview' as Tab, label: 'Overview', visible: true }] },
     { key: 'health',    label: 'Health',    subTabs: [
-      { key: 'vet',          label: 'Vet',      visible: canViewHealth },
-      { key: 'farrier',      label: 'Farrier',  visible: canViewHealth },
-      { key: 'dentist',      label: 'Dentist',  visible: canViewHealth },
-      { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
+      { key: 'vet' as Tab,          label: 'Vet',      visible: canViewHealth },
+      { key: 'farrier' as Tab,      label: 'Farrier',  visible: canViewHealth },
+      { key: 'dentist' as Tab,      label: 'Dentist',  visible: canViewHealth },
+      { key: 'vaccinations' as Tab, label: 'Vaccines', visible: canViewHealth },
     ]},
-    { key: 'training',  label: 'Training',  subTabs: [{ key: 'programmes', label: 'Programmes', visible: true }] },
+    { key: 'training',  label: 'Training',  subTabs: [{ key: 'programmes' as Tab, label: 'Programmes', visible: true }] },
     { key: 'admin',     label: 'Admin',     subTabs: [
-      { key: 'appointments', label: 'Appointments', visible: canEdit },
-      { key: 'expenses',     label: 'Expenses',     visible: !!canViewExpenses },
-      { key: 'documents',    label: 'Documents',    visible: true },
+      { key: 'appointments' as Tab, label: 'Appointments', visible: canEdit },
+      { key: 'expenses' as Tab,     label: 'Expenses',     visible: !!canViewExpenses },
+      { key: 'documents' as Tab,    label: 'Documents',    visible: true },
     ]},
-    { key: 'timeline',  label: 'Timeline',  subTabs: [{ key: 'timeline', label: 'Timeline', visible: canViewHealth }] },
+    { key: 'timeline',  label: 'Timeline',  subTabs: [{ key: 'timeline' as Tab, label: 'Timeline', visible: canViewHealth }] },
   ].map((g) => ({ ...g, subTabs: g.subTabs.filter((s) => s.visible) }))
    .filter((g) => g.subTabs.length > 0);
 
