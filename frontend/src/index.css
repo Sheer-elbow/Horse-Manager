@@ -21,6 +21,32 @@
   }
 }
 
+/* ─── Typography scale ───────────────────────────────────────────────────────
+   Semantic text classes built on the Inter type scale.
+   Usage: <h2 className="text-heading-2"> instead of ad-hoc font-* combos.
+   ─────────────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* Headings */
+  .text-display   { @apply text-3xl font-bold tracking-tight text-gray-900; }
+  .text-heading-1 { @apply text-2xl font-bold text-gray-900; }
+  .text-heading-2 { @apply text-xl  font-bold text-gray-900; }
+  .text-heading-3 { @apply text-lg  font-semibold text-gray-900; }
+  .text-heading-4 { @apply text-base font-semibold text-gray-800; }
+
+  /* Body */
+  .text-body-lg   { @apply text-base text-gray-700 leading-relaxed; }
+  .text-body      { @apply text-sm   text-gray-700 leading-relaxed; }
+  .text-body-sm   { @apply text-xs   text-gray-600 leading-relaxed; }
+
+  /* UI labels */
+  .text-label     { @apply text-sm font-medium text-gray-700; }
+  .text-label-sm  { @apply text-xs font-medium text-gray-500; }
+
+  /* Muted / secondary */
+  .text-muted     { @apply text-sm text-gray-500; }
+  .text-muted-sm  { @apply text-xs text-gray-400; }
+}
+
 /* Hide scrollbar for tab bars on mobile */
 .scrollbar-hide {
   -ms-overflow-style: none;

@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { Plus, Receipt, Trash2, Pencil, FileText, Filter, CheckCircle2, Circle, Clock, RefreshCw, Pause, Play } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAccessToken } from '../api/client';
+import { Tooltip } from '../components/ui/tooltip';
 
 const STATUS_BADGE: Record<InvoiceStatus, string> = {
   DRAFT: 'bg-gray-100 text-gray-600',
@@ -307,20 +308,24 @@ export default function Invoices() {
                               >
                                 <StatusIcon className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => { setEditingInvoice(invoice); setShowForm(true); }}
-                                aria-label="Edit invoice"
-                                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setConfirmDeleteId(invoice.id)}
-                                aria-label="Delete invoice"
-                                className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-gray-500 hover:text-red-600"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <Tooltip label="Edit invoice">
+                                <button
+                                  onClick={() => { setEditingInvoice(invoice); setShowForm(true); }}
+                                  aria-label="Edit invoice"
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                              </Tooltip>
+                              <Tooltip label="Delete invoice">
+                                <button
+                                  onClick={() => setConfirmDeleteId(invoice.id)}
+                                  aria-label="Delete invoice"
+                                  className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-gray-500 hover:text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </Tooltip>
                             </>
                           )}
                         </div>

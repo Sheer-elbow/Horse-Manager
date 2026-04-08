@@ -10,6 +10,7 @@ import { AuthenticatedImage } from '../components/AuthenticatedImage';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select } from '../components/ui/select';
+import { Tooltip } from '../components/ui/tooltip';
 
 export default function HorseList() {
   const { user } = useAuth();
@@ -191,13 +192,15 @@ export default function HorseList() {
                 </div>
               </Link>
               {isAdmin && (
-                <button
-                  onClick={() => setDeleteTarget(h)}
-                  className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                  aria-label={`Delete ${h.name}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <Tooltip label={`Delete ${h.name}`}>
+                  <button
+                    onClick={() => setDeleteTarget(h)}
+                    className="absolute top-3 right-3 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label={`Delete ${h.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </Tooltip>
               )}
             </div>
           ))}

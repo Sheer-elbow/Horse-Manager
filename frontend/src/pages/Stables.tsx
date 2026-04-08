@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
+import { Tooltip } from '../components/ui/tooltip';
 import { toast } from 'sonner';
 
 export default function Stables() {
@@ -171,12 +172,16 @@ export default function Stables() {
                   </div>
                   {(isAdmin || isOwnStable) && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
-                        <Pencil className="w-4 h-4 text-gray-400" />
-                      </button>
-                      <button onClick={() => setDeleteTarget(s)} aria-label={`Delete ${s.name}`} className="p-1.5 hover:bg-red-50 rounded-md transition-colors">
-                        <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
-                      </button>
+                      <Tooltip label={`Edit ${s.name}`}>
+                        <button onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
+                          <Pencil className="w-4 h-4 text-gray-400" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip label={`Delete ${s.name}`}>
+                        <button onClick={() => setDeleteTarget(s)} aria-label={`Delete ${s.name}`} className="p-1.5 hover:bg-red-50 rounded-md transition-colors">
+                          <Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" />
+                        </button>
+                      </Tooltip>
                     </div>
                   )}
                 </div>

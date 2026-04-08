@@ -264,15 +264,25 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">RPE (1–10)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">RPE</label>
+              {form.intensityRpe && (
+                <span className="text-sm font-semibold text-brand-700">{form.intensityRpe} / 10</span>
+              )}
+            </div>
             <input
-              type="number"
+              type="range"
               min="1"
               max="10"
-              value={form.intensityRpe}
+              step="1"
+              value={form.intensityRpe || ''}
               onChange={(e) => field('intensityRpe', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              className="w-full accent-brand-600 h-2 cursor-pointer"
             />
+            <div className="flex justify-between text-xs text-gray-400 mt-1 px-0.5">
+              <span>Easy</span>
+              <span>Max</span>
+            </div>
           </div>
         </div>
 
