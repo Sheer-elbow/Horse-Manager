@@ -389,6 +389,7 @@ router.delete('/:id', authenticate, requireRole('ADMIN', 'TRAINER'), async (req:
 const scheduleDaySchema = z.object({
   week: z.number().int().min(1),
   day: z.number().int().min(1).max(7),
+  slot: z.enum(['AM', 'PM']).default('AM'),
   title: z.string().min(1),
   category: z.string().min(1),
   durationMin: z.number().int().positive().nullable(),
@@ -467,13 +468,15 @@ router.post('/:id/versions', authenticate, requireRole('ADMIN', 'TRAINER'), asyn
 
     const data = createVersionSchema.parse(req.body);
 
-    // Validate that scheduleData covers exactly numWeeks × 7 days
-    const expectedDays = data.numWeeks * 7;
-    if (data.scheduleData.length !== expectedDays) {
-      res.status(400).json({
-        error: `scheduleData must have exactly ${expectedDays} entries (${data.numWeeks} weeks × 7 days), got ${data.scheduleData.length}`,
-      });
-      return;
+    // Validate: no duplicate week-day-slot combinations
+    const seen = new Set<string>();
+    for (const entry of data.scheduleData) {
+      const key = `${entry.week}-${entry.day}-${entry.slot}`;
+      if (seen.has(key)) {
+        res.status(400).json({ error: `Duplicate schedule entry for week ${entry.week}, day ${entry.day}, slot ${entry.slot}` });
+        return;
+      }
+      seen.add(key);
     }
 
     // Determine next version number

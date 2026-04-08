@@ -26,6 +26,7 @@ const sessionLogSchema = z.object({
   plannedSessionId: z.string().uuid().nullable().optional(),
   sessionType: z.string().nullable().optional(),
   durationMinutes: z.number().int().positive().nullable().optional(),
+  distanceKm: z.number().positive().nullable().optional(),
   intensityRpe: z.number().int().min(1).max(10).nullable().optional(),
   notes: z.string().nullable().optional(),
   rider: z.string().nullable().optional(),
@@ -187,6 +188,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (
         plannedSessionId: data.plannedSessionId ?? null,
         sessionType: data.sessionType ?? null,
         durationMinutes: data.durationMinutes ?? null,
+        distanceKm: data.distanceKm ?? null,
         intensityRpe: data.intensityRpe ?? null,
         notes: data.notes ?? null,
         rider: data.rider ?? null,
@@ -233,6 +235,7 @@ router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async
     const previousData = {
       sessionType: existing.sessionType,
       durationMinutes: existing.durationMinutes,
+      distanceKm: existing.distanceKm,
       intensityRpe: existing.intensityRpe,
       notes: existing.notes,
       rider: existing.rider,
@@ -244,6 +247,7 @@ router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async
       data: {
         sessionType: data.sessionType !== undefined ? (data.sessionType ?? null) : undefined,
         durationMinutes: data.durationMinutes !== undefined ? (data.durationMinutes ?? null) : undefined,
+        distanceKm: data.distanceKm !== undefined ? (data.distanceKm ?? null) : undefined,
         intensityRpe: data.intensityRpe !== undefined ? (data.intensityRpe ?? null) : undefined,
         notes: data.notes !== undefined ? (data.notes ?? null) : undefined,
         rider: data.rider !== undefined ? (data.rider ?? null) : undefined,
@@ -254,6 +258,7 @@ router.put('/:id', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async
     const newData = {
       sessionType: updated.sessionType,
       durationMinutes: updated.durationMinutes,
+      distanceKm: updated.distanceKm,
       intensityRpe: updated.intensityRpe,
       notes: updated.notes,
       rider: updated.rider,

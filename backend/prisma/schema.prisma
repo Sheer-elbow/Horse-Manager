@@ -364,6 +364,7 @@ model ActualSessionLog {
   plannedSessionId String?  @unique @map("planned_session_id")
   sessionType      String?  @map("session_type")
   durationMinutes  Int?     @map("duration_minutes")
+  distanceKm       Float?   @map("distance_km")
   intensityRpe     Int?     @map("intensity_rpe")
   notes            String?
   rider            String?

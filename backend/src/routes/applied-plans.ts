@@ -81,7 +81,7 @@ async function checkCollisions(horseId: string, scheduleData: ScheduleDayEntry[]
   }
 
   const existingSessions = await prisma.plannedSession.findMany({
-    where: { horseId, slot: 'AM', date: { in: scheduledDates } },
+    where: { horseId, date: { in: scheduledDates } },
     select: { date: true },
   });
 
@@ -136,7 +136,7 @@ async function executeApply(params: ApplyParams) {
           originWeek: entry.week,
           originDay: entry.day,
           scheduledDate,
-          slot: 'AM',
+          slot: ((entry.slot as 'AM' | 'PM') ?? 'AM'),
           baselineData: entryJson,
           currentData: entryJson,
           isRest: rest,
@@ -150,7 +150,7 @@ async function executeApply(params: ApplyParams) {
           horseId: params.horseId,
           workoutId: workout.id,
           date: scheduledDate,
-          slot: 'AM',
+          slot: ((entry.slot as 'AM' | 'PM') ?? 'AM'),
           ...sessionFields,
         },
       });
@@ -221,7 +221,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER'), async (req: Auth
     const conflictDates = await checkCollisions(data.horseId, scheduleData, startDate);
     if (conflictDates) {
       res.status(409).json({
-        error: `Cannot apply: ${conflictDates.length} date(s) already have AM planned sessions`,
+        error: `Cannot apply: ${conflictDates.length} date(s) already have planned sessions`,
         conflictDates,
       });
       return;
@@ -493,7 +493,7 @@ router.post('/:id/repeat', authenticate, requireRole('ADMIN', 'TRAINER'), async 
       const conflictDates = await checkCollisions(sourcePlan.horseId, scheduleData, startDate);
       if (conflictDates) {
         res.status(409).json({
-          error: `Cannot repeat: ${conflictDates.length} date(s) already have AM planned sessions`,
+          error: `Cannot repeat: ${conflictDates.length} date(s) already have planned sessions`,
           conflictDates,
         });
         return;
@@ -541,7 +541,7 @@ router.post('/:id/repeat', authenticate, requireRole('ADMIN', 'TRAINER'), async 
       const conflictDates = await checkCollisions(sourcePlan.horseId, amendedSchedule, startDate);
       if (conflictDates) {
         res.status(409).json({
-          error: `Cannot repeat: ${conflictDates.length} date(s) already have AM planned sessions`,
+          error: `Cannot repeat: ${conflictDates.length} date(s) already have planned sessions`,
           conflictDates,
         });
         return;
@@ -614,7 +614,7 @@ router.post('/:id/repeat', authenticate, requireRole('ADMIN', 'TRAINER'), async 
               originWeek: entry.week,
               originDay: entry.day,
               scheduledDate,
-              slot: 'AM',
+              slot: ((entry.slot as 'AM' | 'PM') ?? 'AM'),
               baselineData: entryJson,
               currentData: entryJson,
               isRest: rest,
@@ -628,7 +628,7 @@ router.post('/:id/repeat', authenticate, requireRole('ADMIN', 'TRAINER'), async 
               horseId: sourcePlan.horseId,
               workoutId: workout.id,
               date: scheduledDate,
-              slot: 'AM',
+              slot: ((entry.slot as 'AM' | 'PM') ?? 'AM'),
               ...sessionFields,
             },
           });

@@ -174,14 +174,14 @@ export default function Register() {
                       required
                     />
                   </FormField>
-                  <FormField label="Address (optional)" htmlFor="stableAddress">
+                  <FormField label="Postcode (optional)" htmlFor="stableAddress" hint="Used to show local weather forecasts for your yard">
                     <Input
                       id="stableAddress"
                       type="text"
                       value={stableAddress}
                       onChange={(e) => setStableAddress(e.target.value)}
-                      placeholder="Street, Town, County"
-                      autoComplete="street-address"
+                      placeholder="e.g. RG14 2AB"
+                      autoComplete="postal-code"
                     />
                   </FormField>
                 </div>
