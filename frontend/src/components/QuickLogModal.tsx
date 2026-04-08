@@ -4,9 +4,34 @@ import { Check } from 'lucide-react';
 import Modal from './Modal';
 import { api } from '../api/client';
 import { Select } from './ui/select';
-import { Horse } from '../types';
+import { Horse, WeatherForecast, DailyForecast } from '../types';
 import { AuthenticatedImage } from './AuthenticatedImage';
 import { useAuth } from '../contexts/AuthContext';
+
+function wmoEmoji(code: number): string {
+  if (code === 0) return '☀️';
+  if (code <= 2) return '⛅';
+  if (code === 3) return '☁️';
+  if (code <= 48) return '🌫️';
+  if (code <= 57) return '🌦️';
+  if (code <= 67) return '🌧️';
+  if (code <= 77) return '❄️';
+  if (code <= 82) return '🌦️';
+  if (code <= 86) return '🌨️';
+  return '⛈️';
+}
+
+function conditionLevel(day: DailyForecast): 'good' | 'caution' | 'poor' {
+  if (day.precipitationProbability > 70 || day.windGustsMax > 45) return 'poor';
+  if (day.precipitationProbability > 40 || day.windGustsMax > 28) return 'caution';
+  return 'good';
+}
+
+const CONDITION_STYLES = {
+  good:    { dot: 'bg-green-400',  label: 'Good',    text: 'text-green-700',  bg: 'bg-green-50 border-green-100' },
+  caution: { dot: 'bg-amber-400',  label: 'Caution', text: 'text-amber-700',  bg: 'bg-amber-50 border-amber-100' },
+  poor:    { dot: 'bg-red-400',    label: 'Poor',    text: 'text-red-700',    bg: 'bg-red-50 border-red-100'     },
+};
 
 const SESSION_PRESETS = ['Flat work', 'Jumping', 'Lunging', 'Hack', 'Polo practice', 'Stick & ball', 'Swimming', 'Rest day', 'Walk only'];
 
@@ -14,6 +39,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   horses: Horse[];
+  stableId?: string;
   onLogged?: () => void;
 }
 
@@ -43,12 +69,21 @@ function initialForm(): FormState {
   };
 }
 
-export default function QuickLogModal({ open, onClose, horses, onLogged }: Props) {
+export default function QuickLogModal({ open, onClose, horses, stableId, onLogged }: Props) {
   const { user } = useAuth();
   const [form, setForm] = useState<FormState>(initialForm);
   const [selectedHorses, setSelectedHorses] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [weather, setWeather] = useState<WeatherForecast | null>(null);
+
+  // Fetch today's weather once when the modal opens (if stable has location)
+  useEffect(() => {
+    if (!open || !stableId) return;
+    api<WeatherForecast>(`/weather?stableId=${stableId}`)
+      .then(setWeather)
+      .catch(() => {}); // weather is non-critical
+  }, [open, stableId]);
 
   // Sort: user's own horses (OWNER_EDIT / ADMIN) before shared/view-only horses
   const myHorses = horses.filter((h) => h._accessType === 'OWNER_EDIT' || h._accessType === 'ADMIN');
@@ -125,6 +160,26 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
   return (
     <Modal open={open} onClose={onClose} title="Log session">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Today's conditions strip — shown when weather data is available */}
+        {weather && weather.days.length > 0 && (() => {
+          const today = weather.days[0];
+          const level = conditionLevel(today);
+          const style = CONDITION_STYLES[level];
+          return (
+            <div className={`flex items-center gap-3 px-3 py-2 rounded-lg border text-sm ${style.bg}`}>
+              <span className="text-xl leading-none shrink-0">{wmoEmoji(today.weatherCode)}</span>
+              <div className="flex-1 min-w-0">
+                <span className="font-medium text-gray-800">{Math.round(today.tempMax)}° / {Math.round(today.tempMin)}°</span>
+                <span className="text-gray-500 ml-1.5">{today.description}</span>
+              </div>
+              <span className={`flex items-center gap-1 font-medium shrink-0 ${style.text}`}>
+                <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                {style.label}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Horse picker — first so users confirm which horse(s) immediately */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -264,15 +319,25 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">RPE (1–10)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">RPE</label>
+              {form.intensityRpe && (
+                <span className="text-sm font-semibold text-brand-700">{form.intensityRpe} / 10</span>
+              )}
+            </div>
             <input
-              type="number"
+              type="range"
               min="1"
               max="10"
-              value={form.intensityRpe}
+              step="1"
+              value={form.intensityRpe || ''}
               onChange={(e) => field('intensityRpe', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
+              className="w-full accent-brand-600 h-2 cursor-pointer"
             />
+            <div className="flex justify-between text-xs text-gray-400 mt-1 px-0.5">
+              <span>Easy</span>
+              <span>Max</span>
+            </div>
           </div>
         </div>
 

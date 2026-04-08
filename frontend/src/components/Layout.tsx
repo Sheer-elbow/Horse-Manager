@@ -36,15 +36,20 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [showQuickLog, setShowQuickLog] = useState(false);
   const [horses, setHorses] = useState<Horse[]>([]);
+  const [quickLogStableId, setQuickLogStableId] = useState<string | null>(null);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  // Load horses for the QuickLog FAB (lightweight — just id, name, photoUrl)
+  // Load horses for the QuickLog FAB; derive stableId for weather strip
   useEffect(() => {
-    api<Horse[]>('/horses').then(setHorses).catch(() => {});
+    api<Horse[]>('/horses').then((h) => {
+      setHorses(h);
+      const stable = h.find((horse) => horse.stable?.id)?.stable ?? null;
+      if (stable) setQuickLogStableId(stable.id);
+    }).catch(() => {});
   }, []);
 
   // Cmd+K / Ctrl+K global shortcut
@@ -227,6 +232,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         open={showQuickLog}
         onClose={() => setShowQuickLog(false)}
         horses={horses}
+        stableId={quickLogStableId ?? undefined}
         onLogged={() => window.dispatchEvent(new CustomEvent('horse:session-logged'))}
       />
     </div>
