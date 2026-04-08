@@ -9,6 +9,7 @@ import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Select } from '../components/ui/select';
 
 export default function HorseList() {
   const { user } = useAuth();
@@ -126,17 +127,17 @@ export default function HorseList() {
             </button>
           )}
           {stables.length > 0 && !isStableStaff && (
-            <select
+            <Select
               value={stableFilter}
               onChange={(e) => setStableFilter(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm bg-white"
+              className="w-auto"
             >
               <option value="all">All stables</option>
               {stables.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
               <option value="none">No stable</option>
-            </select>
+            </Select>
           )}
           {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
             <Button onClick={() => setShowAdd(true)}>Add horse</Button>
@@ -145,7 +146,23 @@ export default function HorseList() {
       </div>
 
       {filteredHorses.length === 0 ? (
-        <p className="text-gray-500">{horses.length === 0 ? 'No horses yet.' : 'No horses in this stable.'}</p>
+        horses.length === 0 ? (
+          /* Empty state — CTA in the centre of the screen, in the thumb zone on mobile */
+          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+            <div className="text-6xl mb-4 select-none" aria-hidden="true">&#x1f40e;</div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">No horses yet</h3>
+            <p className="text-sm text-gray-500 mb-6 max-w-xs">
+              Add your first horse to start tracking health records, training plans, and more.
+            </p>
+            {(isAdmin || user?.role === 'OWNER') && (
+              <Button onClick={() => setShowAdd(true)} className="text-base px-6 py-3">
+                Add your first horse
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-500 py-8 text-center">No horses in this stable.</p>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredHorses.map((h) => (

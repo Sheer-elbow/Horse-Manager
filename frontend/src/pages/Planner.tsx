@@ -461,7 +461,7 @@ export default function Planner() {
             {isRest ? 'Rest' : 'Programme'}
           </span>
           {isModified && (
-            <span className="text-[11px] text-amber-600 font-medium">modified</span>
+            <span className="text-xs text-amber-600 font-medium">modified</span>
           )}
         </div>
         {!isRest && (
@@ -490,10 +490,10 @@ export default function Planner() {
           <div className="font-medium text-gray-500 text-xs">Rest day</div>
         )}
         {progName && (
-          <div className="text-[11px] text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
+          <div className="text-xs text-gray-400 truncate mt-0.5" title={progName}>{progName}</div>
         )}
         {planned.notes && (
-          <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={planned.notes}>
+          <div className="text-xs text-gray-400 italic mt-0.5 line-clamp-2" title={planned.notes}>
             {planned.notes}
           </div>
         )}
@@ -502,7 +502,7 @@ export default function Planner() {
           <div className="flex gap-1 mt-1 flex-wrap">
             <button
               onClick={(e) => { e.stopPropagation(); openEditPlanned(dayIdx, slot, planned.id); }}
-              className="text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+              className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-purple-100 text-purple-600 hover:bg-purple-200"
               title="Edit planned session"
             >
               Edit
@@ -511,14 +511,14 @@ export default function Planner() {
               <>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleResetWorkout(workout.id); }}
-                  className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200"
                   title="Reset to original programme data"
                 >
                   Reset
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); openMoveModal(workout.id); }}
-                  className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200"
                   title="Move or swap with another day"
                 >
                   Move
@@ -527,7 +527,7 @@ export default function Planner() {
             )}
             <button
               onClick={(e) => { e.stopPropagation(); handleDeletePlanned(planned.id); }}
-              className="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-500 hover:bg-red-100"
+              className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-red-50 text-red-500 hover:bg-red-100"
               title="Remove planned session"
             >
               ×
@@ -546,7 +546,7 @@ export default function Planner() {
       {planned.durationMinutes && <div className="text-xs text-gray-500">{planned.durationMinutes}min</div>}
       {planned.intensityRpe && <div className="text-xs text-gray-500">RPE {planned.intensityRpe}</div>}
       {planned.notes && (
-        <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={planned.notes}>
+        <div className="text-xs text-gray-400 italic mt-0.5 line-clamp-2" title={planned.notes}>
           {planned.notes}
         </div>
       )}
@@ -554,13 +554,13 @@ export default function Planner() {
         <div className="flex gap-1 mt-1">
           <button
             onClick={(e) => { e.stopPropagation(); openEditPlanned(dayIdx, slot, planned.id); }}
-            className="text-[11px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+            className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-blue-100 text-blue-600 hover:bg-blue-200"
           >
             Edit
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); handleDeletePlanned(planned.id); }}
-            className="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-500 hover:bg-red-100"
+            className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-red-50 text-red-500 hover:bg-red-100"
           >
             ×
           </button>
@@ -754,14 +754,14 @@ export default function Planner() {
                                 <div className="flex gap-1 mt-0.5">
                                   <button
                                     onClick={() => handleCompleteAsPlanned(dayIdx, slot, planned)}
-                                    className="text-[11px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
+                                    className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-green-100 text-green-700 hover:bg-green-200"
                                     title="Mark as completed as planned"
                                   >
                                     ✓ Done
                                   </button>
                                   <button
                                     onClick={() => openLogActual(dayIdx, slot, planned)}
-                                    className="text-[11px] px-1 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                    className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200"
                                   >
                                     Log
                                   </button>
@@ -773,7 +773,7 @@ export default function Planner() {
                         {canEditPlan && (
                           <button
                             onClick={() => openEditPlanned(dayIdx, slot)}
-                            className="w-full text-[11px] py-1 rounded border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 font-medium"
+                            className="w-full text-xs py-2.5 rounded min-h-[44px] flex items-center justify-center border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 font-medium"
                           >
                             + Add session
                           </button>
@@ -792,7 +792,7 @@ export default function Planner() {
                                 {actual._edited && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }}
-                                    className="text-[11px] text-amber-600 hover:underline"
+                                    className="text-xs text-amber-600 hover:underline min-h-[28px] inline-flex items-center"
                                   >
                                     edited
                                   </button>
@@ -800,7 +800,7 @@ export default function Planner() {
                                 {canLogSession && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDeleteActual(actual.id); }}
-                                    className="text-[11px] text-red-400 hover:text-red-600 px-0.5"
+                                    className="text-xs text-red-400 hover:text-red-600 px-1 py-1 min-h-[28px] inline-flex items-center"
                                     title="Delete session log"
                                   >
                                     ×
@@ -813,7 +813,7 @@ export default function Planner() {
                             {actual.intensityRpe && <div className="text-gray-500">RPE {actual.intensityRpe}</div>}
                             {actual.rider && <div className="text-gray-400">{actual.rider}</div>}
                             {actual.notes && (
-                              <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={actual.notes}>
+                              <div className="text-xs text-gray-400 italic mt-0.5 line-clamp-2" title={actual.notes}>
                                 {actual.notes}
                               </div>
                             )}
@@ -822,7 +822,7 @@ export default function Planner() {
                         {canLogSession && (
                           <button
                             onClick={() => openLogActual(dayIdx, slot)}
-                            className="w-full text-[11px] py-1 rounded border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 font-medium"
+                            className="w-full text-xs py-2.5 rounded min-h-[44px] flex items-center justify-center border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 font-medium"
                           >
                             + Log session
                           </button>
@@ -866,13 +866,13 @@ export default function Planner() {
                                   <div className="flex gap-1 mt-0.5">
                                     <button
                                       onClick={() => handleCompleteAsPlanned(dayIdx, slot, planned)}
-                                      className="text-[11px] px-1 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200"
+                                      className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-green-100 text-green-700 hover:bg-green-200"
                                     >
                                       ✓ Done
                                     </button>
                                     <button
                                       onClick={() => openLogActual(dayIdx, slot, planned)}
-                                      className="text-[11px] px-1 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                      className="text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-gray-100 text-gray-600 hover:bg-gray-200"
                                     >
                                       Log
                                     </button>
@@ -884,7 +884,7 @@ export default function Planner() {
                           {canEditPlan && (
                             <button
                               onClick={() => openEditPlanned(dayIdx, slot)}
-                              className="w-full text-[11px] py-1 rounded border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 font-medium"
+                              className="w-full text-xs py-2.5 rounded min-h-[44px] flex items-center justify-center border border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100 hover:text-blue-700 font-medium"
                             >
                               + Add session
                             </button>
@@ -899,10 +899,10 @@ export default function Planner() {
                                 <span className="text-xs text-gray-400 uppercase">Logged</span>
                                 <div className="flex items-center gap-1">
                                   {actual._edited && (
-                                    <button onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }} className="text-[11px] text-amber-600 hover:underline">edited</button>
+                                    <button onClick={(e) => { e.stopPropagation(); openAudit(actual.id); }} className="text-xs text-amber-600 hover:underline min-h-[28px] inline-flex items-center">edited</button>
                                   )}
                                   {canLogSession && (
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteActual(actual.id); }} className="text-[11px] text-red-400 hover:text-red-600">×</button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteActual(actual.id); }} className="text-xs text-red-400 hover:text-red-600 px-1 py-1 min-h-[28px] inline-flex items-center">×</button>
                                   )}
                                 </div>
                               </div>
@@ -910,14 +910,14 @@ export default function Planner() {
                               {actual.durationMinutes && <div className="text-gray-500">{actual.durationMinutes}min</div>}
                               {actual.intensityRpe && <div className="text-gray-500">RPE {actual.intensityRpe}</div>}
                               {actual.notes && (
-                                <div className="text-[11px] text-gray-400 italic mt-0.5 line-clamp-2" title={actual.notes}>{actual.notes}</div>
+                                <div className="text-xs text-gray-400 italic mt-0.5 line-clamp-2" title={actual.notes}>{actual.notes}</div>
                               )}
                             </div>
                           ))}
                           {canLogSession && (
                             <button
                               onClick={() => openLogActual(dayIdx, slot)}
-                              className="w-full text-[11px] py-1 rounded border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 font-medium"
+                              className="w-full text-xs py-2.5 rounded min-h-[44px] flex items-center justify-center border border-green-200 bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 font-medium"
                             >
                               + Log session
                             </button>
@@ -952,16 +952,16 @@ export default function Planner() {
                         {formatDuration(entry) && (
                           <div className="text-xs text-gray-500">{formatDuration(entry)}</div>
                         )}
-                        <div className="text-[11px] text-gray-400 mt-0.5">
+                        <div className="text-xs text-gray-400 mt-0.5">
                           W{w.originWeek}D{w.originDay}
                         </div>
                         {progName && (
-                          <div className="text-[11px] text-gray-400 truncate" title={progName}>{progName}</div>
+                          <div className="text-xs text-gray-400 truncate" title={progName}>{progName}</div>
                         )}
                         {canEditPlan && w.appliedPlan?.status === 'ACTIVE' && (
                           <button
                             onClick={() => openMoveModal(w.id)}
-                            className="mt-1 text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 hover:bg-purple-200"
+                            className="mt-1 text-xs px-2 py-1 rounded min-h-[28px] inline-flex items-center bg-purple-100 text-purple-600 hover:bg-purple-200"
                           >
                             Schedule
                           </button>
