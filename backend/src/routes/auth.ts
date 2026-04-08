@@ -155,20 +155,29 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
   }
 });
 
-// POST /api/auth/invite (admin only)
+// POST /api/auth/invite (admin, or stable_lead for non-admin/non-lead roles)
 const inviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(['STABLE_LEAD', 'RIDER', 'GROOM', 'OWNER', 'TRAINER']).default('RIDER'),
 });
 
+const STABLE_LEAD_INVITABLE_ROLES = new Set(['RIDER', 'GROOM', 'OWNER', 'TRAINER']);
+
 router.post('/invite', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user!.role !== 'ADMIN') {
-      res.status(403).json({ error: 'Admin access required' });
+    const callerRole = req.user!.role;
+    if (callerRole !== 'ADMIN' && callerRole !== 'STABLE_LEAD') {
+      res.status(403).json({ error: 'Admin or Stable Lead access required' });
       return;
     }
 
     const body = inviteSchema.parse(req.body);
+
+    // Stable leads can only invite staff-level roles, not other admins or leads
+    if (callerRole === 'STABLE_LEAD' && !STABLE_LEAD_INVITABLE_ROLES.has(body.role)) {
+      res.status(403).json({ error: 'Stable Leads can only invite Rider, Groom, Owner, or Trainer roles' });
+      return;
+    }
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email: body.email } });

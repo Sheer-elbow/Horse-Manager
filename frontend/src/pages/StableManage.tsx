@@ -66,7 +66,14 @@ export default function StableManage() {
   const [pendingMemberships, setPendingMemberships] = useState<StableMembership[]>([]);
 
   const isAdmin = user?.role === 'ADMIN';
+  const isStableLead = user?.role === 'STABLE_LEAD';
   const [stableAppointments, setStableAppointments] = useState<Appointment[]>([]);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'RIDER' | 'GROOM' | 'OWNER' | 'TRAINER'>('RIDER');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -157,6 +164,26 @@ export default function StableManage() {
       setAssignments(a);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Failed to add staff');
+    }
+  };
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteLoading(true);
+    setInviteError('');
+    setInviteLink(null);
+    try {
+      const data = await api<{ message: string; inviteUrl: string }>('/auth/invite', {
+        method: 'POST',
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
+      setInviteLink(data.inviteUrl);
+      setInviteEmail('');
+      toast.success('Invite sent');
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to send invite');
+    } finally {
+      setInviteLoading(false);
     }
   };
 
@@ -342,7 +369,14 @@ export default function StableManage() {
             <h3 className="font-semibold flex items-center gap-2">
               <Users className="w-4 h-4" /> Staff members
             </h3>
-            <Button size="sm" onClick={() => setShowAddStaff(true)}>Add staff</Button>
+            <div className="flex gap-2">
+              {(isAdmin || isStableLead) && (
+                <Button size="sm" variant="outline" onClick={() => { setShowInvite(true); setInviteLink(null); setInviteError(''); }}>
+                  Invite new
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setShowAddStaff(true)}>Add staff</Button>
+            </div>
           </div>
           {assignments.length === 0 ? (
             <p className="text-sm text-gray-500">No staff assigned yet.</p>
@@ -428,7 +462,14 @@ export default function StableManage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Staff member</label>
             {eligibleUsers.length === 0 ? (
               <p className="text-sm text-gray-500">
-                No eligible users to add. Invite staff from the Users page first.
+                No eligible users to add.{' '}
+                {(isAdmin || isStableLead) ? (
+                  <button type="button" onClick={() => { setShowAddStaff(false); setShowInvite(true); setInviteLink(null); setInviteError(''); }} className="text-brand-600 hover:underline">
+                    Send an invite instead.
+                  </button>
+                ) : (
+                  'Invite staff from the Users page first.'
+                )}
               </p>
             ) : (
               <select
@@ -450,6 +491,65 @@ export default function StableManage() {
             <Button type="submit" className="w-full">Add to stable</Button>
           )}
         </form>
+      </Modal>
+
+      {/* Invite new staff modal */}
+      <Modal
+        open={showInvite}
+        onClose={() => { setShowInvite(false); setInviteLink(null); setInviteError(''); }}
+        title="Invite new staff member"
+      >
+        {inviteLink ? (
+          <div className="space-y-3">
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+              Invite sent! Share this link if the email didn't arrive:
+            </div>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={inviteLink}
+                className="flex-1 border rounded-lg px-3 py-2 text-xs text-gray-600 bg-gray-50 truncate"
+              />
+              <Button size="sm" type="button" onClick={() => { navigator.clipboard.writeText(inviteLink); toast.success('Copied'); }}>
+                Copy
+              </Button>
+            </div>
+            <Button variant="outline" className="w-full" onClick={() => { setInviteLink(null); setInviteEmail(''); }}>
+              Send another
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSendInvite} className="space-y-3">
+            {inviteError && <div className="p-2 bg-red-50 text-red-700 rounded-lg text-sm">{inviteError}</div>}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="staff@example.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="RIDER">Rider</option>
+                <option value="GROOM">Groom</option>
+                <option value="TRAINER">Trainer</option>
+                <option value="OWNER">Owner</option>
+              </select>
+            </div>
+            <Button type="submit" disabled={inviteLoading} className="w-full">
+              {inviteLoading ? 'Sending…' : 'Send invite'}
+            </Button>
+          </form>
+        )}
       </Modal>
     </div>
   );
