@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { api } from '../api/client';
 import { Horse } from '../types';
 import { AuthenticatedImage } from './AuthenticatedImage';
+import { useAuth } from '../contexts/AuthContext';
 
 const SESSION_PRESETS = ['Flat work', 'Jumping', 'Lunging', 'Hack', 'Polo practice', 'Stick & ball', 'Swimming', 'Rest day', 'Walk only'];
 
@@ -42,6 +43,7 @@ function initialForm(): FormState {
 }
 
 export default function QuickLogModal({ open, onClose, horses, onLogged }: Props) {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormState>(initialForm);
   const [selectedHorses, setSelectedHorses] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -49,11 +51,11 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
 
   useEffect(() => {
     if (open) {
-      setForm(initialForm());
-      setSelectedHorses(new Set());
+      setForm({ ...initialForm(), rider: user?.name ?? '' });
+      setSelectedHorses(horses.length === 1 ? new Set([horses[0].id]) : new Set());
       setError('');
     }
-  }, [open]);
+  }, [open, horses, user]);
 
   function toggleHorse(id: string) {
     setSelectedHorses((prev) => {
@@ -117,108 +119,10 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
   return (
     <Modal open={open} onClose={onClose} title="Log session">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Date + slot */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => field('date', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Slot</label>
-            <select
-              value={form.slot}
-              onChange={(e) => field('slot', e.target.value as 'AM' | 'PM')}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="AM">AM</option>
-              <option value="PM">PM</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Session type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Session type</label>
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {SESSION_PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => field('sessionType', form.sessionType === p ? '' : p)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  form.sessionType === p
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-          <input
-            value={form.sessionType}
-            onChange={(e) => field('sessionType', e.target.value)}
-            placeholder="Or type custom..."
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-
-        {/* Duration + RPE */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
-            <input
-              type="number"
-              min="1"
-              value={form.durationMinutes}
-              onChange={(e) => field('durationMinutes', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">RPE (1–10)</label>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              value={form.intensityRpe}
-              onChange={(e) => field('intensityRpe', e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
-
-        {/* Rider */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Rider</label>
-          <input
-            value={form.rider}
-            onChange={(e) => field('rider', e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-
-        {/* Notes */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <textarea
-            value={form.notes}
-            onChange={(e) => field('notes', e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-            rows={2}
-          />
-        </div>
-
-        {/* Horse picker */}
+        {/* Horse picker — first so users confirm which horse(s) immediately */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">Apply to horses</label>
+            <label className="block text-sm font-medium text-gray-700">Horse{horses.length !== 1 ? 's' : ''}</label>
             {horses.length > 1 && (
               <button
                 type="button"
@@ -280,6 +184,104 @@ export default function QuickLogModal({ open, onClose, horses, onLogged }: Props
               {selectedHorses.size} horse{selectedHorses.size !== 1 ? 's' : ''} selected
             </p>
           )}
+        </div>
+
+        {/* Date + slot */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => field('date', e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Slot</label>
+            <select
+              value={form.slot}
+              onChange={(e) => field('slot', e.target.value as 'AM' | 'PM')}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Session type — chips sized to 44px touch target */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Session type</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {SESSION_PRESETS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => field('sessionType', form.sessionType === p ? '' : p)}
+                className={`inline-flex items-center min-h-[44px] px-3 py-2 rounded-full text-sm font-medium transition-colors ${
+                  form.sessionType === p
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <input
+            value={form.sessionType}
+            onChange={(e) => field('sessionType', e.target.value)}
+            placeholder="Or type custom..."
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+
+        {/* Duration + RPE */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
+            <input
+              type="number"
+              min="1"
+              value={form.durationMinutes}
+              onChange={(e) => field('durationMinutes', e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">RPE (1–10)</label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={form.intensityRpe}
+              onChange={(e) => field('intensityRpe', e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        {/* Rider — pre-filled from logged-in user's name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Rider</label>
+          <input
+            value={form.rider}
+            onChange={(e) => field('rider', e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <textarea
+            value={form.notes}
+            onChange={(e) => field('notes', e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+            rows={2}
+          />
         </div>
 
         {error && (

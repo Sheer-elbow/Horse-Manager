@@ -832,19 +832,28 @@ export default function HorseProfile() {
   if (!horse) return null;
 
   const canViewHealth = !isStableStaff || !!horse._isPriority;
-  const allTabs: { key: Tab; label: string; visible: boolean }[] = [
-    { key: 'overview', label: 'Overview', visible: true },
-    { key: 'programmes', label: 'Programmes', visible: true },
-    { key: 'vet', label: 'Vet', visible: canViewHealth },
-    { key: 'farrier', label: 'Farrier', visible: canViewHealth },
-    { key: 'dentist', label: 'Dentist', visible: canViewHealth },
-    { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
-    { key: 'expenses', label: 'Expenses', visible: !!canViewExpenses },
-    { key: 'appointments', label: 'Appointments', visible: canEdit },
-    { key: 'documents', label: 'Documents', visible: true },
-    { key: 'timeline', label: 'Timeline', visible: canViewHealth },
-  ];
-  const tabs = allTabs.filter((t) => t.visible);
+
+  // Two-level navigation: 5 top-level groups, each with 1–4 sub-tabs
+  const TAB_GROUPS: { key: string; label: string; subTabs: { key: Tab; label: string; visible: boolean }[] }[] = [
+    { key: 'overview',  label: 'Overview',  subTabs: [{ key: 'overview', label: 'Overview', visible: true }] },
+    { key: 'health',    label: 'Health',    subTabs: [
+      { key: 'vet',          label: 'Vet',      visible: canViewHealth },
+      { key: 'farrier',      label: 'Farrier',  visible: canViewHealth },
+      { key: 'dentist',      label: 'Dentist',  visible: canViewHealth },
+      { key: 'vaccinations', label: 'Vaccines', visible: canViewHealth },
+    ]},
+    { key: 'training',  label: 'Training',  subTabs: [{ key: 'programmes', label: 'Programmes', visible: true }] },
+    { key: 'admin',     label: 'Admin',     subTabs: [
+      { key: 'appointments', label: 'Appointments', visible: canEdit },
+      { key: 'expenses',     label: 'Expenses',     visible: !!canViewExpenses },
+      { key: 'documents',    label: 'Documents',    visible: true },
+    ]},
+    { key: 'timeline',  label: 'Timeline',  subTabs: [{ key: 'timeline', label: 'Timeline', visible: canViewHealth }] },
+  ].map((g) => ({ ...g, subTabs: g.subTabs.filter((s) => s.visible) }))
+   .filter((g) => g.subTabs.length > 0);
+
+  // Which top group contains the active tab?
+  const activeGroup = TAB_GROUPS.find((g) => g.subTabs.some((s) => s.key === tab)) ?? TAB_GROUPS[0];
 
   return (
     <div className="overflow-hidden">
@@ -867,19 +876,46 @@ export default function HorseProfile() {
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0.5 sm:gap-1 mb-4 sm:mb-6 overflow-x-auto border-b scrollbar-hide">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-              tab === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Tabs — 5 top-level groups */}
+      <div className="mb-4 sm:mb-6">
+        <div className="relative">
+          <div className="flex gap-0.5 sm:gap-1 overflow-x-auto border-b scrollbar-hide">
+            {TAB_GROUPS.map((g) => (
+              <button
+                key={g.key}
+                onClick={() => setTab(g.subTabs[0].key)}
+                className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+                  activeGroup.key === g.key
+                    ? 'border-brand-600 text-brand-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+          {/* Fade indicator for horizontal overflow */}
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white to-transparent" />
+        </div>
+
+        {/* Sub-tabs — only shown when the active group has more than one option */}
+        {activeGroup.subTabs.length > 1 && (
+          <div className="flex gap-1.5 mt-2 flex-wrap">
+            {activeGroup.subTabs.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setTab(s.key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  tab === s.key
+                    ? 'bg-brand-100 text-brand-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {tab === 'overview' && (

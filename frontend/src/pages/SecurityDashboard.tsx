@@ -166,7 +166,7 @@ function OverviewTab({ summary, onRefresh }: { summary: SecuritySummary; onRefre
               <ShieldAlert className="w-4 h-4 text-red-500" />
               Recent alerts
             </h3>
-            <button onClick={onRefresh} className="text-gray-400 hover:text-gray-600">
+            <button onClick={onRefresh} aria-label="Refresh alerts" className="text-gray-400 hover:text-gray-600">
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>

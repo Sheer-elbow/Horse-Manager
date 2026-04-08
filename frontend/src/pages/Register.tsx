@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api, setTokens } from '../api/client';
 import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { FormField } from '../components/ui/form-field';
 import { PasswordInput } from '../components/ui/password-input';
 import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
 
@@ -15,7 +17,6 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordTouched, setPasswordTouched] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [stableName, setStableName] = useState('');
   const [stableAddress, setStableAddress] = useState('');
@@ -25,7 +26,6 @@ export default function Register() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setPasswordTouched(true);
     setError('');
     if (!passwordValid(password)) {
       setError('Please meet all password requirements.');
@@ -70,6 +70,15 @@ export default function Register() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg border p-6">
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 mb-5">
+            <div className="flex gap-1.5">
+              <div className={`h-1.5 rounded-full transition-all duration-300 ${step === 'type' ? 'w-6 bg-brand-500' : 'w-3 bg-brand-300'}`} />
+              <div className={`h-1.5 rounded-full transition-all duration-300 ${step === 'details' ? 'w-6 bg-brand-500' : 'w-3 bg-gray-200'}`} />
+            </div>
+            <span className="text-xs text-gray-400">{step === 'type' ? 'Step 1 of 2' : 'Step 2 of 2'}</span>
+          </div>
+
           {step === 'type' ? (
             <div className="space-y-4">
               <h2 className="text-base font-semibold text-gray-900">How will you use Smart Stable Manager?</h2>
@@ -108,76 +117,74 @@ export default function Register() {
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
               )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Your name</label>
-                <input
+              <FormField label="Your name" htmlFor="name">
+                <Input
+                  id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  required
                   placeholder="Full name"
+                  autoComplete="name"
+                  required
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
+              </FormField>
+              <FormField label="Email" htmlFor="email">
+                <Input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  autoComplete="email"
                   required
                 />
-              </div>
+              </FormField>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <PasswordInput
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setPasswordTouched(true); }}
-                  required
-                  minLength={12}
-                />
-                {passwordTouched && password.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {PASSWORD_RULES.map((r) => (
-                      <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.test(password) ? 'text-green-600' : 'text-gray-400'}`}>
-                        <span>{r.test(password) ? '✓' : '○'}</span>
-                        {r.label}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <FormField label="Password" htmlFor="password">
+                  <PasswordInput
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    required
+                    minLength={12}
+                  />
+                </FormField>
+                {/* Password requirements shown upfront so users know what's needed before typing */}
+                <ul className="mt-2 space-y-1">
+                  {PASSWORD_RULES.map((r) => (
+                    <li key={r.label} className={`flex items-center gap-1.5 text-xs transition-colors ${r.test(password) ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span>{r.test(password) ? '✓' : '○'}</span>
+                      {r.label}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               {accountType === 'stable' && (
-                <>
-                  <div className="border-t pt-4">
-                    <div className="text-sm font-medium text-gray-700 mb-3">Your stable</div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Stable name</label>
-                        <input
-                          type="text"
-                          value={stableName}
-                          onChange={(e) => setStableName(e.target.value)}
-                          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                          placeholder="e.g. Sunridge Equestrian"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Address (optional)</label>
-                        <input
-                          type="text"
-                          value={stableAddress}
-                          onChange={(e) => setStableAddress(e.target.value)}
-                          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                          placeholder="Street, Town, County"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
+                <div className="border-t pt-4 space-y-3">
+                  <div className="text-sm font-medium text-gray-700">Your stable</div>
+                  <FormField label="Stable name" htmlFor="stableName">
+                    <Input
+                      id="stableName"
+                      type="text"
+                      value={stableName}
+                      onChange={(e) => setStableName(e.target.value)}
+                      placeholder="e.g. Sunridge Equestrian"
+                      autoComplete="organization"
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Address (optional)" htmlFor="stableAddress">
+                    <Input
+                      id="stableAddress"
+                      type="text"
+                      value={stableAddress}
+                      onChange={(e) => setStableAddress(e.target.value)}
+                      placeholder="Street, Town, County"
+                      autoComplete="street-address"
+                    />
+                  </FormField>
+                </div>
               )}
 
               <div className="flex items-start gap-2">
@@ -190,9 +197,9 @@ export default function Register() {
                 />
                 <label htmlFor="acceptTerms" className="text-sm text-gray-600">
                   I agree to the{' '}
-                  <Link to="/terms" target="_blank" className="text-brand-600 hover:underline">Terms of Service</Link>
+                  <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Terms of Service</Link>
                   {' '}and{' '}
-                  <Link to="/privacy" target="_blank" className="text-brand-600 hover:underline">Privacy Policy</Link>
+                  <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Privacy Policy</Link>
                 </label>
               </div>
 

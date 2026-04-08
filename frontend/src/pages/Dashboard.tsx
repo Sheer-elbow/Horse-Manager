@@ -6,6 +6,7 @@ import { Horse, User, Stable } from '../types';
 import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
+import WeatherWidget from '../components/WeatherWidget';
 import { listExpiringDocuments } from '../api/documents';
 import type { HorseDocument } from '../types';
 
@@ -109,6 +110,7 @@ export default function Dashboard() {
   const [dashData, setDashData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [myStableStaffCount, setMyStableStaffCount] = useState<number | null>(null);
+  const [myStable, setMyStable] = useState<{ id: string; name: string } | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expiringDocs, setExpiringDocs] = useState<HorseDocument[]>([]);
   const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -122,6 +124,9 @@ export default function Dashboard() {
         ]);
         setHorses(h);
         setDashData(dash);
+        // Derive stable context from horses — covers RIDER, GROOM, OWNER, STABLE_LEAD with horses
+        const horseStable = h.find((horse) => horse.stable?.id)?.stable ?? null;
+        if (horseStable) setMyStable(horseStable);
         try {
           const apptsData = await api<Appointment[]>('/appointments/upcoming');
           setAppointments(apptsData);
@@ -136,8 +141,12 @@ export default function Dashboard() {
         }
         if (user?.role === 'STABLE_LEAD') {
           try {
-            const myStables = await api<{ _count?: { stableAssignments: number } }[]>('/stables/my');
-            if (myStables.length > 0) setMyStableStaffCount(myStables[0]._count?.stableAssignments ?? 0);
+            const myStables = await api<Stable[]>('/stables/my');
+            if (myStables.length > 0) {
+              setMyStableStaffCount(myStables[0]._count?.stableAssignments ?? 0);
+              // Fallback for a STABLE_LEAD who has a stable but no horses yet
+              if (!horseStable) setMyStable({ id: myStables[0].id, name: myStables[0].name });
+            }
           } catch { /* non-critical */ }
         }
       } catch (err) {
@@ -148,6 +157,15 @@ export default function Dashboard() {
     };
     load();
   }, [user]);
+
+  // Refresh dashboard when a session is logged via the global FAB
+  useEffect(() => {
+    const handler = () => {
+      api<DashboardData>('/dashboard').then(setDashData).catch(() => {});
+    };
+    window.addEventListener('horse:session-logged', handler);
+    return () => window.removeEventListener('horse:session-logged', handler);
+  }, []);
 
   if (loading) return (
     <div className="space-y-6">
@@ -326,6 +344,11 @@ export default function Dashboard() {
           </div>
         );
       })()}
+
+      {/* Weather widget — shown when a stable with location data is associated */}
+      {myStable && (
+        <WeatherWidget stableId={myStable.id} stableName={myStable.name} />
+      )}
 
       {/* Today's sessions */}
       {(dashData?.todayWorkouts.length ?? 0) > 0 && (

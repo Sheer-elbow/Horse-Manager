@@ -67,13 +67,17 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster position="bottom-center" richColors closeButton />
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {/* Mobile header */}
       <div className="lg:hidden bg-sidebar text-sidebar-foreground px-4 py-3 flex items-center justify-between">
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-1 hover:bg-sidebar-accent rounded-lg transition-colors"
+          aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+        >
           {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
         <span className="font-bold text-white">Smart Stable Manager</span>
@@ -198,23 +202,24 @@ export default function Layout({ children }: { children: ReactNode }) {
           />
         )}
 
-        {/* Main content */}
-        <main className="flex-1 min-w-0 min-h-screen p-4 lg:p-8 overflow-x-hidden">
+        {/* Main content — pb-24 gives clearance for the FAB on mobile */}
+        <main className="flex-1 min-w-0 min-h-screen p-4 pb-24 lg:p-8 lg:pb-8 overflow-x-hidden">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>
         </main>
       </div>
 
-      {/* Global QuickLog FAB — visible on all pages when user has horses */}
+      {/* Global QuickLog FAB — clears iOS home indicator via safe-area-inset-bottom */}
       {horses.length > 0 && (
         <button
           onClick={() => setShowQuickLog(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
-          title="Log a session"
+          className="fixed right-6 z-40 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white px-4 py-3 rounded-full shadow-lg transition-colors font-medium text-sm"
+          style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+          aria-label="Log a session"
         >
           <Plus className="w-5 h-5" />
-          <span className="hidden sm:inline">Log session</span>
+          <span>Log session</span>
         </button>
       )}
 
@@ -222,6 +227,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         open={showQuickLog}
         onClose={() => setShowQuickLog(false)}
         horses={horses}
+        onLogged={() => window.dispatchEvent(new CustomEvent('horse:session-logged'))}
       />
     </div>
   );
