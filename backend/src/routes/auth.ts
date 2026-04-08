@@ -293,6 +293,32 @@ router.post('/register', apiLimiter, async (req, res: Response) => {
   }
 });
 
+// GET /api/auth/invite-preview?token=... — unauthenticated, safe to call before account creation
+router.get('/invite-preview', async (req, res: Response) => {
+  const { token } = req.query;
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ error: 'Token required' });
+    return;
+  }
+  try {
+    const invite = await prisma.inviteToken.findUnique({
+      where: { token },
+      include: { creator: { select: { name: true, email: true } } },
+    });
+    if (!invite || invite.usedAt || invite.expiresAt < new Date()) {
+      res.status(400).json({ error: 'Invalid or expired invite' });
+      return;
+    }
+    res.json({
+      email: invite.email,
+      role: invite.role,
+      inviterName: invite.creator.name || invite.creator.email,
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to load invite details' });
+  }
+});
+
 // POST /api/auth/accept-invite
 const acceptInviteSchema = z.object({
   token: z.string(),
