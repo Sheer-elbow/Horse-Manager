@@ -52,6 +52,7 @@ interface FormState {
   slot: 'AM' | 'PM';
   sessionType: string;
   durationMinutes: string;
+  distanceKm: string;
   intensityRpe: string;
   rider: string;
   notes: string;
@@ -63,6 +64,7 @@ function initialForm(): FormState {
     slot: defaultSlot(),
     sessionType: '',
     durationMinutes: '',
+    distanceKm: '',
     intensityRpe: '',
     rider: '',
     notes: '',
@@ -134,6 +136,7 @@ export default function QuickLogModal({ open, onClose, horses, stableId, onLogge
               slot: form.slot,
               sessionType: form.sessionType || null,
               durationMinutes: form.durationMinutes ? parseInt(form.durationMinutes) : null,
+              distanceKm: form.distanceKm ? parseFloat(form.distanceKm) : null,
               intensityRpe: form.intensityRpe ? parseInt(form.intensityRpe) : null,
               rider: form.rider || null,
               notes: form.notes || null,
@@ -306,7 +309,7 @@ export default function QuickLogModal({ open, onClose, horses, stableId, onLogge
           />
         </div>
 
-        {/* Duration + RPE */}
+        {/* Duration + Distance */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
@@ -319,25 +322,39 @@ export default function QuickLogModal({ open, onClose, horses, stableId, onLogge
             />
           </div>
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">RPE</label>
-              {form.intensityRpe && (
-                <span className="text-sm font-semibold text-brand-700">{form.intensityRpe} / 10</span>
-              )}
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Distance (km)</label>
             <input
-              type="range"
-              min="1"
-              max="10"
-              step="1"
-              value={form.intensityRpe || ''}
-              onChange={(e) => field('intensityRpe', e.target.value)}
-              className="w-full accent-brand-600 h-2 cursor-pointer"
+              type="number"
+              min="0"
+              step="0.1"
+              value={form.distanceKm}
+              onChange={(e) => field('distanceKm', e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              placeholder="0.0"
             />
-            <div className="flex justify-between text-xs text-gray-400 mt-1 px-0.5">
-              <span>Easy</span>
-              <span>Max</span>
-            </div>
+          </div>
+        </div>
+
+        {/* RPE */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700">RPE</label>
+            {form.intensityRpe && (
+              <span className="text-sm font-semibold text-brand-700">{form.intensityRpe} / 10</span>
+            )}
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            step="1"
+            value={form.intensityRpe || ''}
+            onChange={(e) => field('intensityRpe', e.target.value)}
+            className="w-full accent-brand-600 h-2 cursor-pointer"
+          />
+          <div className="flex justify-between text-xs text-gray-400 mt-1 px-0.5">
+            <span>Easy</span>
+            <span>Max</span>
           </div>
         </div>
 
