@@ -7,28 +7,64 @@ interface Props {
 
 interface State {
   error: Error | null;
+  reloading: boolean;
+}
+
+// Detects Safari "Load failed", Chrome "Loading chunk X failed", Firefox dynamic import errors
+function isChunkLoadError(err: Error): boolean {
+  return (
+    /loading chunk/i.test(err.message) ||
+    /load failed/i.test(err.message) ||
+    /failed to fetch dynamically imported module/i.test(err.message) ||
+    /error loading dynamically imported module/i.test(err.message) ||
+    (err.name === 'ChunkLoadError')
+  );
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, reloading: false };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Could forward to a logging service here
     console.error('[ErrorBoundary]', error, info.componentStack);
+
+    // Stale PWA cache — chunk hashes changed after a deploy.
+    // Force a hard reload once; the browser will fetch fresh index.html + chunks.
+    if (isChunkLoadError(error)) {
+      const reloadKey = 'chunk_error_reload';
+      const lastReload = Number(sessionStorage.getItem(reloadKey) ?? 0);
+      const now = Date.now();
+      // Only auto-reload once per session to avoid infinite loops
+      if (now - lastReload > 10_000) {
+        sessionStorage.setItem(reloadKey, String(now));
+        this.setState({ reloading: true });
+        window.location.reload();
+      }
+    }
   }
 
   handleReset = () => {
-    this.setState({ error: null });
+    this.setState({ error: null, reloading: false });
     window.location.href = '/';
   };
 
   render() {
-    const { error } = this.state;
+    const { error, reloading } = this.state;
     if (!error) return this.props.children;
+
+    if (reloading || isChunkLoadError(error)) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+          <div className="text-center">
+            <div className="text-4xl mb-4">🐴</div>
+            <p className="text-sm text-gray-500">Updating app, please wait…</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
