@@ -14,6 +14,7 @@ export interface ScheduleBlock {
 export interface ScheduleDayEntry {
   week: number;
   day: number;
+  slot?: string;   // 'AM' | 'PM'
   title: string;
   category: string;
   durationMin: number | null;
@@ -39,6 +40,7 @@ export function makeRestEntry(week: number, day: number): ScheduleDayEntry {
   return {
     week,
     day,
+    slot: 'AM',
     title: 'Rest',
     category: 'rest',
     durationMin: null,

@@ -121,7 +121,7 @@ export default function Programmes() {
   const [builderProgrammeName, setBuilderProgrammeName] = useState('');
   const [builderNumWeeks, setBuilderNumWeeks] = useState(4);
   const [builderCells, setBuilderCells] = useState<Record<string, BuilderCell>>({});
-  const [editCell, setEditCell] = useState<{ week: number; day: number } | null>(null);
+  const [editCell, setEditCell] = useState<{ week: number; day: number; slot: 'AM' | 'PM' } | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensityMode: 'rpe', intensity: '', distance: '', distanceUnit: 'km', pace: '', paceUnit: 'min/km', jumpHeight: '', jumpType: '', jumpCount: '' });
   const [builderSaving, setBuilderSaving] = useState(false);
 
@@ -411,8 +411,8 @@ export default function Programmes() {
 
   const BLANK_FORM: EditForm = { title: '', category: 'Flatwork', durationMin: '', durationMax: '', intensityMode: 'rpe', intensity: '', distance: '', distanceUnit: 'km', pace: '', paceUnit: 'min/km', jumpHeight: '', jumpType: '', jumpCount: '' };
 
-  const selectCell = (week: number, day: number) => {
-    const key = `${week}-${day}`;
+  const selectCell = (week: number, day: number, slot: 'AM' | 'PM') => {
+    const key = `${week}-${day}-${slot}`;
     const existing = builderCells[key];
     if (existing) {
       const preset = INTENSITY_LEVELS.find((l) => l.label === existing.intensityLabel);
@@ -437,12 +437,12 @@ export default function Programmes() {
     } else {
       setEditForm(BLANK_FORM);
     }
-    setEditCell({ week, day });
+    setEditCell({ week, day, slot });
   };
 
   const saveEditCell = () => {
     if (!editCell) return;
-    const key = `${editCell.week}-${editCell.day}`;
+    const key = `${editCell.week}-${editCell.day}-${editCell.slot}`;
     const isRest = editForm.category === 'Rest' || !editForm.title.trim();
     if (isRest) {
       setBuilderCells((prev) => { const next = { ...prev }; delete next[key]; return next; });
@@ -489,7 +489,7 @@ export default function Programmes() {
 
   const clearEditCell = () => {
     if (!editCell) return;
-    const key = `${editCell.week}-${editCell.day}`;
+    const key = `${editCell.week}-${editCell.day}-${editCell.slot}`;
     setBuilderCells((prev) => {
       const next = { ...prev };
       delete next[key];
@@ -504,16 +504,16 @@ export default function Programmes() {
     const scheduleData = [];
     for (let w = 1; w <= builderNumWeeks; w++) {
       for (let d = 1; d <= 7; d++) {
-        const cell = builderCells[`${w}-${d}`];
-        if (cell) {
-          scheduleData.push({ week: w, day: d, ...cell });
-        } else {
-          scheduleData.push({
-            week: w, day: d,
-            title: 'Rest', category: 'Rest',
-            durationMin: null, durationMax: null,
-            intensityLabel: null, blocks: [],
-          });
+        const amCell = builderCells[`${w}-${d}-AM`];
+        const pmCell = builderCells[`${w}-${d}-PM`];
+        // AM slot — always present (rest if nothing set)
+        scheduleData.push({
+          week: w, day: d, slot: 'AM',
+          ...(amCell ?? { title: 'Rest', category: 'Rest', durationMin: null, durationMax: null, intensityLabel: null, blocks: [] }),
+        });
+        // PM slot — only if explicitly set
+        if (pmCell) {
+          scheduleData.push({ week: w, day: d, slot: 'PM', ...pmCell });
         }
       }
     }
@@ -909,35 +909,35 @@ export default function Programmes() {
                   <tr key={week} className="border-b last:border-0">
                     <td className="px-2 py-1 text-gray-400 font-medium whitespace-nowrap">W{week}</td>
                     {[1,2,3,4,5,6,7].map((day) => {
-                      const key = `${week}-${day}`;
-                      const cell = builderCells[key];
-                      const isSelected = editCell?.week === week && editCell?.day === day;
-                      const colorClass = cell ? (CELL_COLORS[cell.category] ?? CELL_COLORS.Other) : '';
                       return (
                         <td key={day} className="px-1 py-1">
-                          <button
-                            onClick={() => selectCell(week, day)}
-                            className={`w-full min-h-[32px] rounded border text-left px-1.5 py-1 transition-colors text-[11px] leading-tight ${
-                              isSelected
-                                ? 'ring-2 ring-brand-500 ring-offset-1'
-                                : ''
-                            } ${
-                              cell
-                                ? colorClass
-                                : 'border-dashed border-gray-200 text-gray-300 hover:border-gray-300 hover:text-gray-400'
-                            }`}
-                          >
-                            {cell ? (
-                              <div>
-                                <div className="font-medium truncate max-w-[64px]">{cell.title}</div>
-                                {cell.durationMin && (
-                                  <div className="opacity-70">{cell.durationMin}{cell.durationMax ? `–${cell.durationMax}` : ''}m</div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="text-center w-full">+</div>
-                            )}
-                          </button>
+                          <div className="space-y-0.5">
+                            {(['AM', 'PM'] as const).map((slot) => {
+                              const key = `${week}-${day}-${slot}`;
+                              const cell = builderCells[key];
+                              const isSelected = editCell?.week === week && editCell?.day === day && editCell?.slot === slot;
+                              const colorClass = cell ? (CELL_COLORS[cell.category] ?? CELL_COLORS.Other) : '';
+                              return (
+                                <button
+                                  key={slot}
+                                  onClick={() => selectCell(week, day, slot)}
+                                  className={`w-full min-h-[24px] rounded border text-left px-1 py-0.5 transition-colors text-[10px] leading-tight ${
+                                    isSelected ? 'ring-2 ring-brand-500 ring-offset-1' : ''
+                                  } ${
+                                    cell
+                                      ? colorClass
+                                      : 'border-dashed border-gray-200 text-gray-300 hover:border-gray-300 hover:text-gray-400'
+                                  }`}
+                                >
+                                  {cell ? (
+                                    <span className="font-medium truncate block max-w-[60px]">{slot} {cell.title}</span>
+                                  ) : (
+                                    <span className="text-center block w-full">{slot} +</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </td>
                       );
                     })}
@@ -952,7 +952,7 @@ export default function Programmes() {
         {editCell && (
           <div className="mt-3 border rounded-lg p-3 bg-gray-50 space-y-3">
             <div className="text-sm font-medium text-gray-700">
-              Week {editCell.week} · {DAYS_SHORT[editCell.day - 1]}
+              Week {editCell.week} · {DAYS_SHORT[editCell.day - 1]} · {editCell.slot}
             </div>
 
             {/* Title + Category */}
