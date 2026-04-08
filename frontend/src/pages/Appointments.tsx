@@ -5,7 +5,7 @@ import { Horse } from '../types';
 import Modal from '../components/Modal';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
-import { Calendar, Plus } from 'lucide-react';
+import { Calendar, List, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 
 interface Appointment {
@@ -56,11 +56,174 @@ const APPT_TYPE_LABELS: Record<string, string> = {
 };
 
 type FilterTab = 'upcoming' | 'all';
+type ViewMode = 'list' | 'week';
+
+// ─── Week calendar helpers ────────────────────────────────────────────────────
+
+function getWeekStart(offsetWeeks: number): Date {
+  const d = new Date();
+  // shift to Monday
+  const day = d.getDay(); // 0=Sun
+  const diff = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diff + offsetWeeks * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+}
+
+function formatWeekRange(start: Date): string {
+  const end = addDays(start, 6);
+  const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
+const WEEK_DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+interface WeekCalendarProps {
+  appointments: Appointment[];
+  weekOffset: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onEdit: (a: Appointment) => void;
+  onComplete: (a: Appointment) => void;
+  onCancel: (a: Appointment) => void;
+}
+
+function WeekCalendar({ appointments, weekOffset, onPrev, onNext, onEdit, onComplete, onCancel }: WeekCalendarProps) {
+  const weekStart = getWeekStart(weekOffset);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
+
+  return (
+    <div>
+      {/* Week nav */}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={onPrev}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          aria-label="Previous week"
+        >
+          <ChevronLeft className="w-4 h-4 text-gray-600" />
+        </button>
+        <span className="text-sm font-semibold text-gray-700 flex-1 text-center">
+          {formatWeekRange(weekStart)}
+        </span>
+        <button
+          onClick={onNext}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          aria-label="Next week"
+        >
+          <ChevronRight className="w-4 h-4 text-gray-600" />
+        </button>
+      </div>
+
+      {/* 7-column grid */}
+      <div className="grid grid-cols-7 gap-1 overflow-x-auto">
+        {days.map((day, i) => {
+          const isToday = isSameDay(day, today);
+          const dayAppts = appointments.filter((a) => isSameDay(new Date(a.scheduledAt), day));
+          const dateKey = day.toISOString().split('T')[0];
+          const expanded = expandedDay === dateKey;
+
+          return (
+            <div key={dateKey} className="min-w-0">
+              {/* Day header */}
+              <button
+                onClick={() => setExpandedDay(expanded ? null : dateKey)}
+                className={`w-full text-center rounded-lg py-2 mb-1.5 transition-colors ${
+                  isToday
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                <div className={`text-[10px] font-medium uppercase tracking-wide ${isToday ? 'text-brand-100' : 'text-gray-400'}`}>
+                  {WEEK_DAY_LABELS[i]}
+                </div>
+                <div className={`text-sm font-bold leading-tight ${isToday ? 'text-white' : 'text-gray-900'}`}>
+                  {day.getDate()}
+                </div>
+                {dayAppts.length > 0 && (
+                  <div className={`text-[10px] font-medium mt-0.5 ${isToday ? 'text-brand-100' : 'text-brand-600'}`}>
+                    {dayAppts.length}
+                  </div>
+                )}
+              </button>
+
+              {/* Appointment chips */}
+              <div className="space-y-1">
+                {dayAppts.slice(0, expanded ? undefined : 2).map((appt) => (
+                  <div
+                    key={appt.id}
+                    className={`rounded px-1.5 py-1 text-[10px] leading-tight cursor-pointer group ${
+                      APPT_TYPE_BADGE[appt.type] ?? 'bg-gray-100 text-gray-600'
+                    } ${appt.status !== 'UPCOMING' ? 'opacity-50' : ''}`}
+                    title={`${appt.horse.name} · ${APPT_TYPE_LABELS[appt.type]}${appt.practitionerName ? ` · ${appt.practitionerName}` : ''}`}
+                  >
+                    <div className="font-medium truncate">{appt.horse.name}</div>
+                    <div className="truncate opacity-75">
+                      {new Date(appt.scheduledAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      {' '}{appt.type === 'OTHER' ? (appt.typeOther ?? 'Other') : APPT_TYPE_LABELS[appt.type]}
+                    </div>
+                    {appt.status === 'UPCOMING' && (
+                      <div className="hidden group-hover:flex gap-1 mt-1 flex-wrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onComplete(appt); }}
+                          className="text-green-700 hover:underline font-semibold"
+                        >
+                          Done
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onEdit(appt); }}
+                          className="text-gray-600 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onCancel(appt); }}
+                          className="text-red-600 hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {!expanded && dayAppts.length > 2 && (
+                  <button
+                    onClick={() => setExpandedDay(dateKey)}
+                    className="w-full text-[10px] text-gray-400 hover:text-gray-600 text-center py-0.5"
+                  >
+                    +{dayAppts.length - 2} more
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function Appointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<FilterTab>('upcoming');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [weekOffset, setWeekOffset] = useState(0);
 
   // Horse selector for Add
   const [horses, setHorses] = useState<Horse[]>([]);
@@ -295,19 +458,37 @@ export default function Appointments() {
         </Button>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-0.5 border-b">
-        {(['upcoming', 'all'] as FilterTab[]).map((t) => (
+      {/* Filter tabs + view toggle */}
+      <div className="flex items-center justify-between border-b">
+        <div className="flex gap-0.5">
+          {(['upcoming', 'all'] as FilterTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setFilterTab(t)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                filterTab === t ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t === 'upcoming' ? 'Upcoming' : 'All'}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-0.5 pb-1">
           <button
-            key={t}
-            onClick={() => setFilterTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              filterTab === t ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            onClick={() => setViewMode('list')}
+            className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-brand-50 text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+            aria-label="List view"
           >
-            {t === 'upcoming' ? 'Upcoming' : 'All'}
+            <List className="w-4 h-4" />
           </button>
-        ))}
+          <button
+            onClick={() => setViewMode('week')}
+            className={`p-1.5 rounded transition-colors ${viewMode === 'week' ? 'bg-brand-50 text-brand-600' : 'text-gray-400 hover:text-gray-600'}`}
+            aria-label="Week calendar view"
+          >
+            <Calendar className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -320,6 +501,18 @@ export default function Appointments() {
               <Skeleton className="h-10 w-full" />
             </div>
           ))}
+        </div>
+      ) : viewMode === 'week' ? (
+        <div className="bg-white rounded-xl border p-4">
+          <WeekCalendar
+            appointments={appointments}
+            weekOffset={weekOffset}
+            onPrev={() => setWeekOffset((w) => w - 1)}
+            onNext={() => setWeekOffset((w) => w + 1)}
+            onEdit={openEditAppt}
+            onComplete={openCompleteAppt}
+            onCancel={handleCancelAppt}
+          />
         </div>
       ) : groups.length === 0 ? (
         <div className="bg-white rounded-xl border p-10 text-center">

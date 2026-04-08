@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/client';
 import { Horse, User, Stable } from '../types';
-import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Calendar, Syringe, Users, Activity, FileText, LayoutGrid } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { AuthenticatedImage } from '../components/AuthenticatedImage';
 import WeatherWidget from '../components/WeatherWidget';
@@ -350,52 +350,72 @@ export default function Dashboard() {
         <WeatherWidget stableId={myStable.id} stableName={myStable.name} />
       )}
 
-      {/* Today's sessions */}
-      {(dashData?.todayWorkouts.length ?? 0) > 0 && (
+      {/* Yard board — all horses × AM/PM status + today's appointments */}
+      {horses.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <Calendar className="w-4 h-4 text-brand-600" />
-            <h3 className="text-base font-semibold text-gray-900">Today's sessions</h3>
+            <LayoutGrid className="w-4 h-4 text-brand-600" />
+            <h3 className="text-base font-semibold text-gray-900">Today's yard</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {dashData!.todayWorkouts.map((w) => {
-              const title = (w.currentData as { title?: string })?.title;
-              const category = (w.currentData as { category?: string })?.category;
-              const durationMin = (w.currentData as { durationMin?: number | null })?.durationMin;
-              return (
-                <Link
-                  key={w.id}
-                  to={`/horses/${w.horseId}/planner`}
-                  className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow flex items-center gap-4"
-                >
-                  {w.horse.photoUrl ? (
-                    <AuthenticatedImage src={w.horse.photoUrl} alt={w.horse.name} className="w-10 h-10 rounded-lg object-cover border shrink-0" fallback={<div className="w-10 h-10 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-lg shrink-0">&#x1f40e;</div>} />
+          <div className="bg-white rounded-xl border overflow-hidden">
+            {/* Header row */}
+            <div className="grid grid-cols-[1fr_56px_56px_auto] text-xs font-medium text-gray-400 uppercase tracking-wide px-4 py-2 bg-gray-50 border-b">
+              <span>Horse</span>
+              <span className="text-center">AM</span>
+              <span className="text-center">PM</span>
+              <span className="text-right pr-1">Today</span>
+            </div>
+            <div className="divide-y">
+              {horses.map((h) => {
+                const amSlot = dashData?.todayWorkouts.find((w) => w.horseId === h.id && w.slot === 'AM');
+                const pmSlot = dashData?.todayWorkouts.find((w) => w.horseId === h.id && w.slot === 'PM');
+                const todayDate = new Date();
+                const todayAppt = appointments.find((a) => {
+                  const d = new Date(a.scheduledAt);
+                  return a.horse.id === h.id &&
+                    d.getFullYear() === todayDate.getFullYear() &&
+                    d.getMonth() === todayDate.getMonth() &&
+                    d.getDate() === todayDate.getDate();
+                });
+                const renderSlot = (slot: TodayWorkout | undefined) => {
+                  if (!slot) return <span className="text-gray-200">—</span>;
+                  return slot.logged ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 border flex items-center justify-center text-gray-300 text-lg shrink-0">&#x1f40e;</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900 truncate">{w.horse.name}</span>
-                      <span className="text-xs text-gray-400 shrink-0">{w.slot}</span>
+                    <Clock className="w-4 h-4 text-amber-400" />
+                  );
+                };
+                return (
+                  <Link
+                    key={h.id}
+                    to={`/horses/${h.id}`}
+                    className="grid grid-cols-[1fr_56px_56px_auto] items-center px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {h.photoUrl ? (
+                        <AuthenticatedImage src={h.photoUrl} alt={h.name} className="w-7 h-7 rounded-md object-cover border shrink-0" fallback={<div className="w-7 h-7 rounded-md bg-gray-100 border flex items-center justify-center text-gray-300 text-xs shrink-0">&#x1f40e;</div>} />
+                      ) : (
+                        <div className="w-7 h-7 rounded-md bg-gray-100 border flex items-center justify-center text-gray-300 text-xs shrink-0">&#x1f40e;</div>
+                      )}
+                      <span className="text-sm font-medium text-gray-800 truncate">{h.name}</span>
                     </div>
-                    {title && <div className="text-sm text-gray-600 truncate">{title}</div>}
-                    {category && !title && <div className="text-sm text-gray-500 truncate">{category}</div>}
-                    {durationMin && <div className="text-xs text-gray-400 mt-0.5">{durationMin} min</div>}
-                  </div>
-                  <div className="shrink-0">
-                    {w.logged ? (
-                      <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Logged
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full font-medium">
-                        <Clock className="w-3.5 h-3.5" /> Pending
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
+                    <div className="flex justify-center">{renderSlot(amSlot)}</div>
+                    <div className="flex justify-center">{renderSlot(pmSlot)}</div>
+                    <div className="text-right">
+                      {todayAppt ? (
+                        <span className="text-xs text-blue-600 font-medium">
+                          {todayAppt.type === 'OTHER' ? (todayAppt.typeOther ?? 'Appt') : todayAppt.type.charAt(0) + todayAppt.type.slice(1).toLowerCase()}
+                          {' '}
+                          {new Date(todayAppt.scheduledAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-200">—</span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
