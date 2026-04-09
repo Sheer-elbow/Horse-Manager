@@ -1,20 +1,15 @@
 const BASE = '/api';
 
-let accessToken: string | null = localStorage.getItem('accessToken');
-let refreshToken: string | null = localStorage.getItem('refreshToken');
+// Access token is kept in memory only — never persisted to localStorage.
+// The refresh token lives in an httpOnly cookie managed by the server.
+let accessToken: string | null = null;
 
-export function setTokens(access: string, refresh: string) {
-  accessToken = access;
-  refreshToken = refresh;
-  localStorage.setItem('accessToken', access);
-  localStorage.setItem('refreshToken', refresh);
+export function setAccessToken(token: string) {
+  accessToken = token;
 }
 
-export function clearTokens() {
+export function clearAccessToken() {
   accessToken = null;
-  refreshToken = null;
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
 }
 
 export function getAccessToken() {
@@ -22,16 +17,17 @@ export function getAccessToken() {
 }
 
 export async function tryRefresh(): Promise<boolean> {
-  if (!refreshToken) return false;
   try {
+    // The httpOnly cookie is sent automatically via credentials: 'include'
     const res = await fetch(`${BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
+      body: JSON.stringify({}),
     });
     if (!res.ok) return false;
     const data = await res.json();
-    setTokens(data.accessToken, data.refreshToken);
+    accessToken = data.accessToken;
     return true;
   } catch {
     return false;
@@ -55,14 +51,14 @@ export async function api<T = unknown>(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  let res = await fetch(`${BASE}${path}`, { ...options, headers });
+  let res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: 'include' });
 
-  // If 401, try refreshing token
-  if (res.status === 401 && refreshToken) {
+  // If 401, try refreshing token via httpOnly cookie
+  if (res.status === 401) {
     const refreshed = await tryRefresh();
     if (refreshed) {
       headers['Authorization'] = `Bearer ${accessToken}`;
-      res = await fetch(`${BASE}${path}`, { ...options, headers });
+      res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: 'include' });
     }
   }
 

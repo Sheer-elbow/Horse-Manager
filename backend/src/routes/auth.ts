@@ -25,6 +25,26 @@ function generateTokens(payload: JwtPayload) {
   return { accessToken, refreshToken };
 }
 
+/** Set the refresh token as an httpOnly cookie and return the access token. */
+function setRefreshCookie(res: Response, refreshToken: string) {
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'strict',
+    path: '/api/auth',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+}
+
+function clearRefreshCookie(res: Response) {
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: 'strict',
+    path: '/api/auth',
+  });
+}
+
 // POST /api/auth/login
 const loginSchema = z.object({
   email: z.string().email(),
@@ -45,8 +65,9 @@ router.post('/login', loginLimiter, async (req, res: Response) => {
     const tokens = generateTokens(payload);
     void logSecurityEvent('LOGIN_SUCCESS', req, { userId: user.id, email: user.email, outcome: 'success' });
 
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({
-      ...tokens,
+      accessToken: tokens.accessToken,
       user: {
         id: user.id,
         email: user.email,
@@ -68,13 +89,14 @@ router.post('/login', loginLimiter, async (req, res: Response) => {
 // POST /api/auth/refresh
 router.post('/refresh', refreshLimiter, async (req, res: Response) => {
   try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) {
+    // Accept refresh token from httpOnly cookie (preferred) or body (legacy)
+    const token = req.cookies?.refreshToken || req.body?.refreshToken;
+    if (!token) {
       res.status(400).json({ error: 'Refresh token required' });
       return;
     }
 
-    const payload = jwt.verify(refreshToken, config.jwt.refreshSecret) as JwtPayload;
+    const payload = jwt.verify(token, config.jwt.refreshSecret) as JwtPayload;
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user) {
       res.status(401).json({ error: 'User not found' });
@@ -83,14 +105,17 @@ router.post('/refresh', refreshLimiter, async (req, res: Response) => {
 
     // Reject refresh tokens issued before the last password change / logout-all
     if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.tokenVersion) {
+      clearRefreshCookie(res);
       res.status(401).json({ error: 'Token has been revoked' });
       return;
     }
 
     const newPayload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     const tokens = generateTokens(newPayload);
-    res.json(tokens);
+    setRefreshCookie(res, tokens.refreshToken);
+    res.json({ accessToken: tokens.accessToken });
   } catch {
+    clearRefreshCookie(res);
     res.status(401).json({ error: 'Invalid refresh token' });
   }
 });
@@ -110,6 +135,24 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('Get current user error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/logout
+router.post('/logout', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    // Increment tokenVersion to invalidate all existing refresh tokens
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    clearRefreshCookie(res);
+    void logSecurityEvent('LOGOUT', req, { userId: req.user!.userId, email: req.user!.email, outcome: 'success' });
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    clearRefreshCookie(res);
+    res.json({ message: 'Logged out' });
   }
 });
 
@@ -144,7 +187,8 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
     const newPayload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion + 1 };
     const tokens = generateTokens(newPayload);
 
-    res.json({ message: 'Password changed successfully', ...tokens });
+    setRefreshCookie(res, tokens.refreshToken);
+    res.json({ message: 'Password changed successfully', accessToken: tokens.accessToken });
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: err.errors });
@@ -288,8 +332,9 @@ router.post('/register', apiLimiter, async (req, res: Response) => {
       metadata: { stableName: body.stableName ?? null },
     });
 
+    setRefreshCookie(res, tokens.refreshToken);
     res.status(201).json({
-      ...tokens,
+      accessToken: tokens.accessToken,
       user: { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: false },
     });
   } catch (err) {
@@ -382,8 +427,9 @@ router.post('/accept-invite', inviteAcceptLimiter, async (req, res: Response) =>
     const payload: JwtPayload = { userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion };
     const tokens = generateTokens(payload);
 
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({
-      ...tokens,
+      accessToken: tokens.accessToken,
       user: { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: false },
     });
   } catch (err) {

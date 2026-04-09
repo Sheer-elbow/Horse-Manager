@@ -1,6 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { api, setTokens, clearTokens, getAccessToken } from '../api/client';
-import { User, AuthTokens } from '../types';
+import { api, setAccessToken, clearAccessToken, tryRefresh, getAccessToken } from '../api/client';
+import { User } from '../types';
+
+interface AuthTokenResponse {
+  accessToken: string;
+  user: User;
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -17,29 +22,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (token) {
-      api<User>('/auth/me')
-        .then(setUser)
-        .catch(() => clearTokens())
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    // On mount, attempt a silent refresh via the httpOnly cookie.
+    // If that succeeds we get a fresh access token and can fetch /auth/me.
+    // If no cookie exists (first visit / logged out), this quietly fails.
+    const init = async () => {
+      try {
+        // First check if we already have an in-memory token (e.g. SPA navigation)
+        if (getAccessToken()) {
+          const u = await api<User>('/auth/me');
+          setUser(u);
+        } else {
+          // Try silent refresh via httpOnly cookie
+          const refreshed = await tryRefresh();
+          if (refreshed) {
+            const u = await api<User>('/auth/me');
+            setUser(u);
+          }
+        }
+      } catch {
+        clearAccessToken();
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
   }, []);
 
   const login = async (email: string, password: string) => {
-    const data = await api<AuthTokens>('/auth/login', {
+    const data = await api<AuthTokenResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    setTokens(data.accessToken, data.refreshToken);
+    setAccessToken(data.accessToken);
     setUser(data.user);
     return data.user;
   };
 
-  const logout = () => {
-    clearTokens();
+  const logout = async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      // Best-effort — clear local state regardless
+    }
+    clearAccessToken();
     setUser(null);
   };
 

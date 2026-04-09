@@ -1,4 +1,5 @@
 import { useEffect, useState, FormEvent, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../api/client';
 import { Programme, ProgrammeVersion, Horse } from '../types';
@@ -296,7 +297,7 @@ export default function Programmes() {
       const full = await api<ProgrammeVersion>(`/programmes/${p.id}/versions/${v[0].id}`);
       if (!full.manualHtml) { win.close(); toast.error('No manual included in this version.'); return; }
       win.document.open();
-      win.document.write(full.manualHtml);
+      win.document.write(DOMPurify.sanitize(full.manualHtml, { WHOLE_DOCUMENT: true }));
       win.document.close();
     } catch {
       win.close();
@@ -750,7 +751,7 @@ export default function Programmes() {
         {viewProgramme?.htmlContent && (
           <div
             className="prose prose-sm max-w-none overflow-auto max-h-[70vh]"
-            dangerouslySetInnerHTML={{ __html: viewProgramme.htmlContent }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(viewProgramme.htmlContent) }}
           />
         )}
       </Modal>

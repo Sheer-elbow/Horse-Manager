@@ -239,7 +239,6 @@ export interface PlanShare {
 
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
   user: User;
 }
 

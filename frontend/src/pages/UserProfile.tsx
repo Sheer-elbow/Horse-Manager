@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { api, clearTokens } from '../api/client';
+import { api, clearAccessToken, getAccessToken } from '../api/client';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
@@ -215,7 +215,7 @@ export default function UserProfile() {
           onClick={async () => {
             try {
               const res = await fetch('/api/users/me/export', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+                headers: { 'Authorization': `Bearer ${getAccessToken()}` },
               });
               if (!res.ok) throw new Error('Export failed');
               const blob = await res.blob();
@@ -272,7 +272,7 @@ export default function UserProfile() {
                   setDeleteError('');
                   try {
                     await api('/users/me', { method: 'DELETE' });
-                    clearTokens();
+                    clearAccessToken();
                     window.location.href = '/login';
                   } catch (err) {
                     setDeleteError(err instanceof Error ? err.message : 'Failed to delete account');

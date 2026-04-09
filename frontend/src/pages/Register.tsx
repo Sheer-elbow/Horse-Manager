@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { api, setTokens } from '../api/client';
+import { api, setAccessToken } from '../api/client';
 import { AuthTokens } from '../types';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -52,7 +52,7 @@ export default function Register() {
           stableAddress: accountType === 'stable' && stableAddress.trim() ? stableAddress.trim() : undefined,
         }),
       });
-      setTokens(data.accessToken, data.refreshToken);
+      setAccessToken(data.accessToken);
       window.location.href = '/';
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed');

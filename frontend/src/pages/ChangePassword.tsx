@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../api/client';
+import { api, setAccessToken } from '../api/client';
 import { Button } from '../components/ui/button';
 import { PasswordInput } from '../components/ui/password-input';
 import { PASSWORD_RULES, passwordValid } from '../lib/passwordRules';
@@ -34,10 +34,12 @@ export default function ChangePassword() {
 
     setLoading(true);
     try {
-      await api('/auth/change-password', {
+      const result = await api<{ accessToken: string }>('/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ currentPassword, newPassword }),
       });
+      // Update in-memory access token with the fresh one issued after version bump
+      if (result.accessToken) setAccessToken(result.accessToken);
       if (user) {
         updateUser({ ...user, mustChangePassword: false });
       }
