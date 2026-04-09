@@ -9,6 +9,41 @@ const router = Router();
 
 // ─── Helpers ──────────────────────────────────────────────────
 
+/** Check if the user has EDIT-level access to a horse via assignment or stable ownership. */
+async function hasEditAccess(userId: string, role: string, horseId: string): Promise<boolean> {
+  if (role === 'ADMIN') return true;
+  // Direct horse assignment with EDIT permission
+  const assignment = await prisma.horseAssignment.findUnique({
+    where: { userId_horseId: { userId, horseId } },
+  });
+  if (assignment?.permission === 'EDIT') return true;
+  // Stable owner check — if user owns the stable the horse belongs to
+  const horse = await prisma.horse.findUnique({ where: { id: horseId }, select: { stableId: true } });
+  if (horse?.stableId) {
+    const stable = await prisma.stable.findUnique({ where: { id: horse.stableId }, select: { ownerId: true } });
+    if (stable?.ownerId === userId) return true;
+    // Stable lead via StableAssignment gets EDIT on appointments
+    if (role === 'STABLE_LEAD') {
+      const stableAssignment = await prisma.stableAssignment.findUnique({
+        where: { userId_stableId: { userId, stableId: horse.stableId } },
+      });
+      if (stableAssignment) return true;
+    }
+  }
+  return false;
+}
+
+/** Check if the user is a member/owner of a stable. */
+async function hasStableAccess(userId: string, role: string, stableId: string): Promise<boolean> {
+  if (role === 'ADMIN') return true;
+  const [stable, stableAssignment, membership] = await Promise.all([
+    prisma.stable.findUnique({ where: { id: stableId }, select: { ownerId: true } }),
+    prisma.stableAssignment.findUnique({ where: { userId_stableId: { userId, stableId } } }),
+    prisma.stableMembership.findFirst({ where: { userId, stableId } }),
+  ]);
+  return stable?.ownerId === userId || !!stableAssignment || !!membership;
+}
+
 const APPOINTMENT_SELECT = {
   id: true,
   type: true,
@@ -84,7 +119,11 @@ router.put('/:id', authenticate, async (req: HorsePermissionRequest, res: Respon
     const existing = await prisma.appointment.findUnique({ where: { id: req.params.id } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
 
-    // Re-use requireHorseAccess logic: verify edit access on the horse
+    if (!(await hasEditAccess(req.user!.userId, req.user!.role, existing.horseId))) {
+      res.status(403).json({ error: 'Edit access required for this horse' });
+      return;
+    }
+
     const { type, typeOther, scheduledAt, practitionerName, contactNumber, locationAtStable, locationOther, notes } = req.body;
     const appointment = await prisma.appointment.update({
       where: { id: req.params.id },
@@ -113,6 +152,12 @@ router.post('/:id/complete', authenticate, async (req: HorsePermissionRequest, r
   try {
     const existing = await prisma.appointment.findUnique({ where: { id: req.params.id } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await hasEditAccess(req.user!.userId, req.user!.role, existing.horseId))) {
+      res.status(403).json({ error: 'Edit access required for this horse' });
+      return;
+    }
+
     if (existing.status !== 'UPCOMING') {
       res.status(400).json({ error: 'Appointment is not upcoming' });
       return;
@@ -192,26 +237,44 @@ router.post('/:id/complete', authenticate, async (req: HorsePermissionRequest, r
 });
 
 // POST /api/appointments/:id/cancel
-router.post('/:id/cancel', authenticate, async (_req, res: Response) => {
+router.post('/:id/cancel', authenticate, async (req: HorsePermissionRequest, res: Response) => {
   try {
+    const existing = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await hasEditAccess(req.user!.userId, req.user!.role, existing.horseId))) {
+      res.status(403).json({ error: 'Edit access required for this horse' });
+      return;
+    }
+
     const appointment = await prisma.appointment.update({
-      where: { id: _req.params.id },
+      where: { id: req.params.id },
       data: { status: 'CANCELLED' },
       select: APPOINTMENT_SELECT,
     });
     res.json(appointment);
-  } catch {
-    res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    console.error('Cancel appointment error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // DELETE /api/appointments/:id
-router.delete('/:id', authenticate, async (_req, res: Response) => {
+router.delete('/:id', authenticate, async (req: HorsePermissionRequest, res: Response) => {
   try {
-    await prisma.appointment.delete({ where: { id: _req.params.id } });
+    const existing = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await hasEditAccess(req.user!.userId, req.user!.role, existing.horseId))) {
+      res.status(403).json({ error: 'Edit access required for this horse' });
+      return;
+    }
+
+    await prisma.appointment.delete({ where: { id: req.params.id } });
     res.json({ message: 'Deleted' });
-  } catch {
-    res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    console.error('Delete appointment error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -220,6 +283,11 @@ router.delete('/:id', authenticate, async (_req, res: Response) => {
 // GET /api/appointments/stable/:stableId?status=UPCOMING
 router.get('/stable/:stableId', authenticate, async (req: HorsePermissionRequest, res: Response) => {
   try {
+    if (!(await hasStableAccess(req.user!.userId, req.user!.role, req.params.stableId))) {
+      res.status(403).json({ error: 'No access to this stable' });
+      return;
+    }
+
     const { status } = req.query;
     const appointments = await prisma.appointment.findMany({
       where: {

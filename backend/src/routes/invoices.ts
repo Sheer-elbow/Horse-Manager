@@ -164,6 +164,19 @@ async function getAccessibleHorseIds(userId: string, role: string): Promise<stri
   ])];
 }
 
+/** Check if the user can access a specific invoice (creator, ADMIN, or has horse access to a split). */
+async function canAccessInvoice(
+  userId: string,
+  role: string,
+  invoice: { createdBy: { id: string }; splits: { horseId: string }[] }
+): Promise<boolean> {
+  if (role === 'ADMIN') return true;
+  if (invoice.createdBy.id === userId) return true;
+  // Check if the user has access to at least one horse in the splits
+  const accessibleIds = await getAccessibleHorseIds(userId, role);
+  return invoice.splits.some((s) => accessibleIds.includes(s.horseId));
+}
+
 // ─── Routes ───────────────────────────────────────────────────
 
 // GET /api/invoices — list invoices visible to current user
@@ -569,6 +582,11 @@ router.put('/recurring/:id', authenticate, async (req: AuthRequest, res: Respons
     const existing = await db.recurringInvoice.findUnique({ where: { id: req.params.id } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
 
+    if (req.user!.role !== 'ADMIN' && existing.createdById !== req.user!.userId) {
+      res.status(403).json({ error: 'No access to this recurring invoice' });
+      return;
+    }
+
     const { supplier, category, totalAmount, notes, dayOfMonth, endDate, splits } = req.body;
 
     const parsedSplits: { horseId: string; ownerId?: string; amount: number }[] | undefined =
@@ -607,28 +625,44 @@ router.put('/recurring/:id', authenticate, async (req: AuthRequest, res: Respons
 });
 
 // PATCH /api/invoices/recurring/:id/toggle — pause / resume
-router.patch('/recurring/:id/toggle', authenticate, async (_req, res: Response) => {
+router.patch('/recurring/:id/toggle', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const existing = await db.recurringInvoice.findUnique({ where: { id: _req.params.id } });
+    const existing = await db.recurringInvoice.findUnique({ where: { id: req.params.id } });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (req.user!.role !== 'ADMIN' && existing.createdById !== req.user!.userId) {
+      res.status(403).json({ error: 'No access to this recurring invoice' });
+      return;
+    }
+
     const recurring = await db.recurringInvoice.update({
-      where: { id: _req.params.id },
+      where: { id: req.params.id },
       data: { active: !existing.active },
       select: RECURRING_SELECT,
     });
     res.json(recurring);
-  } catch {
-    res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    console.error('Toggle recurring invoice error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // DELETE /api/invoices/recurring/:id
-router.delete('/recurring/:id', authenticate, async (_req, res: Response) => {
+router.delete('/recurring/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    await db.recurringInvoice.delete({ where: { id: _req.params.id } });
+    const existing = await db.recurringInvoice.findUnique({ where: { id: req.params.id } });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (req.user!.role !== 'ADMIN' && existing.createdById !== req.user!.userId) {
+      res.status(403).json({ error: 'No access to this recurring invoice' });
+      return;
+    }
+
+    await db.recurringInvoice.delete({ where: { id: req.params.id } });
     res.json({ message: 'Deleted' });
-  } catch {
-    res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    console.error('Delete recurring invoice error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -640,6 +674,12 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       select: INVOICE_SELECT,
     });
     if (!invoice) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await canAccessInvoice(req.user!.userId, req.user!.role, invoice))) {
+      res.status(403).json({ error: 'No access to this invoice' });
+      return;
+    }
+
     res.json(invoice);
   } catch (err) {
     console.error('Get invoice error:', err);
@@ -718,8 +758,16 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const existing = await db.invoice.findUnique({ where: { id: req.params.id } });
+    const existing = await db.invoice.findUnique({
+      where: { id: req.params.id },
+      select: { ...INVOICE_SELECT, createdById: true },
+    });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await canAccessInvoice(req.user!.userId, req.user!.role, existing))) {
+      res.status(403).json({ error: 'No access to this invoice' });
+      return;
+    }
 
     const { supplier, category, date, totalAmount, notes, status, splits } = req.body;
 
@@ -768,24 +816,49 @@ router.patch('/:id/status', authenticate, async (req: AuthRequest, res: Response
   try {
     const { status } = req.body;
     if (!status) { res.status(400).json({ error: 'status required' }); return; }
+
+    const existing = await db.invoice.findUnique({
+      where: { id: req.params.id },
+      select: INVOICE_SELECT,
+    });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await canAccessInvoice(req.user!.userId, req.user!.role, existing))) {
+      res.status(403).json({ error: 'No access to this invoice' });
+      return;
+    }
+
     const invoice = await db.invoice.update({
       where: { id: req.params.id },
       data: { status: status as InvoiceStatus },
       select: INVOICE_SELECT,
     });
     res.json(invoice);
-  } catch {
-    res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    console.error('Update invoice status error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // DELETE /api/invoices/:id
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    const existing = await db.invoice.findUnique({
+      where: { id: req.params.id },
+      select: INVOICE_SELECT,
+    });
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+
+    if (!(await canAccessInvoice(req.user!.userId, req.user!.role, existing))) {
+      res.status(403).json({ error: 'No access to this invoice' });
+      return;
+    }
+
     await db.invoice.delete({ where: { id: req.params.id } });
     res.json({ message: 'Deleted' });
-  } catch {
-    res.status(404).json({ error: 'Not found' });
+  } catch (err) {
+    console.error('Delete invoice error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
