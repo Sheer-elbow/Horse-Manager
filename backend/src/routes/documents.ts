@@ -69,20 +69,61 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
 
 // ─── Access helpers ───────────────────────────────────────────
 
+/**
+ * VIEW access to a horse's documents:
+ *  - ADMIN always
+ *  - Direct HorseAssignment (VIEW or EDIT)
+ *  - StableAssignment for the horse's stable (lead/rider/groom assigned to the stable)
+ *  - Stable owner (user who owns the stable the horse is in)
+ *  - StableMembership (APPROVED horse owner with a membership record in the stable)
+ */
 async function canAccessHorse(userId: string, role: string, horseId: string): Promise<boolean> {
-  if (role === 'ADMIN' || role === 'STABLE_LEAD' || role === 'TRAINER') return true;
+  if (role === 'ADMIN') return true;
+
   const assignment = await prisma.horseAssignment.findUnique({
     where: { userId_horseId: { userId, horseId } },
   });
-  return !!assignment;
+  if (assignment) return true;
+
+  const horse = await prisma.horse.findUnique({ where: { id: horseId }, select: { stableId: true } });
+  if (!horse?.stableId) return false;
+
+  const [stable, stableAssignment, membership] = await Promise.all([
+    prisma.stable.findUnique({ where: { id: horse.stableId }, select: { ownerId: true } }),
+    prisma.stableAssignment.findUnique({ where: { userId_stableId: { userId, stableId: horse.stableId } } }),
+    prisma.stableMembership.findFirst({ where: { userId, stableId: horse.stableId } }),
+  ]);
+  return stable?.ownerId === userId || !!stableAssignment || !!membership;
 }
 
+/**
+ * EDIT access to a horse's documents:
+ *  - ADMIN always
+ *  - HorseAssignment with EDIT permission
+ *  - Stable owner (user who owns the stable the horse is in)
+ *  - STABLE_LEAD with a StableAssignment for the horse's stable
+ */
 async function canEditHorse(userId: string, role: string, horseId: string): Promise<boolean> {
-  if (role === 'ADMIN' || role === 'STABLE_LEAD') return true;
+  if (role === 'ADMIN') return true;
+
   const assignment = await prisma.horseAssignment.findUnique({
     where: { userId_horseId: { userId, horseId } },
   });
-  return assignment?.permission === 'EDIT';
+  if (assignment?.permission === 'EDIT') return true;
+
+  const horse = await prisma.horse.findUnique({ where: { id: horseId }, select: { stableId: true } });
+  if (!horse?.stableId) return false;
+
+  const stable = await prisma.stable.findUnique({ where: { id: horse.stableId }, select: { ownerId: true } });
+  if (stable?.ownerId === userId) return true;
+
+  if (role === 'STABLE_LEAD') {
+    const stableAssignment = await prisma.stableAssignment.findUnique({
+      where: { userId_stableId: { userId, stableId: horse.stableId } },
+    });
+    if (stableAssignment) return true;
+  }
+  return false;
 }
 
 // ─── GET /api/horses/:horseId/documents ───────────────────────
@@ -193,12 +234,33 @@ export async function getExpiringDocuments(userId: string, role: string): Promis
 
   let horseFilter: { horseId?: { in: string[] } } = {};
 
-  if (role !== 'ADMIN' && role !== 'STABLE_LEAD' && role !== 'TRAINER') {
-    const assignments = await prisma.horseAssignment.findMany({
-      where: { userId },
-      select: { horseId: true },
-    });
-    const ids = assignments.map((a) => a.horseId);
+  if (role !== 'ADMIN') {
+    // Collect all horse IDs the user can access:
+    //  - via HorseAssignment (owner/trainer)
+    //  - via StableAssignment (lead/rider/groom) — any horse in that stable
+    //  - via stable ownership — any horse in stables the user owns
+    //  - via StableMembership — any horse in stables the user is a member of
+    const [assignments, stableAssignments, ownedStables, memberships] = await Promise.all([
+      prisma.horseAssignment.findMany({ where: { userId }, select: { horseId: true } }),
+      prisma.stableAssignment.findMany({ where: { userId }, select: { stableId: true } }),
+      prisma.stable.findMany({ where: { ownerId: userId }, select: { id: true } }),
+      prisma.stableMembership.findMany({ where: { userId }, select: { stableId: true } }),
+    ]);
+
+    const stableIds = Array.from(new Set([
+      ...stableAssignments.map((s) => s.stableId),
+      ...ownedStables.map((s) => s.id),
+      ...memberships.map((m) => m.stableId),
+    ]));
+
+    const stableHorses = stableIds.length > 0
+      ? await prisma.horse.findMany({ where: { stableId: { in: stableIds } }, select: { id: true } })
+      : [];
+
+    const ids = Array.from(new Set([
+      ...assignments.map((a) => a.horseId),
+      ...stableHorses.map((h) => h.id),
+    ]));
     if (ids.length === 0) return [];
     horseFilter = { horseId: { in: ids } };
   }

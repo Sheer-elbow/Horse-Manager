@@ -65,10 +65,23 @@ router.get('/my', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/stables — list all stables (any authenticated user)
-router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
+// GET /api/stables — list stables the user has a relationship to.
+// ADMIN sees all; everyone else is scoped to stables they own, are assigned
+// to, or have a membership record for.
+router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    const { userId, role } = req.user!;
+    const where = role === 'ADMIN'
+      ? {}
+      : {
+          OR: [
+            { ownerId: userId },
+            { stableAssignments: { some: { userId } } },
+            { stableMemberships: { some: { userId } } },
+          ],
+        };
     const stables = await prisma.stable.findMany({
+      where,
       orderBy: { name: 'asc' },
       include: STABLE_INCLUDE,
     });
@@ -113,9 +126,12 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/stables/:id — single stable with counts
+// GET /api/stables/:id — single stable with counts. The caller must have a
+// relationship to the stable (owner, stable assignment, or membership) unless
+// they are ADMIN.
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    const { userId, role } = req.user!;
     const stable = await prisma.stable.findUnique({
       where: { id: req.params.id },
       include: STABLE_INCLUDE,
@@ -124,6 +140,23 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
       res.status(404).json({ error: 'Stable not found' });
       return;
     }
+
+    if (role !== 'ADMIN') {
+      const [stableAssignment, membership] = await Promise.all([
+        prisma.stableAssignment.findUnique({
+          where: { userId_stableId: { userId, stableId: stable.id } },
+        }),
+        prisma.stableMembership.findFirst({
+          where: { userId, stableId: stable.id },
+        }),
+      ]);
+      const isOwner = stable.ownerId === userId;
+      if (!isOwner && !stableAssignment && !membership) {
+        res.status(403).json({ error: 'No access to this stable' });
+        return;
+      }
+    }
+
     res.json(stable);
   } catch (err) {
     console.error('Get stable error:', err);

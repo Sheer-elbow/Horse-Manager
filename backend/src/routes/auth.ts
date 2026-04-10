@@ -6,7 +6,7 @@ import { v4 as uuid } from 'uuid';
 import { z } from 'zod';
 import { prisma } from '../db';
 import { config } from '../config';
-import { authenticate } from '../middleware/auth';
+import { authenticate, invalidateTokenVersionCache } from '../middleware/auth';
 import { loginLimiter, inviteAcceptLimiter, refreshLimiter, forgotPasswordLimiter, apiLimiter } from '../middleware/rateLimiter';
 import { sendInviteEmail, sendPasswordResetEmail } from '../services/email';
 import { logSecurityEvent } from '../services/securityLog';
@@ -146,6 +146,7 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response) => 
       where: { id: req.user!.userId },
       data: { tokenVersion: { increment: 1 } },
     });
+    invalidateTokenVersionCache(req.user!.userId);
     clearRefreshCookie(res);
     void logSecurityEvent('LOGOUT', req, { userId: req.user!.userId, email: req.user!.email, outcome: 'success' });
     res.json({ message: 'Logged out successfully' });
@@ -181,6 +182,7 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
       where: { id: user.id },
       data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
     });
+    invalidateTokenVersionCache(user.id);
     void logSecurityEvent('PASSWORD_CHANGED', req, { userId: user.id, email: user.email, outcome: 'success' });
 
     // Return fresh tokens so the current session stays alive after the version bump
@@ -531,6 +533,7 @@ router.post('/reset-password', loginLimiter, async (req, res: Response) => {
         data: { usedAt: new Date() },
       }),
     ]);
+    invalidateTokenVersionCache(record.userId);
 
     void logSecurityEvent('PASSWORD_RESET_USED', req, { userId: record.userId, outcome: 'success' });
     res.json({ message: 'Password reset successfully. You can now log in.' });
