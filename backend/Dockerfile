@@ -1,7 +1,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+# `--ignore-scripts` blocks arbitrary lifecycle scripts from dependencies.
+# Prisma engines and sharp/esbuild native binaries are still installed via
+# optionalDependencies rather than postinstall scripts, and `prisma generate`
+# below will fetch any missing engines explicitly.
+RUN npm ci --ignore-scripts
 COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig.json ./

@@ -1,7 +1,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+# `--ignore-scripts` blocks arbitrary lifecycle scripts from dependencies;
+# esbuild/rollup native binaries are still installed via optionalDependencies.
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build
 
