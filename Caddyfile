@@ -2,7 +2,30 @@
     redir https://{host}{uri} permanent
 }
 
+# ── Shared security headers snippet ─────────────────────────────────────────
+# Applied to every HTTPS vhost via `import security_headers`.
+# CSP notes:
+#   - 'self' is enough for bundled scripts
+#   - the single inline <script> in index.html (PWA service-worker registration)
+#     is whitelisted via its SHA-256 hash so we avoid 'unsafe-inline' for scripts
+#   - 'unsafe-inline' is required for styles because Tailwind/Vite inject inline
+#     <style> blocks
+#   - images allow data: (inline SVGs) and blob: (AuthenticatedImage previews)
+(security_headers) {
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-PhGHOWGkxtQ4dFEiuzyOoy9Tfe9GHbsL02eJDCAOeU4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Strict-Transport-Security "max-age=31536000"
+        # Remove Caddy's default `Server: Caddy` identifier
+        -Server
+    }
+}
+
 www.holidayskitak.uk {
+    import security_headers
     reverse_proxy frontend:80
 }
 
@@ -10,6 +33,18 @@ holidayskitak.uk {
     redir https://www.holidayskitak.uk{uri} permanent
 }
 
+# ── Grafana — restricted to admin IPs only ──────────────────────────────────
+# IMPORTANT: replace the placeholder CIDRs below with the real admin IP ranges
+# before deploying. Anything outside the list gets a 403. The security_headers
+# snippet is still imported so the response headers are consistent.
 grafana.holidayskitak.uk {
-    reverse_proxy grafana:3000
+    import security_headers
+
+    @admins remote_ip 203.0.113.0/24 198.51.100.0/24
+    handle @admins {
+        reverse_proxy grafana:3000
+    }
+    handle {
+        respond "Forbidden" 403
+    }
 }
