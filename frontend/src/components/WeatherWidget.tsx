@@ -62,7 +62,7 @@ function MiniDayTile({ day, isToday }: { day: DailyForecast; isToday: boolean })
 
   return (
     <div
-      className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg min-w-[48px] ${
+      className={`flex flex-col items-center gap-0.5 px-2 py-2 rounded-lg flex-1 min-w-[44px] ${
         isToday ? 'bg-brand-50 ring-1 ring-brand-200' : 'hover:bg-gray-50'
       }`}
       title={`${day.description} · ${day.precipitationProbability}% rain · gusts ${day.windGustsMax} km/h`}
@@ -70,12 +70,11 @@ function MiniDayTile({ day, isToday }: { day: DailyForecast; isToday: boolean })
       <span className="text-[11px] font-medium text-gray-500">{isToday ? 'Today' : shortDay(day.date)}</span>
       <span className="text-xl leading-none">{wmoEmoji(day.weatherCode)}</span>
       <span className="text-xs font-semibold text-gray-800">{day.tempMax}°</span>
-      <span className="text-[11px] text-gray-400">{day.precipitationProbability}%</span>
-      {/* Conditions dot */}
-      <span
-        className={`w-1.5 h-1.5 rounded-full mt-0.5 ${style.dot}`}
-        title={`Conditions: ${style.label}`}
-      />
+      <span className="text-[11px] text-gray-400">{day.tempMin}°</span>
+      <span className="text-[11px] text-blue-400">{day.precipitationProbability}%</span>
+      {/* Conditions dot — shows as text label on desktop */}
+      <span className={`w-1.5 h-1.5 rounded-full mt-0.5 shrink-0 ${style.dot}`} />
+      <span className={`hidden lg:block text-[10px] font-medium mt-0.5 ${style.text}`}>{style.label}</span>
     </div>
   );
 }
@@ -180,56 +179,71 @@ export default function WeatherWidget({ stableId, stableName }: Props) {
         </span>
       </div>
 
-      {/* Today card */}
-      <div className="px-4 pt-3 pb-4">
-        <div className="flex items-start gap-4">
-          {/* Icon + temps */}
-          <div className="flex flex-col items-center gap-0 min-w-[64px]">
-            <span className="text-5xl leading-none">{wmoEmoji(today.weatherCode)}</span>
-            <div className="flex items-baseline gap-1 mt-1.5">
-              <span className="text-2xl font-bold text-gray-900">{today.tempMax}°</span>
-              <span className="text-base text-gray-400 font-medium">{today.tempMin}°</span>
-            </div>
-          </div>
+      {/*
+        Mobile: today card stacked above forecast strip.
+        Desktop (lg+): today panel on the left, full 7-day forecast
+        filling the right — tiles expand to use available space.
+      */}
+      <div className="lg:flex lg:gap-0 lg:divide-x">
 
-          {/* Description + stats */}
-          <div className="flex-1 min-w-0 pt-1">
-            <div className="text-sm font-semibold text-gray-800 mb-2">{today.description}</div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              <StatChip
-                icon={<Droplets className="w-3.5 h-3.5 text-blue-400" />}
-                value={`${today.precipitationProbability}%${today.precipitationSum > 0 ? ` · ${today.precipitationSum}mm` : ''}`}
-                title="Precipitation probability"
-              />
-              <StatChip
-                icon={<Wind className="w-3.5 h-3.5 text-gray-400" />}
-                value={`${today.windSpeedMax} km/h${today.windGustsMax > today.windSpeedMax + 5 ? ` gusts ${today.windGustsMax}` : ''}`}
-                title="Wind speed and gusts"
-              />
-              <StatChip
-                icon={<Sun className="w-3.5 h-3.5 text-amber-400" />}
-                value={`UV ${today.uvIndexMax}`}
-                title="UV index"
-              />
+        {/* Today panel */}
+        <div className="px-4 pt-3 pb-4 lg:w-56 lg:shrink-0">
+          <div className="flex items-start gap-4 lg:flex-col lg:items-start lg:gap-2">
+            {/* Icon + temps */}
+            <div className="flex flex-col items-center gap-0 min-w-[64px] lg:flex-row lg:items-end lg:gap-2 lg:min-w-0">
+              <span className="text-5xl leading-none lg:text-4xl">{wmoEmoji(today.weatherCode)}</span>
+              <div className="flex items-baseline gap-1 mt-1.5 lg:mt-0">
+                <span className="text-2xl font-bold text-gray-900">{today.tempMax}°</span>
+                <span className="text-base text-gray-400 font-medium">{today.tempMin}°</span>
+              </div>
             </div>
-            {/* Sunrise / sunset */}
-            <div className="text-[11px] text-gray-400 mt-1.5">
-              🌅 {formatTime(today.sunrise)} &nbsp;·&nbsp; 🌇 {formatTime(today.sunset)}
+
+            {/* Description + stats */}
+            <div className="flex-1 min-w-0 pt-1 lg:pt-0 lg:w-full">
+              <div className="text-sm font-semibold text-gray-800 mb-2">{today.description}</div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm lg:flex-col lg:gap-1">
+                <StatChip
+                  icon={<Droplets className="w-3.5 h-3.5 text-blue-400" />}
+                  value={`${today.precipitationProbability}%${today.precipitationSum > 0 ? ` · ${today.precipitationSum}mm` : ''}`}
+                  title="Precipitation probability"
+                />
+                <StatChip
+                  icon={<Wind className="w-3.5 h-3.5 text-gray-400" />}
+                  value={`${today.windSpeedMax} km/h${today.windGustsMax > today.windSpeedMax + 5 ? ` gusts ${today.windGustsMax}` : ''}`}
+                  title="Wind speed and gusts"
+                />
+                <StatChip
+                  icon={<Sun className="w-3.5 h-3.5 text-amber-400" />}
+                  value={`UV ${today.uvIndexMax}`}
+                  title="UV index"
+                />
+              </div>
+              <div className="text-[11px] text-gray-400 mt-1.5">
+                🌅 {formatTime(today.sunrise)} &nbsp;·&nbsp; 🌇 {formatTime(today.sunset)}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Forecast strip — scrollable on mobile, fills space on desktop */}
+        {data.days.length > 0 && (
+          <div className="border-t lg:border-t-0 px-3 pb-3 pt-2 lg:flex-1 lg:px-4 lg:py-3">
+            <div className="flex gap-1 overflow-x-auto no-scrollbar lg:overflow-visible">
+              {/* Desktop: show all 7 days (today + future); mobile: future only */}
+              <div className="hidden lg:flex lg:gap-1 lg:w-full">
+                {data.days.map((day, i) => (
+                  <MiniDayTile key={day.date} day={day} isToday={i === 0} />
+                ))}
+              </div>
+              <div className="flex gap-1 lg:hidden">
+                {futureDays.map((day) => (
+                  <MiniDayTile key={day.date} day={day} isToday={false} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* 6-day mini forecast */}
-      {futureDays.length > 0 && (
-        <div className="border-t px-3 pb-3 pt-2">
-          <div className="flex gap-1 overflow-x-auto no-scrollbar">
-            {futureDays.map((day) => (
-              <MiniDayTile key={day.date} day={day} isToday={false} />
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Attribution — required by Open-Meteo CC BY 4.0 */}
       <div className="px-4 pb-2.5 text-[10px] text-gray-300 text-right">
