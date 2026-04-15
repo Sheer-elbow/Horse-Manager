@@ -197,9 +197,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRAINER', 'RIDER'), async (
       },
     });
 
-    res.status(201).json(session);
     sessionsCreatedTotal.inc();
-    res.json(session);
+    res.status(201).json(session);
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: err.errors });
